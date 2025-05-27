@@ -43,29 +43,31 @@ st.markdown("""
 
 st.title("📊 Crane Sequence Timeline (Infographic Style)")
 
-# Data sequence (simulasi dari crane schedule)
-sequence_data = [
-    {"Seq": 1, "Direction": "Discharge", "Mvs": 45, "Bay": "14", "Crane": "806", "Color": "red", "Icon": "👷"},
-    {"Seq": 2, "Direction": "Discharge", "Mvs": 10, "Bay": "10", "Crane": "806", "Color": "blue", "Icon": "📦"},
-    {"Seq": 3, "Direction": "Discharge", "Mvs": 15, "Bay": "30", "Crane": "807", "Color": "yellow", "Icon": "⏱️"},
-    {"Seq": 4, "Direction": "Discharge", "Mvs": 40, "Bay": "26", "Crane": "807", "Color": "green", "Icon": "🏗️"},
-]
+# Langsung tampilkan blok HTML statis (seperti yang diminta)
+st.markdown("""
+<div style='display:flex; align-items: center;'>
+    <div class='step blue'>
+        <h3>2 📦</h3>
+        <p><strong>Discharge</strong></p>
+        <p>10 Moves</p>
+        <p>Bay 10<br>Crane 806</p>
+    </div>
 
-html_steps = "<div style='display:flex; align-items: center;'>"
+    <div class='step yellow'>
+        <h3>3 ⏱️</h3>
+        <p><strong>Discharge</strong></p>
+        <p>15 Moves</p>
+        <p>Bay 30<br>Crane 807</p>
+    </div>
 
-for item in sequence_data:
-    html_steps += f"""
-        <div class='step {item['Color']}'>
-            <h3>{item['Seq']} {item['Icon']}</h3>
-            <p><strong>{item['Direction']}</strong></p>
-            <p>{item['Mvs']} Moves</p>
-            <p>Bay {item['Bay']}<br>Crane {item['Crane']}</p>
-        </div>
-    """
-
-html_steps += "</div>"
-
-st.markdown(html_steps, unsafe_allow_html=True)
+    <div class='step green'>
+        <h3>4 🏗️</h3>
+        <p><strong>Discharge</strong></p>
+        <p>40 Moves</p>
+        <p>Bay 26<br>Crane 807</p>
+    </div>
+</div>
+""", unsafe_allow_html=True)
 
 st.sidebar.header("🕒 Set Start Time (Dummy)")
 st.sidebar.time_input("Start Time", time(1, 0))
