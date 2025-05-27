@@ -109,21 +109,25 @@ for t in range(6, 0, -1):
 
 html += "</div>"
 
-for bay_index, (bay, items) in enumerate(sorted(timeline.items())):
-    html += f"<div class='column'><div class='column-title'>Bay {bay}</div>"
-    for i, item in enumerate(items):
-        color_class = crane_colors.get(item['Crane'], 'red')
-        top_offset = int((item['StartTime'] - 1) * 40)  # 40px per hour from 01:00
-        height = int((item['EndTime'] - item['StartTime']) * 40)
-        html += f"""
-        <div class='step {color_class}' style='margin-top:{top_offset}px;height:{height}px;'>
-            <h3>{item['Seq']} {item.get('Icon', '')}</h3>
-            <p><strong>{item['Direction']}</strong></p>
-            <p>{item['Mvs']} Moves</p>
-            <p>Crane {item['Crane']}</p>
-        </div>
-        """
-    html += "</div>"
+if timeline:
+    for bay_index, (bay, items) in enumerate(sorted(timeline.items())):
+        html += f"<div class='column'><div class='column-title'>Bay {bay}</div>"
+        for i, item in enumerate(items):
+            color_class = crane_colors.get(item['Crane'], 'red')
+            top_offset = int((item['StartTime'] - 1) * 40)  # 40px per hour from 01:00
+            height = int((item['EndTime'] - item['StartTime']) * 40)
+            html += f"""
+            <div class='step {color_class}' style='margin-top:{top_offset}px;height:{height}px;'>
+                <h3>{item['Seq']} {item.get('Icon', '')}</h3>
+                <p><strong>{item['Direction']}</strong></p>
+                <p>{item['Mvs']} Moves</p>
+                <p>Crane {item['Crane']}</p>
+            </div>
+            """
+        html += "</div>"
+else:
+    html += "<p style='color:red;'>⚠️ Tidak ada data valid untuk ditampilkan.</p>"
+
 html += "</div>"
 
 st.markdown(html, unsafe_allow_html=True)
