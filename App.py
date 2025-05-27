@@ -36,9 +36,6 @@ if crane_start_times:
 else:
     min_start = 0
 
-# Inisialisasi plot
-fig = go.Figure()
-
 # Warna per crane
 crane_colors = {
     806: "#00BFFF",   # DeepSkyBlue
@@ -49,17 +46,8 @@ crane_colors = {
 bay_x_pos = {10: 1, 14: 3, 22: 5, 26: 7, 30: 9}
 main_bay_positions = {10: [0, 2], 14: [2, 4], 22: [4, 6], 26: [6, 8], 30: [8, 10]}
 
-# Grid layout sub bay
-for i, bay in enumerate(sub_bay_labels):
-    fig.add_shape(type="rect", x0=i, x1=i+1, y0=0, y1=1,
-                  line=dict(color="#CCCCCC", width=1), fillcolor="#FAFAFA")
-    fig.add_annotation(x=i+0.5, y=0.5, text=str(bay), showarrow=False, font=dict(size=12, color="#444"))
-
-# Grid layout main bay
-for bay, (start, end) in main_bay_positions.items():
-    fig.add_shape(type="rect", x0=start, x1=end, y0=1, y1=2,
-                  line=dict(color="#888888", width=1.5), fillcolor="#F0F0F0")
-    fig.add_annotation(x=(start+end)/2, y=1.5, text=str(bay), showarrow=False, font=dict(size=14, color="#333"))
+# Inisialisasi plot
+fig = go.Figure()
 
 # Buat blok sequence per crane
 crane_sequences = defaultdict(list)
@@ -100,13 +88,25 @@ yticks = [-t for t in range(start_tick, end_tick + 1)]
 yticklabels = [f"{t:02d}:00" for t in range(start_tick, end_tick + 1)]
 yticklabels.reverse()
 
+# Grid layout sub bay
+for i, bay in enumerate(sub_bay_labels):
+    fig.add_shape(type="rect", x0=i, x1=i+1, y0=-min_start + 1.5, y1=-min_start + 2.5,
+                  line=dict(color="#CCCCCC", width=1), fillcolor="#FAFAFA")
+    fig.add_annotation(x=i+0.5, y=-min_start + 2.0, text=str(bay), showarrow=False, font=dict(size=12, color="#444"))
+
+# Grid layout main bay
+for bay, (start, end) in main_bay_positions.items():
+    fig.add_shape(type="rect", x0=start, x1=end, y0=-min_start + 2.5, y1=-min_start + 3.5,
+                  line=dict(color="#888888", width=1.5), fillcolor="#F0F0F0")
+    fig.add_annotation(x=(start+end)/2, y=-min_start + 3.0, text=str(bay), showarrow=False, font=dict(size=14, color="#333"))
+
 fig.update_layout(
     width=1100,
     height=700,
     margin=dict(l=20, r=20, t=30, b=20),
     xaxis=dict(showgrid=False, zeroline=False, showticklabels=False, range=[0, 10]),
     yaxis=dict(showgrid=True, gridcolor="#eee", zeroline=False,
-               tickvals=yticks, ticktext=yticklabels, range=[-end_tick, -min_start + 1]),
+               tickvals=yticks, ticktext=yticklabels, range=[-end_tick, -min_start + 4]),
     plot_bgcolor="white",
     paper_bgcolor="white"
 )
