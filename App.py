@@ -27,7 +27,7 @@ crane_start_times = {}
 for crane in unique_cranes:
     start_time_str = st.sidebar.time_input(f"Start Time Crane {crane}", value=None, key=f"crane_{crane}")
     if start_time_str is not None:
-        crane_start_times[crane] = f"{start_time_str.hour:02d}:{start_time_str.minute:02d}"
+        crane_start_times[crane] = int(start_time_str.hour) + int(start_time_str.minute) / 60
 
 # Buat figure
 fig = go.Figure()
@@ -62,32 +62,37 @@ bay_x_pos = {
     30: 9
 }
 
-# Tambahkan sequence blocks
+# Kelompokkan sequence per crane dan urutkan
+from collections import defaultdict
+crane_sequences = defaultdict(list)
 for seq in sequence_data:
-    crane = seq["Crane"]
+    crane_sequences[seq['Crane']].append(seq)
+
+for crane in crane_sequences:
     if crane not in crane_start_times:
-        continue  # Skip jika belum input waktu
+        continue
+    start_time = crane_start_times[crane]
+    sequences = sorted(crane_sequences[crane], key=lambda x: x['Seq'])
+    current_time = start_time
 
-    x_center = bay_x_pos[seq['Main bay']]
-    time_str = crane_start_times[crane]
-    time_float = int(time_str[:2]) + int(time_str[3:]) / 60
-    y_base = -time_float
+    for seq in sequences:
+        x_center = bay_x_pos[seq['Main bay']]
+        y_base = -current_time
+        duration_hours = seq['Mvs'] / 30
+        y_top = y_base - duration_hours
 
-    # Tambah offset untuk urutan sequence (jika ada beberapa dalam satu crane)
-    y_base -= (seq['Seq'] - 1) * (seq['Mvs'] / 30)
+        color = crane_colors.get(crane, "gray")
 
-    duration_hours = seq['Mvs'] / 30
-    y_top = y_base - duration_hours
-    color = crane_colors.get(crane, "gray")
+        fig.add_shape(type="rect",
+                      x0=x_center - 0.9, x1=x_center + 0.9,
+                      y0=y_base, y1=y_top,
+                      fillcolor=color, line=dict(color="black"))
+        fig.add_annotation(x=x_center, y=(y_base + y_top) / 2 + 0.2,
+                           text=seq['Direction'], showarrow=False, font=dict(size=12, color="black"))
+        fig.add_annotation(x=x_center, y=(y_base + y_top) / 2 - 0.2,
+                           text=f"{seq['Mvs']} mv", showarrow=False, font=dict(size=12, color="black"))
 
-    fig.add_shape(type="rect",
-                  x0=x_center - 0.9, x1=x_center + 0.9,
-                  y0=y_base, y1=y_top,
-                  fillcolor=color, line=dict(color="black"))
-    fig.add_annotation(x=x_center, y=(y_base + y_top) / 2 + 0.2,
-                       text=seq['Direction'], showarrow=False, font=dict(size=12, color="black"))
-    fig.add_annotation(x=x_center, y=(y_base + y_top) / 2 - 0.2,
-                       text=f"{seq['Mvs']} mv", showarrow=False, font=dict(size=12, color="black"))
+        current_time += duration_hours
 
 # Tambahkan label waktu di sumbu Y
 yticks = [-5, -4.5, -4, -3.5, -3, -2.5, -2, -1.5, -1, -0.5, 0]
