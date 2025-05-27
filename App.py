@@ -116,14 +116,14 @@ if timeline:
             color_class = crane_colors.get(item['Crane'], 'red')
             top_offset = int((item['StartTime'] - 1) * 40)  # 40px per hour from 01:00
             height = int((item['EndTime'] - item['StartTime']) * 40)
-            html += f"""
-            <div class='step {color_class}' style='margin-top:{top_offset}px;height:{height}px;'>
-                <h3>{item['Seq']} {item.get('Icon', '')}</h3>
-                <p><strong>{item['Direction']}</strong></p>
-                <p>{item['Mvs']} Moves</p>
-                <p>Crane {item['Crane']}</p>
-            </div>
-            """
+            html += (
+    f"<div class='step {color_class}' style='margin-top:{top_offset}px;height:{height}px;'>"
+    f"<h3>{item['Seq']} {item.get('Icon', '')}</h3>"
+    f"<p><strong>{item['Direction']}</strong></p>"
+    f"<p>{item['Mvs']} Moves</p>"
+    f"<p>Crane {item['Crane']}</p>"
+    f"</div>"
+)
         html += "</div>"
 else:
     html += "<p style='color:red;'>⚠️ Tidak ada data valid untuk ditampilkan.</p>"
