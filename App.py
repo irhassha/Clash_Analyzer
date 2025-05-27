@@ -30,6 +30,12 @@ for crane in unique_cranes:
     if start_time_str is not None:
         crane_start_times[crane] = int(start_time_str.hour) + int(start_time_str.minute) / 60
 
+# Tentukan waktu paling awal dari semua crane
+if crane_start_times:
+    min_start = min(crane_start_times.values())
+else:
+    min_start = 0
+
 # Inisialisasi plot
 fig = go.Figure()
 
@@ -60,6 +66,7 @@ crane_sequences = defaultdict(list)
 for seq in sequence_data:
     crane_sequences[seq['Crane']].append(seq)
 
+max_end_time = min_start
 for crane in crane_sequences:
     if crane not in crane_start_times:
         continue
@@ -84,11 +91,14 @@ for crane in crane_sequences:
                            text=f"{seq['Mvs']} mv", showarrow=False, font=dict(size=12, color="#000"))
 
         current_time += duration_hours
+        max_end_time = max(max_end_time, current_time)
 
-# Sumbu Y sebagai waktu
-yticks = [-6, -5.5, -5, -4.5, -4, -3.5, -3, -2.5, -2, -1.5, -1, -0.5, 0]
-yticklabels = ["06:00", "05:30", "05:00", "04:30", "04:00", "03:30", "03:00",
-              "02:30", "02:00", "01:30", "01:00", "00:30", "00:00"]
+# Sumbu Y berdasarkan waktu dinamis
+start_tick = int(min_start)
+end_tick = int(max_end_time) + 1
+yticks = [-t for t in range(start_tick, end_tick + 1)]
+yticklabels = [f"{t:02d}:00" for t in range(start_tick, end_tick + 1)]
+yticklabels.reverse()
 
 fig.update_layout(
     width=1100,
@@ -96,7 +106,7 @@ fig.update_layout(
     margin=dict(l=20, r=20, t=30, b=20),
     xaxis=dict(showgrid=False, zeroline=False, showticklabels=False, range=[0, 10]),
     yaxis=dict(showgrid=True, gridcolor="#eee", zeroline=False,
-               tickvals=yticks, ticktext=yticklabels, range=[-7, 2]),
+               tickvals=yticks, ticktext=yticklabels, range=[-end_tick, -min_start + 1]),
     plot_bgcolor="white",
     paper_bgcolor="white"
 )
