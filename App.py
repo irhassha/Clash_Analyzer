@@ -11,8 +11,8 @@ sub_bay_labels = [9, 11, 13, 15]
 
 # Dummy data untuk sequence
 sequence_data = [
-    {"Bay": "13..15", "Main bay": 14, "Seq": 1, "Direction": "Discharge", "Mvs": 45},
-    {"Bay": "10", "Main bay": 10, "Seq": 2, "Direction": "Discharge", "Mvs": 10},
+    {"Bay": "13..15", "Main bay": 14, "Seq": 1, "Direction": "Discharge", "Mvs": 45, "Queue": "806:01:00"},
+    {"Bay": "10", "Main bay": 10, "Seq": 2, "Direction": "Discharge", "Mvs": 10, "Queue": "806:02:00"},
 ]
 
 # Buat figure
@@ -34,15 +34,19 @@ for bay, (start, end) in main_bay_positions.items():
     fig.add_annotation(x=(start+end)/2, y=1.5, text=str(bay), showarrow=False, font=dict(size=14))
 
 # Tambahkan blok sequence di bawah
-sequence_start_y = -1
 sequence_height = 0.8
+sequence_padding = 0.2
 
 # Tentukan posisi X berdasarkan main bay
 bay_x_pos = {10: 1, 14: 3}  # tengah dari kolom sub-bay
 
+# Ambil jam dari queue dan buat sumbu Y berdasarkan waktu
 for seq in sequence_data:
     x_center = bay_x_pos[seq['Main bay']]
-    y_base = sequence_start_y - (seq['Seq'] - 1) * (sequence_height + 0.2)
+    time_str = seq['Queue'][-5:]  # ambil 5 karakter terakhir, contoh "01:00"
+    time_float = int(time_str[:2]) + int(time_str[3:]) / 60  # contoh "01:30" jadi 1.5
+    y_base = -time_float
+
     fig.add_shape(type="rect",
                   x0=x_center - 0.9, x1=x_center + 0.9,
                   y0=y_base, y1=y_base + sequence_height,
@@ -52,12 +56,16 @@ for seq in sequence_data:
     fig.add_annotation(x=x_center, y=y_base + sequence_height * 0.35,
                        text=f"{seq['Mvs']} mv", showarrow=False, font=dict(size=12, color="black"))
 
+# Tambahkan label waktu di sumbu Y
+yticks = [-2, -1.5, -1, -0.5, 0]
+yticklabels = ["02:00", "01:30", "01:00", "00:30", "00:00"]
+
 fig.update_layout(
     width=600,
-    height=400,
+    height=500,
     margin=dict(l=20, r=20, t=20, b=20),
     xaxis=dict(showgrid=False, zeroline=False, showticklabels=False, range=[0, 4]),
-    yaxis=dict(showgrid=False, zeroline=False, showticklabels=False, range=[-3, 2]),
+    yaxis=dict(showgrid=False, zeroline=False, tickvals=yticks, ticktext=yticklabels, range=[-3, 2]),
     plot_bgcolor="white",
     paper_bgcolor="white"
 )
