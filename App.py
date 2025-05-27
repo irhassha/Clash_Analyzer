@@ -20,7 +20,7 @@ st.markdown("""
         flex-direction: column;
         position: relative;
         min-height: 1000px;
-        width: 220px;
+        width: 120px;
     }
     .column-title {
         text-align: center;
@@ -34,9 +34,9 @@ st.markdown("""
         border-radius: 6px;
         padding: 4px 6px;
         margin-bottom: 6px;
-        font-size: 10px;
+        font-size: 9px;
         position: absolute;
-        width: 190px;
+        width: 100px;
         left: 10px;
     }
     .red { background-color: #e74c3c; color: white; }
