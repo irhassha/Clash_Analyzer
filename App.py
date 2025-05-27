@@ -15,8 +15,13 @@ st.markdown("""
         gap: 10px;
         padding: 10px;
     }
-    
+    .column {
+        display: flex;
+        flex-direction: column;
+        position: relative;
         min-height: 1000px;
+        width: 150px;
+    }
     .column-title {
         text-align: center;
         font-weight: bold;
@@ -46,11 +51,13 @@ st.markdown("""
         margin: 2px 0;
     }
     .time-grid {
-        position: absolute;
+        position: sticky;
         left: 0;
         top: 0;
         width: 60px;
         height: 100%;
+        background-color: #111;
+        z-index: 2;
     }
     .time-label {
         height: 40px;
