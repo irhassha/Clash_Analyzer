@@ -11,8 +11,8 @@ sub_bay_labels = [9, 11, 13, 15]
 
 # Dummy data untuk sequence
 sequence_data = [
-    {"Bay": "13..15", "Main bay": 14, "Seq": 1},
-    {"Bay": "10", "Main bay": 10, "Seq": 2},
+    {"Bay": "13..15", "Main bay": 14, "Seq": 1, "Direction": "Discharge", "Mvs": 45},
+    {"Bay": "10", "Main bay": 10, "Seq": 2, "Direction": "Discharge", "Mvs": 10},
 ]
 
 # Buat figure
@@ -47,8 +47,10 @@ for seq in sequence_data:
                   x0=x_center - 0.9, x1=x_center + 0.9,
                   y0=y_base, y1=y_base + sequence_height,
                   fillcolor="deepskyblue", line=dict(color="black"))
-    fig.add_annotation(x=x_center, y=y_base + sequence_height / 2,
-                       text=f"Seq {seq['Seq']}", showarrow=False, font=dict(size=12, color="black"))
+    fig.add_annotation(x=x_center, y=y_base + sequence_height * 0.65,
+                       text=seq['Direction'], showarrow=False, font=dict(size=12, color="black"))
+    fig.add_annotation(x=x_center, y=y_base + sequence_height * 0.35,
+                       text=f"{seq['Mvs']} mv", showarrow=False, font=dict(size=12, color="black"))
 
 fig.update_layout(
     width=600,
