@@ -9,14 +9,25 @@ st.title("Bay Header Visualisation + Sequence")
 main_bay_labels = [10, 10, 14, 14, 22, 22, 26, 26, 30, 30]
 sub_bay_labels = [9, 11, 13, 15, 21, 23, 25, 27, 29, 31]
 
-# Dummy data untuk sequence (Queue dihapus, diganti StartTime manual)
+# Dummy data untuk sequence
 sequence_data = [
-    {"Bay": "13..15", "Main bay": 14, "Seq": 1, "Direction": "Discharge", "Mvs": 45, "StartTime": "01:00", "Crane": 806},
-    {"Bay": "10", "Main bay": 10, "Seq": 2, "Direction": "Discharge", "Mvs": 10, "StartTime": "02:30", "Crane": 806},
-    {"Bay": "30", "Main bay": 30, "Seq": 1, "Direction": "Discharge", "Mvs": 15, "StartTime": "01:15", "Crane": 807},
-    {"Bay": "26", "Main bay": 26, "Seq": 2, "Direction": "Discharge", "Mvs": 40, "StartTime": "02:00", "Crane": 807},
-    {"Bay": "22", "Main bay": 22, "Seq": 3, "Direction": "Discharge", "Mvs": 3, "StartTime": "03:00", "Crane": 807},
+    {"Bay": "13..15", "Main bay": 14, "Seq": 1, "Direction": "Discharge", "Mvs": 45, "Crane": 806},
+    {"Bay": "10", "Main bay": 10, "Seq": 2, "Direction": "Discharge", "Mvs": 10, "Crane": 806},
+    {"Bay": "30", "Main bay": 30, "Seq": 1, "Direction": "Discharge", "Mvs": 15, "Crane": 807},
+    {"Bay": "26", "Main bay": 26, "Seq": 2, "Direction": "Discharge", "Mvs": 40, "Crane": 807},
+    {"Bay": "22", "Main bay": 22, "Seq": 3, "Direction": "Discharge", "Mvs": 3, "Crane": 807},
 ]
+
+# Ambil daftar crane unik
+unique_cranes = sorted(set(seq["Crane"] for seq in sequence_data))
+
+# Buat dictionary input waktu untuk masing-masing crane
+st.sidebar.header("Set Start Time per Crane")
+crane_start_times = {}
+for crane in unique_cranes:
+    start_time_str = st.sidebar.time_input(f"Start Time Crane {crane}", value=None, key=f"crane_{crane}")
+    if start_time_str is not None:
+        crane_start_times[crane] = f"{start_time_str.hour:02d}:{start_time_str.minute:02d}"
 
 # Buat figure
 fig = go.Figure()
@@ -42,27 +53,32 @@ crane_colors = {
     807: "lightgreen"
 }
 
-# Tentukan posisi X berdasarkan main bay
+# Posisi X berdasarkan main bay
 bay_x_pos = {
     10: 1,
     14: 3,
     22: 5,
     26: 7,
     30: 9
-}  # tengah dari kolom sub-bay
+}
 
-# Ambil waktu mulai dari StartTime dan buat sumbu Y berdasarkan waktu
+# Tambahkan sequence blocks
 for seq in sequence_data:
+    crane = seq["Crane"]
+    if crane not in crane_start_times:
+        continue  # Skip jika belum input waktu
+
     x_center = bay_x_pos[seq['Main bay']]
-    time_str = seq['StartTime']  # ambil string waktu manual
-    time_float = int(time_str[:2]) + int(time_str[3:]) / 60  # contoh "01:30" jadi 1.5
+    time_str = crane_start_times[crane]
+    time_float = int(time_str[:2]) + int(time_str[3:]) / 60
     y_base = -time_float
 
-    # Hitung durasi dari Mvs (asumsi 30 moves = 1 jam)
-    duration_hours = seq['Mvs'] / 30
-    y_top = y_base + -duration_hours  # ke bawah
+    # Tambah offset untuk urutan sequence (jika ada beberapa dalam satu crane)
+    y_base -= (seq['Seq'] - 1) * (seq['Mvs'] / 30)
 
-    color = crane_colors.get(seq['Crane'], "gray")
+    duration_hours = seq['Mvs'] / 30
+    y_top = y_base - duration_hours
+    color = crane_colors.get(crane, "gray")
 
     fig.add_shape(type="rect",
                   x0=x_center - 0.9, x1=x_center + 0.9,
@@ -74,15 +90,15 @@ for seq in sequence_data:
                        text=f"{seq['Mvs']} mv", showarrow=False, font=dict(size=12, color="black"))
 
 # Tambahkan label waktu di sumbu Y
-yticks = [-4, -3.5, -3, -2.5, -2, -1.5, -1, -0.5, 0]
-yticklabels = ["04:00", "03:30", "03:00", "02:30", "02:00", "01:30", "01:00", "00:30", "00:00"]
+yticks = [-5, -4.5, -4, -3.5, -3, -2.5, -2, -1.5, -1, -0.5, 0]
+yticklabels = ["05:00", "04:30", "04:00", "03:30", "03:00", "02:30", "02:00", "01:30", "01:00", "00:30", "00:00"]
 
 fig.update_layout(
     width=1000,
     height=700,
     margin=dict(l=20, r=20, t=20, b=20),
     xaxis=dict(showgrid=False, zeroline=False, showticklabels=False, range=[0, 10]),
-    yaxis=dict(showgrid=False, zeroline=False, tickvals=yticks, ticktext=yticklabels, range=[-5, 2]),
+    yaxis=dict(showgrid=False, zeroline=False, tickvals=yticks, ticktext=yticklabels, range=[-6, 2]),
     plot_bgcolor="white",
     paper_bgcolor="white"
 )
