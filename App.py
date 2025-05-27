@@ -1,6 +1,7 @@
 import streamlit as st
 from datetime import time
 from collections import defaultdict
+import pandas as pd
 
 st.set_page_config(layout="wide")
 
@@ -52,13 +53,18 @@ st.markdown("""
 
 st.title("📊 Crane Sequence by Bay with Time Axis")
 
-# Dummy sequence data with crane time sequence
-data = [
-    {"Seq": 1, "Direction": "Discharge", "Mvs": 45, "Bay": "14", "Crane": 806, "Icon": "👷"},
-    {"Seq": 2, "Direction": "Discharge", "Mvs": 10, "Bay": "10", "Crane": 806, "Icon": "📦"},
-    {"Seq": 3, "Direction": "Discharge", "Mvs": 15, "Bay": "30", "Crane": 807, "Icon": "⏱️"},
-    {"Seq": 4, "Direction": "Discharge", "Mvs": 40, "Bay": "26", "Crane": 807, "Icon": "🏗️"},
-]
+# Upload Excel
+uploaded_file = st.sidebar.file_uploader("📂 Upload Excel", type=["xlsx"])
+if uploaded_file:
+    df = pd.read_excel(uploaded_file)
+    data = df.to_dict(orient="records")
+else:
+    data = [
+        {"Seq": 1, "Direction": "Discharge", "Mvs": 45, "Bay": "14", "Crane": 806, "Icon": "👷"},
+        {"Seq": 2, "Direction": "Discharge", "Mvs": 10, "Bay": "10", "Crane": 806, "Icon": "📦"},
+        {"Seq": 3, "Direction": "Discharge", "Mvs": 15, "Bay": "30", "Crane": 807, "Icon": "⏱️"},
+        {"Seq": 4, "Direction": "Discharge", "Mvs": 40, "Bay": "26", "Crane": 807, "Icon": "🏗️"},
+    ]
 
 # Sidebar input waktu mulai per crane
 st.sidebar.header("🕒 Set Start Time per Crane")
@@ -69,10 +75,8 @@ for crane in crane_ids:
     start_times[crane] = t.hour + t.minute / 60
 
 # Color per crane
-crane_colors = {
-    806: "blue",
-    807: "green"
-}
+color_pool = ["blue", "green", "yellow", "red", "orange", "purple"]
+crane_colors = {crane: color_pool[i % len(color_pool)] for i, crane in enumerate(crane_ids)}
 
 duration_per_mv = 1 / 30  # 30 moves = 1 hour
 
@@ -106,7 +110,7 @@ for bay_index, (bay, items) in enumerate(sorted(timeline.items())):
         height = int((item['EndTime'] - item['StartTime']) * 40)
         html += f"""
         <div class='step {color_class}' style='margin-top:{top_offset}px;height:{height}px;'>
-            <h3>{item['Seq']} {item['Icon']}</h3>
+            <h3>{item['Seq']} {item.get('Icon', '')}</h3>
             <p><strong>{item['Direction']}</strong></p>
             <p>{item['Mvs']} Moves</p>
             <p>Crane {item['Crane']}</p>
