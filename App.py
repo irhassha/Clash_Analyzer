@@ -8,45 +8,46 @@ st.set_page_config(layout="wide")
 st.markdown("""
 <style>
     .column {
-        display: inline-block;
-        vertical-align: top;
-        margin: 10px;
+        display: block;
+        margin-bottom: 40px;
     }
     .column-title {
-        text-align: center;
+        text-align: left;
         font-weight: bold;
-        font-size: 20px;
-        margin-bottom: 10px;
+        font-size: 18px;
+        margin-bottom: 6px;
+        padding-left: 10px;
     }
     .step {
         background-color: #f0f0f0;
         color: #333;
         border-radius: 10px;
-        padding: 16px;
-        margin-bottom: 12px;
-        width: 220px;
-        box-shadow: 2px 2px 8px rgba(0,0,0,0.1);
+        padding: 10px;
+        margin-left: 90px;
+        margin-bottom: 8px;
+        width: 160px;
+        box-shadow: 1px 1px 5px rgba(0,0,0,0.1);
+        font-size: 12px;
     }
     .red { background-color: #e74c3c; color: white; }
     .blue { background-color: #3498db; color: white; }
     .yellow { background-color: #f1c40f; color: white; }
     .green { background-color: #2ecc71; color: white; }
     .step h3 {
-        margin: 0;
-        font-size: 22px;
+        margin: 0 0 4px;
+        font-size: 16px;
     }
     .step p {
-        margin: 5px 0;
-        font-size: 14px;
+        margin: 2px 0;
     }
     .time-labels {
-        position: absolute;
-        left: 0;
         width: 80px;
         text-align: right;
         padding-right: 10px;
         font-weight: bold;
         color: #555;
+        font-size: 12px;
+        height: 40px;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -99,35 +100,26 @@ for item in data:
     timeline[item['Bay']].append(item)
     crane_last_time[crane] = item['EndTime']
 
-html = """
-<div style='display: flex;'>
-    <div style='display: flex; flex-direction: column; margin-right: 30px;'>
-"""
-
-for t in range(6, 0, -1):
-    html += f"<div style='height:40px;' class='time-labels'>{t:02d}:00</div>"
-
-html += "</div>"
+html = ""
 
 if timeline:
     for bay_index, (bay, items) in enumerate(sorted(timeline.items())):
         html += f"<div class='column'><div class='column-title'>Bay {bay}</div>"
         for i, item in enumerate(items):
             color_class = crane_colors.get(item['Crane'], 'red')
-            top_offset = int((item['StartTime'] - 1) * 40)  # 40px per hour from 01:00
+            start_hour = int(item['StartTime'])
+            top_offset = int((item['StartTime'] - 1) * 40)
             height = int((item['EndTime'] - item['StartTime']) * 40)
             html += (
-    f"<div class='step {color_class}' style='margin-top:{top_offset}px;height:{height}px;'>"
-    f"<h3>{item['Seq']} {item.get('Icon', '')}</h3>"
-    f"<p><strong>{item['Direction']}</strong></p>"
-    f"<p>{item['Mvs']} Moves</p>"
-    f"<p>Crane {item['Crane']}</p>"
-    f"</div>"
-)
+                f"<div class='step {color_class}' style='margin-top:{top_offset}px;height:{height}px;'>"
+                f"<h3>{item['Seq']} {item.get('Icon', '')}</h3>"
+                f"<p><strong>{item['Direction']}</strong></p>"
+                f"<p>{item['Mvs']} Moves</p>"
+                f"<p>Crane {item['Crane']}</p>"
+                f"</div>"
+            )
         html += "</div>"
 else:
     html += "<p style='color:red;'>⚠️ Tidak ada data valid untuk ditampilkan.</p>"
-
-html += "</div>"
 
 st.markdown(html, unsafe_allow_html=True)
