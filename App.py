@@ -42,10 +42,6 @@ crane_colors = {
     807: "lightgreen"
 }
 
-# Tambahkan blok sequence di bawah
-sequence_height = 0.8
-sequence_padding = 0.2
-
 # Tentukan posisi X berdasarkan main bay
 bay_x_pos = {
     10: 1,
@@ -62,27 +58,31 @@ for seq in sequence_data:
     time_float = int(time_str[:2]) + int(time_str[3:]) / 60  # contoh "01:30" jadi 1.5
     y_base = -time_float
 
+    # Hitung durasi dari Mvs (asumsi 30 moves = 1 jam)
+    duration_hours = seq['Mvs'] / 30
+    y_top = y_base + -duration_hours  # ke bawah
+
     color = crane_colors.get(seq['Crane'], "gray")
 
     fig.add_shape(type="rect",
                   x0=x_center - 0.9, x1=x_center + 0.9,
-                  y0=y_base, y1=y_base + sequence_height,
+                  y0=y_base, y1=y_top,
                   fillcolor=color, line=dict(color="black"))
-    fig.add_annotation(x=x_center, y=y_base + sequence_height * 0.65,
+    fig.add_annotation(x=x_center, y=(y_base + y_top) / 2 + 0.2,
                        text=seq['Direction'], showarrow=False, font=dict(size=12, color="black"))
-    fig.add_annotation(x=x_center, y=y_base + sequence_height * 0.35,
+    fig.add_annotation(x=x_center, y=(y_base + y_top) / 2 - 0.2,
                        text=f"{seq['Mvs']} mv", showarrow=False, font=dict(size=12, color="black"))
 
 # Tambahkan label waktu di sumbu Y
-yticks = [-3, -2.5, -2, -1.5, -1, -0.5, 0]
-yticklabels = ["03:00", "02:30", "02:00", "01:30", "01:00", "00:30", "00:00"]
+yticks = [-4, -3.5, -3, -2.5, -2, -1.5, -1, -0.5, 0]
+yticklabels = ["04:00", "03:30", "03:00", "02:30", "02:00", "01:30", "01:00", "00:30", "00:00"]
 
 fig.update_layout(
     width=1000,
-    height=600,
+    height=700,
     margin=dict(l=20, r=20, t=20, b=20),
     xaxis=dict(showgrid=False, zeroline=False, showticklabels=False, range=[0, 10]),
-    yaxis=dict(showgrid=False, zeroline=False, tickvals=yticks, ticktext=yticklabels, range=[-4, 2]),
+    yaxis=dict(showgrid=False, zeroline=False, tickvals=yticks, ticktext=yticklabels, range=[-5, 2]),
     plot_bgcolor="white",
     paper_bgcolor="white"
 )
