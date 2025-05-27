@@ -57,7 +57,7 @@ st.title("📊 Crane Sequence by Bay with Time Axis")
 uploaded_file = st.sidebar.file_uploader("📂 Upload Excel", type=["xlsx"])
 if uploaded_file:
     df = pd.read_excel(uploaded_file)
-df.columns = df.columns.str.strip().str.replace('.', '', regex=False)
+    df.columns = df.columns.str.strip().str.replace('.', '', regex=False)
     data = df.to_dict(orient="records")
 else:
     data = [
