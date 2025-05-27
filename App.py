@@ -1,9 +1,10 @@
 import streamlit as st
 import plotly.graph_objects as go
+from collections import defaultdict
 
 st.set_page_config(layout="wide")
 
-st.title("Bay Header Visualisation + Sequence")
+st.title("🚢 Crane Sequence Timeline")
 
 # Data struktur bay dan sub-bay
 main_bay_labels = [10, 10, 14, 14, 22, 22, 26, 26, 30, 30]
@@ -21,49 +22,40 @@ sequence_data = [
 # Ambil daftar crane unik
 unique_cranes = sorted(set(seq["Crane"] for seq in sequence_data))
 
-# Buat dictionary input waktu untuk masing-masing crane
-st.sidebar.header("Set Start Time per Crane")
+# Sidebar Input Start Time
+st.sidebar.header("🕒 Start Time per Crane")
 crane_start_times = {}
 for crane in unique_cranes:
-    start_time_str = st.sidebar.time_input(f"Start Time Crane {crane}", value=None, key=f"crane_{crane}")
+    start_time_str = st.sidebar.time_input(f"Crane {crane}", value=None, key=f"crane_{crane}")
     if start_time_str is not None:
         crane_start_times[crane] = int(start_time_str.hour) + int(start_time_str.minute) / 60
 
-# Buat figure
+# Inisialisasi plot
 fig = go.Figure()
-
-# Tambahkan kotak sub-bay
-for i, bay in enumerate(sub_bay_labels):
-    fig.add_shape(type="rect",
-                  x0=i, x1=i+1, y0=0, y1=1,
-                  line=dict(color="black"), fillcolor="white")
-    fig.add_annotation(x=i+0.5, y=0.5, text=str(bay), showarrow=False, font=dict(size=14))
-
-# Tambahkan kotak main bay
-main_bay_positions = {10: [0, 2], 14: [2, 4], 22: [4, 6], 26: [6, 8], 30: [8, 10]}
-for bay, (start, end) in main_bay_positions.items():
-    fig.add_shape(type="rect",
-                  x0=start, x1=end, y0=1, y1=2,
-                  line=dict(color="black"), fillcolor="white")
-    fig.add_annotation(x=(start+end)/2, y=1.5, text=str(bay), showarrow=False, font=dict(size=14))
 
 # Warna per crane
 crane_colors = {
-    806: "deepskyblue",
-    807: "lightgreen"
+    806: "#00BFFF",   # DeepSkyBlue
+    807: "#90EE90"    # LightGreen
 }
 
-# Posisi X berdasarkan main bay
-bay_x_pos = {
-    10: 1,
-    14: 3,
-    22: 5,
-    26: 7,
-    30: 9
-}
+# Koordinat horizontal bay
+bay_x_pos = {10: 1, 14: 3, 22: 5, 26: 7, 30: 9}
+main_bay_positions = {10: [0, 2], 14: [2, 4], 22: [4, 6], 26: [6, 8], 30: [8, 10]}
 
-# Kelompokkan sequence per crane dan urutkan
-from collections import defaultdict
+# Grid layout sub bay
+for i, bay in enumerate(sub_bay_labels):
+    fig.add_shape(type="rect", x0=i, x1=i+1, y0=0, y1=1,
+                  line=dict(color="#CCCCCC", width=1), fillcolor="#FAFAFA")
+    fig.add_annotation(x=i+0.5, y=0.5, text=str(bay), showarrow=False, font=dict(size=12, color="#444"))
+
+# Grid layout main bay
+for bay, (start, end) in main_bay_positions.items():
+    fig.add_shape(type="rect", x0=start, x1=end, y0=1, y1=2,
+                  line=dict(color="#888888", width=1.5), fillcolor="#F0F0F0")
+    fig.add_annotation(x=(start+end)/2, y=1.5, text=str(bay), showarrow=False, font=dict(size=14, color="#333"))
+
+# Buat blok sequence per crane
 crane_sequences = defaultdict(list)
 for seq in sequence_data:
     crane_sequences[seq['Crane']].append(seq)
@@ -80,32 +72,33 @@ for crane in crane_sequences:
         y_base = -current_time
         duration_hours = seq['Mvs'] / 30
         y_top = y_base - duration_hours
-
         color = crane_colors.get(crane, "gray")
 
-        fig.add_shape(type="rect",
-                      x0=x_center - 0.9, x1=x_center + 0.9,
-                      y0=y_base, y1=y_top,
-                      fillcolor=color, line=dict(color="black"))
+        fig.add_shape(type="rect", x0=x_center - 0.9, x1=x_center + 0.9,
+                      y0=y_base, y1=y_top, fillcolor=color,
+                      line=dict(color="#333", width=1.5), opacity=0.9)
+
         fig.add_annotation(x=x_center, y=(y_base + y_top) / 2 + 0.2,
-                           text=seq['Direction'], showarrow=False, font=dict(size=12, color="black"))
+                           text=seq['Direction'], showarrow=False, font=dict(size=12, color="#000"))
         fig.add_annotation(x=x_center, y=(y_base + y_top) / 2 - 0.2,
-                           text=f"{seq['Mvs']} mv", showarrow=False, font=dict(size=12, color="black"))
+                           text=f"{seq['Mvs']} mv", showarrow=False, font=dict(size=12, color="#000"))
 
         current_time += duration_hours
 
-# Tambahkan label waktu di sumbu Y
-yticks = [-5, -4.5, -4, -3.5, -3, -2.5, -2, -1.5, -1, -0.5, 0]
-yticklabels = ["05:00", "04:30", "04:00", "03:30", "03:00", "02:30", "02:00", "01:30", "01:00", "00:30", "00:00"]
+# Sumbu Y sebagai waktu
+yticks = [-6, -5.5, -5, -4.5, -4, -3.5, -3, -2.5, -2, -1.5, -1, -0.5, 0]
+yticklabels = ["06:00", "05:30", "05:00", "04:30", "04:00", "03:30", "03:00",
+              "02:30", "02:00", "01:30", "01:00", "00:30", "00:00"]
 
 fig.update_layout(
-    width=1000,
+    width=1100,
     height=700,
-    margin=dict(l=20, r=20, t=20, b=20),
+    margin=dict(l=20, r=20, t=30, b=20),
     xaxis=dict(showgrid=False, zeroline=False, showticklabels=False, range=[0, 10]),
-    yaxis=dict(showgrid=False, zeroline=False, tickvals=yticks, ticktext=yticklabels, range=[-6, 2]),
+    yaxis=dict(showgrid=True, gridcolor="#eee", zeroline=False,
+               tickvals=yticks, ticktext=yticklabels, range=[-7, 2]),
     plot_bgcolor="white",
     paper_bgcolor="white"
 )
 
-st.plotly_chart(fig, use_container_width=False)
+st.plotly_chart(fig, use_container_width=True)
