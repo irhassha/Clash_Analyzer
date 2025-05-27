@@ -9,13 +9,13 @@ st.title("Bay Header Visualisation + Sequence")
 main_bay_labels = [10, 10, 14, 14, 22, 22, 26, 26, 30, 30]
 sub_bay_labels = [9, 11, 13, 15, 21, 23, 25, 27, 29, 31]
 
-# Dummy data untuk sequence
+# Dummy data untuk sequence (Queue dihapus, diganti StartTime manual)
 sequence_data = [
-    {"Bay": "13..15", "Main bay": 14, "Seq": 1, "Direction": "Discharge", "Mvs": 45, "Queue": "806:01:00", "Crane": 806},
-    {"Bay": "10", "Main bay": 10, "Seq": 2, "Direction": "Discharge", "Mvs": 10, "Queue": "806:02:00", "Crane": 806},
-    {"Bay": "30", "Main bay": 30, "Seq": 1, "Direction": "Discharge", "Mvs": 15, "Queue": "807:01:00", "Crane": 807},
-    {"Bay": "26", "Main bay": 26, "Seq": 2, "Direction": "Discharge", "Mvs": 40, "Queue": "807:02:00", "Crane": 807},
-    {"Bay": "22", "Main bay": 22, "Seq": 3, "Direction": "Discharge", "Mvs": 3, "Queue": "807:03:00", "Crane": 807},
+    {"Bay": "13..15", "Main bay": 14, "Seq": 1, "Direction": "Discharge", "Mvs": 45, "StartTime": "01:00", "Crane": 806},
+    {"Bay": "10", "Main bay": 10, "Seq": 2, "Direction": "Discharge", "Mvs": 10, "StartTime": "02:30", "Crane": 806},
+    {"Bay": "30", "Main bay": 30, "Seq": 1, "Direction": "Discharge", "Mvs": 15, "StartTime": "01:15", "Crane": 807},
+    {"Bay": "26", "Main bay": 26, "Seq": 2, "Direction": "Discharge", "Mvs": 40, "StartTime": "02:00", "Crane": 807},
+    {"Bay": "22", "Main bay": 22, "Seq": 3, "Direction": "Discharge", "Mvs": 3, "StartTime": "03:00", "Crane": 807},
 ]
 
 # Buat figure
@@ -51,10 +51,10 @@ bay_x_pos = {
     30: 9
 }  # tengah dari kolom sub-bay
 
-# Ambil jam dari queue dan buat sumbu Y berdasarkan waktu
+# Ambil waktu mulai dari StartTime dan buat sumbu Y berdasarkan waktu
 for seq in sequence_data:
     x_center = bay_x_pos[seq['Main bay']]
-    time_str = seq['Queue'][-5:]  # ambil 5 karakter terakhir, contoh "01:00"
+    time_str = seq['StartTime']  # ambil string waktu manual
     time_float = int(time_str[:2]) + int(time_str[3:]) / 60  # contoh "01:30" jadi 1.5
     y_base = -time_float
 
