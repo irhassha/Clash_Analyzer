@@ -1,26 +1,32 @@
-
 import streamlit as st
 import pandas as pd
 import plotly.express as px
 
 st.set_page_config(layout="wide")
 
-# Load data
+st.title("Crane Sequence Timeline")
+
+# Upload file
 uploaded_file = st.file_uploader("Upload Excel File", type=["xlsx"])
 if uploaded_file:
     df = pd.read_excel(uploaded_file)
 
-    # Convert Queue to datetime
-    df['start_time'] = pd.to_datetime(df['Queue'], errors='coerce')
+    # Pilih tanggal operasi (default ke 2025-05-24)
+    selected_date = st.date_input("Pilih tanggal operasi", value=pd.to_datetime("2025-05-24"))
 
-    # Assume a default 30-minute duration per sequence
+    # Ambil hanya jam dari kolom Queue (formatnya time-only)
+    df['Queue_time'] = pd.to_datetime(df['Queue'], errors='coerce').dt.time
+
+    # Gabungkan tanggal terpilih dengan jam dari Queue
+    df['start_time'] = df['Queue_time'].apply(lambda t: pd.Timestamp.combine(selected_date, t))
+
+    # Estimasikan durasi tiap crane block (misalnya 30 menit)
     df['end_time'] = df['start_time'] + pd.to_timedelta(30, unit='m')
 
-    # Convert Bay to string and Main bay to numeric
+    # Ubah Main bay jadi numerik untuk sumbu y
     df['Main bay'] = pd.to_numeric(df['Main bay'], errors='coerce')
 
-    # Visualize
-    st.subheader("Crane Sequence Gantt Chart")
+    # Buat plot Gantt
     fig = px.timeline(
         df,
         x_start='start_time',
@@ -32,8 +38,11 @@ if uploaded_file:
     )
     fig.update_yaxes(title="Bay Position", autorange="reversed")
     fig.update_layout(xaxis_title="Time", height=800)
+
     st.plotly_chart(fig, use_container_width=True)
 
-    # Optional: Display raw data
+    # Tampilkan data mentah jika diinginkan
     with st.expander("Lihat Data Mentah"):
         st.dataframe(df)
+else:
+    st.info("Silakan upload file Excel crane sequence.")
