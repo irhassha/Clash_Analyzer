@@ -7,27 +7,36 @@ st.set_page_config(layout="wide")
 
 st.markdown("""
 <style>
+    .timeline {
+        display: flex;
+        flex-direction: row;
+        align-items: flex-start;
+        overflow-x: auto;
+        gap: 10px;
+        padding: 10px;
+    }
     .column {
-        display: block;
-        margin-bottom: 40px;
+        display: flex;
+        flex-direction: column;
+        min-width: 150px;
+        position: relative;
     }
     .column-title {
-        text-align: left;
+        text-align: center;
         font-weight: bold;
-        font-size: 18px;
-        margin-bottom: 6px;
-        padding-left: 10px;
+        font-size: 14px;
+        margin-bottom: 8px;
     }
     .step {
         background-color: #f0f0f0;
         color: #333;
-        border-radius: 10px;
-        padding: 10px;
-        margin-left: 90px;
-        margin-bottom: 8px;
-        width: 160px;
-        box-shadow: 1px 1px 5px rgba(0,0,0,0.1);
-        font-size: 12px;
+        border-radius: 6px;
+        padding: 6px;
+        margin-bottom: 6px;
+        font-size: 11px;
+        position: absolute;
+        width: 130px;
+        left: 10px;
     }
     .red { background-color: #e74c3c; color: white; }
     .blue { background-color: #3498db; color: white; }
@@ -35,19 +44,25 @@ st.markdown("""
     .green { background-color: #2ecc71; color: white; }
     .step h3 {
         margin: 0 0 4px;
-        font-size: 16px;
+        font-size: 13px;
     }
     .step p {
         margin: 2px 0;
     }
-    .time-labels {
-        width: 80px;
-        text-align: right;
-        padding-right: 10px;
-        font-weight: bold;
-        color: #555;
-        font-size: 12px;
+    .time-grid {
+        position: absolute;
+        left: 0;
+        top: 0;
+        width: 60px;
+        height: 100%;
+    }
+    .time-label {
         height: 40px;
+        font-size: 11px;
+        color: #888;
+        text-align: right;
+        padding-right: 6px;
+        box-sizing: border-box;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -67,12 +82,7 @@ if uploaded_file:
     df['Bay'] = df['Bay'].astype(str).str.strip()
     data = df.to_dict(orient="records")
 else:
-    data = [
-        {"Seq": 1, "Direction": "Discharge", "Mvs": 45, "Bay": "14", "Crane": 806, "Icon": "👷"},
-        {"Seq": 2, "Direction": "Discharge", "Mvs": 10, "Bay": "10", "Crane": 806, "Icon": "📦"},
-        {"Seq": 3, "Direction": "Discharge", "Mvs": 15, "Bay": "30", "Crane": 807, "Icon": "⏱️"},
-        {"Seq": 4, "Direction": "Discharge", "Mvs": 40, "Bay": "26", "Crane": 807, "Icon": "🏗️"},
-    ]
+    data = []
 
 # Sidebar input waktu mulai per crane
 st.sidebar.header("🕒 Set Start Time per Crane")
@@ -100,19 +110,24 @@ for item in data:
     timeline[item['Bay']].append(item)
     crane_last_time[crane] = item['EndTime']
 
-html = ""
+html = "<div class='timeline'>"
+
+# Time scale background
+html += "<div class='time-grid'>"
+for h in range(24):
+    html += f"<div class='time-label'>{h:02d}:00</div>"
+html += "</div>"
 
 if timeline:
     for bay_index, (bay, items) in enumerate(sorted(timeline.items())):
         html += f"<div class='column'><div class='column-title'>Bay {bay}</div>"
         for i, item in enumerate(items):
             color_class = crane_colors.get(item['Crane'], 'red')
-            start_hour = int(item['StartTime'])
-            top_offset = int((item['StartTime'] - 1) * 40)
-            height = int((item['EndTime'] - item['StartTime']) * 40)
+            top_offset = int(item['StartTime'] * 40)
+            height = max(6, int((item['EndTime'] - item['StartTime']) * 40))
             html += (
-                f"<div class='step {color_class}' style='margin-top:{top_offset}px;height:{height}px;'>"
-                f"<h3>{item['Seq']} {item.get('Icon', '')}</h3>"
+                f"<div class='step {color_class}' style='top:{top_offset}px;height:{height}px;'>"
+                f"<h3>{item['Seq']}</h3>"
                 f"<p><strong>{item['Direction']}</strong></p>"
                 f"<p>{item['Mvs']} Moves</p>"
                 f"<p>Crane {item['Crane']}</p>"
@@ -121,5 +136,7 @@ if timeline:
         html += "</div>"
 else:
     html += "<p style='color:red;'>⚠️ Tidak ada data valid untuk ditampilkan.</p>"
+
+html += "</div>"
 
 st.markdown(html, unsafe_allow_html=True)
