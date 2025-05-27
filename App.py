@@ -4,7 +4,22 @@ from collections import defaultdict
 
 st.set_page_config(layout="wide")
 
-st.title("🚢 Crane Sequence Timeline")
+st.markdown("""
+<style>
+    .block-container {
+        padding-top: 2rem;
+    }
+    .css-18e3th9 {
+        padding-top: 2rem;
+    }
+</style>
+""", unsafe_allow_html=True)
+
+st.markdown("""
+## 🧱 Crane Timeline
+**Vessel:** EVER BEAMY &nbsp;&nbsp;&nbsp;|&nbsp;&nbsp;&nbsp;**Operation Window:** Based on crane start time
+---
+""")
 
 # Data struktur bay dan sub-bay
 main_bay_labels = [10, 10, 14, 14, 22, 22, 26, 26, 30, 30]
@@ -38,8 +53,8 @@ else:
 
 # Warna per crane
 crane_colors = {
-    806: "#00BFFF",   # DeepSkyBlue
-    807: "#90EE90"    # LightGreen
+    806: "#1f77b4",   # Blue
+    807: "#2ca02c"    # Green
 }
 
 # Koordinat horizontal bay
@@ -71,12 +86,14 @@ for crane in crane_sequences:
 
         fig.add_shape(type="rect", x0=x_center - 0.9, x1=x_center + 0.9,
                       y0=y_base, y1=y_top, fillcolor=color,
-                      line=dict(color="#333", width=1.5), opacity=0.9)
+                      line=dict(color="#111", width=2), opacity=1, layer="above")
 
-        fig.add_annotation(x=x_center, y=(y_base + y_top) / 2 + 0.2,
-                           text=seq['Direction'], showarrow=False, font=dict(size=12, color="#000"))
-        fig.add_annotation(x=x_center, y=(y_base + y_top) / 2 - 0.2,
-                           text=f"{seq['Mvs']} mv", showarrow=False, font=dict(size=12, color="#000"))
+        fig.add_annotation(x=x_center, y=(y_base + y_top) / 2 + 0.3,
+                           text=f"⬅️ {seq['Direction']}", showarrow=False, font=dict(size=13, color="white"))
+        fig.add_annotation(x=x_center, y=(y_base + y_top) / 2 - 0.1,
+                           text=f"{seq['Mvs']} moves", showarrow=False, font=dict(size=13, color="white"))
+        fig.add_annotation(x=x_center, y=y_top - 0.2,
+                           text=f"CR-{crane}", showarrow=False, font=dict(size=11, color="#eee"))
 
         current_time += duration_hours
         max_end_time = max(max_end_time, current_time)
@@ -91,24 +108,25 @@ yticklabels.reverse()
 # Grid layout sub bay
 for i, bay in enumerate(sub_bay_labels):
     fig.add_shape(type="rect", x0=i, x1=i+1, y0=-min_start + 1.5, y1=-min_start + 2.5,
-                  line=dict(color="#CCCCCC", width=1), fillcolor="#FAFAFA")
-    fig.add_annotation(x=i+0.5, y=-min_start + 2.0, text=str(bay), showarrow=False, font=dict(size=12, color="#444"))
+                  line=dict(color="#DDDDDD", width=1), fillcolor="#FBFBFB")
+    fig.add_annotation(x=i+0.5, y=-min_start + 2.0, text=str(bay), showarrow=False, font=dict(size=11, color="#555"))
 
 # Grid layout main bay
 for bay, (start, end) in main_bay_positions.items():
     fig.add_shape(type="rect", x0=start, x1=end, y0=-min_start + 2.5, y1=-min_start + 3.5,
-                  line=dict(color="#888888", width=1.5), fillcolor="#F0F0F0")
-    fig.add_annotation(x=(start+end)/2, y=-min_start + 3.0, text=str(bay), showarrow=False, font=dict(size=14, color="#333"))
+                  line=dict(color="#BBBBBB", width=1.5), fillcolor="#F5F5F5")
+    fig.add_annotation(x=(start+end)/2, y=-min_start + 3.0, text=str(bay), showarrow=False, font=dict(size=13, color="#333"))
 
 fig.update_layout(
     width=1100,
     height=700,
     margin=dict(l=20, r=20, t=30, b=20),
     xaxis=dict(showgrid=False, zeroline=False, showticklabels=False, range=[0, 10]),
-    yaxis=dict(showgrid=True, gridcolor="#eee", zeroline=False,
+    yaxis=dict(showgrid=True, gridcolor="#f0f0f0", zeroline=False,
                tickvals=yticks, ticktext=yticklabels, range=[-end_tick, -min_start + 4]),
     plot_bgcolor="white",
-    paper_bgcolor="white"
+    paper_bgcolor="white",
+    font=dict(family="Open Sans, sans-serif", size=12, color="#333")
 )
 
 st.plotly_chart(fig, use_container_width=True)
