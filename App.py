@@ -8,29 +8,47 @@ st.title("Crane Sequence Matrix View")
 
 # Dummy data
 bay_data = pd.DataFrame([
-    {"Bay": 10, "Main bay": 10, "Deck": "WD", "Crane": 806, "Seq.": 2},
-    {"Bay": "13..15", "Main bay": 14, "Deck": "WD", "Crane": 806, "Seq.": 1}
+    {"Bay": "10", "Deck": "WD", "Crane": 806, "Seq.": 2},
+    {"Bay": "13..15", "Deck": "WD", "Crane": 806, "Seq.": 1}
 ])
 
-# Dapatkan daftar bay unik untuk kolom dan sequence untuk baris
-unique_bays = sorted(bay_data['Main bay'].unique())
+# Ekstrak semua bay menjadi list integer
+all_bays = set()
+for bay in bay_data['Bay']:
+    if ".." in bay:
+        start, end = map(int, bay.split(".."))
+        all_bays.update(range(start, end + 1))
+    else:
+        all_bays.add(int(bay))
+
+unique_bays = sorted(all_bays)
 unique_seq = sorted(bay_data['Seq.'].unique())
 
-# Buat grid kosong
+# Buat matriks kosong
 matrix = pd.DataFrame("", index=unique_seq, columns=unique_bays)
 
-# Isi cell dengan informasi Crane
+# Isi cell dengan info crane di semua bay terkait
 for _, row in bay_data.iterrows():
-    matrix.at[row['Seq.'], row['Main bay']] = f"{row['Crane']}\n{row['Deck']}"
+    bay_range = []
+    if ".." in row['Bay']:
+        start, end = map(int, row['Bay'].split(".."))
+        bay_range = list(range(start, end + 1))
+    else:
+        bay_range = [int(row['Bay'])]
 
-# Tampilkan sebagai heatmap text
+    for b in bay_range:
+        matrix.at[row['Seq.'], b] = f"{row['Crane']}\n{row['Deck']}"
+
+# Buat heatmap dummy
+z = [[1 if cell != "" else 0 for cell in row] for row in matrix.values]
+
 fig = go.Figure(data=go.Heatmap(
-    z=[[0]*len(matrix.columns)]*len(matrix.index),
+    z=z,
     x=matrix.columns,
     y=matrix.index,
     text=matrix.values,
     texttemplate="%{text}",
-    colorscale=[[0, 'lightblue'], [1, 'lightblue']],
+    colorscale=[[0, 'white'], [1, 'deepskyblue']],
     showscale=False
 ))
 
