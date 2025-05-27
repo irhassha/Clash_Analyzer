@@ -15,12 +15,8 @@ st.markdown("""
         gap: 10px;
         padding: 10px;
     }
-    .column {
-        display: flex;
-        flex-direction: column;
-        min-width: 150px;
-        position: relative;
-    }
+    
+        min-height: 1000px;
     .column-title {
         text-align: center;
         font-weight: bold;
