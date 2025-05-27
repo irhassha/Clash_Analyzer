@@ -52,12 +52,6 @@ st.markdown("""
 
 st.title("📊 Crane Sequence by Bay with Time Axis")
 
-# Data dinamis
-start_times = {
-    806: 1.0,  # 01:00
-    807: 2.0   # 02:00
-}
-
 # Dummy sequence data with crane time sequence
 data = [
     {"Seq": 1, "Direction": "Discharge", "Mvs": 45, "Bay": "14", "Crane": 806, "Icon": "👷"},
@@ -66,7 +60,19 @@ data = [
     {"Seq": 4, "Direction": "Discharge", "Mvs": 40, "Bay": "26", "Crane": 807, "Icon": "🏗️"},
 ]
 
-colors = ["red", "blue", "yellow", "green"]
+# Sidebar input waktu mulai per crane
+st.sidebar.header("🕒 Set Start Time per Crane")
+crane_ids = sorted(set(item["Crane"] for item in data))
+start_times = {}
+for crane in crane_ids:
+    t = st.sidebar.time_input(f"Crane {crane} Start", value=time(1, 0), key=f"cr_{crane}")
+    start_times[crane] = t.hour + t.minute / 60
+
+# Color per crane
+crane_colors = {
+    806: "blue",
+    807: "green"
+}
 
 duration_per_mv = 1 / 30  # 30 moves = 1 hour
 
@@ -77,9 +83,6 @@ for item in data:
     crane = item['Crane']
     if crane_last_time[crane] == 0:
         crane_last_time[crane] = start_times[crane]
-    else:
-        crane_last_time[crane] += 0  # continue from last
-
     item['StartTime'] = crane_last_time[crane]
     item['EndTime'] = item['StartTime'] + item['Mvs'] * duration_per_mv
     timeline[item['Bay']].append(item)
@@ -98,7 +101,7 @@ html += "</div>"
 for bay_index, (bay, items) in enumerate(sorted(timeline.items())):
     html += f"<div class='column'><div class='column-title'>Bay {bay}</div>"
     for i, item in enumerate(items):
-        color_class = colors[(bay_index + i) % len(colors)]
+        color_class = crane_colors.get(item['Crane'], 'red')
         top_offset = int((item['StartTime'] - 1) * 40)  # 40px per hour from 01:00
         height = int((item['EndTime'] - item['StartTime']) * 40)
         html += f"""
@@ -113,7 +116,3 @@ for bay_index, (bay, items) in enumerate(sorted(timeline.items())):
 html += "</div>"
 
 st.markdown(html, unsafe_allow_html=True)
-
-st.sidebar.header("🕒 Set Start Time (Fixed Example)")
-for crane, hour in start_times.items():
-    st.sidebar.write(f"Crane {crane} Start: {int(hour):02d}:00")
