@@ -1,66 +1,40 @@
 import streamlit as st
-import pandas as pd
 import plotly.graph_objects as go
 
 st.set_page_config(layout="wide")
 
-st.title("Crane Sequence Matrix View")
+st.title("Bay Header Visualisation")
 
-# Dummy data
-bay_data = pd.DataFrame([
-    {"Bay": "10", "Deck": "WD", "Crane": 806, "Seq.": 2},
-    {"Bay": "13..15", "Deck": "WD", "Crane": 806, "Seq.": 1}
-])
+# Data struktur bay dan sub-bay
+main_bay_labels = [10, 10, 14, 14]
+sub_bay_labels = [9, 11, 13, 15]
 
-# Ekstrak semua bay menjadi list integer
-all_bays = set()
-for bay in bay_data['Bay']:
-    if ".." in bay:
-        start, end = map(int, bay.split(".."))
-        all_bays.update(range(start, end + 1))
-    else:
-        all_bays.add(int(bay))
+# Buat figure
+fig = go.Figure()
 
-unique_bays = sorted(all_bays)
-unique_seq = sorted(bay_data['Seq.'].unique())
+# Tambahkan kotak sub-bay
+for i, bay in enumerate(sub_bay_labels):
+    fig.add_shape(type="rect",
+                  x0=i, x1=i+1, y0=0, y1=1,
+                  line=dict(color="black"), fillcolor="white")
+    fig.add_annotation(x=i+0.5, y=0.5, text=str(bay), showarrow=False, font=dict(size=14))
 
-# Buat matriks kosong
-matrix = pd.DataFrame("", index=unique_seq, columns=unique_bays)
-
-# Isi cell dengan info crane di semua bay terkait
-for _, row in bay_data.iterrows():
-    bay_range = []
-    if ".." in row['Bay']:
-        start, end = map(int, row['Bay'].split(".."))
-        bay_range = list(range(start, end + 1))
-    else:
-        bay_range = [int(row['Bay'])]
-
-    for b in bay_range:
-        matrix.at[row['Seq.'], b] = f"{row['Crane']}\n{row['Deck']}"
-
-# Buat heatmap dummy
-z = [[1 if cell != "" else 0 for cell in row] for row in matrix.values]
-
-fig = go.Figure(data=go.Heatmap(
-    z=z,
-    x=matrix.columns,
-    y=matrix.index,
-    text=matrix.values,
-    texttemplate="%{text}",
-    colorscale=[[0, 'white'], [1, 'deepskyblue']],
-    showscale=False
-))
+# Tambahkan kotak main bay
+main_bay_positions = {10: [0, 2], 14: [2, 4]}
+for bay, (start, end) in main_bay_positions.items():
+    fig.add_shape(type="rect",
+                  x0=start, x1=end, y0=1, y1=2,
+                  line=dict(color="black"), fillcolor="white")
+    fig.add_annotation(x=(start+end)/2, y=1.5, text=str(bay), showarrow=False, font=dict(size=14))
 
 fig.update_layout(
-    title="Crane Sequence by Bay",
-    xaxis_title="Bay",
-    yaxis_title="Sequence",
-    height=500
+    width=600,
+    height=200,
+    margin=dict(l=20, r=20, t=20, b=20),
+    xaxis=dict(showgrid=False, zeroline=False, showticklabels=False, range=[0, 4]),
+    yaxis=dict(showgrid=False, zeroline=False, showticklabels=False, range=[0, 2]),
+    plot_bgcolor="white",
+    paper_bgcolor="white"
 )
 
-st.plotly_chart(fig, use_container_width=True)
-
-# Tampilkan data mentah
-with st.expander("Lihat Data Mentah"):
-    st.dataframe(bay_data)
+st.plotly_chart(fig, use_container_width=False)
