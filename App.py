@@ -58,6 +58,12 @@ uploaded_file = st.sidebar.file_uploader("📂 Upload Excel", type=["xlsx"])
 if uploaded_file:
     df = pd.read_excel(uploaded_file)
     df.columns = df.columns.str.strip().str.replace('.', '', regex=False)
+    required_cols = {'Seq', 'Direction', 'Mvs', 'Bay', 'Crane'}
+    if not required_cols.issubset(set(df.columns)):
+        st.error(f"❌ Excel harus mengandung kolom: {', '.join(required_cols)}")
+        st.stop()
+    df = df.dropna(subset=['Seq', 'Direction', 'Mvs', 'Bay', 'Crane'])
+    df['Bay'] = df['Bay'].astype(str).str.strip()
     data = df.to_dict(orient="records")
 else:
     data = [
