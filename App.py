@@ -17,6 +17,9 @@ if uploaded_file:
     # Ambil hanya jam dari kolom Queue (formatnya time-only)
     df['Queue_time'] = pd.to_datetime(df['Queue'], errors='coerce').dt.time
 
+    # Filter data yang waktu-nya valid
+    df = df[df['Queue_time'].notna()].copy()
+
     # Gabungkan tanggal terpilih dengan jam dari Queue
     df['start_time'] = df['Queue_time'].apply(lambda t: pd.Timestamp.combine(selected_date, t))
 
