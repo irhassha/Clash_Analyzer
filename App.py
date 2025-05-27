@@ -43,31 +43,33 @@ st.markdown("""
 
 st.title("📊 Crane Sequence Timeline (Infographic Style)")
 
-# Langsung tampilkan blok HTML statis (seperti yang diminta)
-st.markdown("""
-<div style='display:flex; align-items: center;'>
-    <div class='step blue'>
-        <h3>2 📦</h3>
-        <p><strong>Discharge</strong></p>
-        <p>10 Moves</p>
-        <p>Bay 10<br>Crane 806</p>
-    </div>
+# Data dinamis (dummy)
+data = [
+    {"Seq": 1, "Direction": "Discharge", "Mvs": 45, "Bay": "14", "Crane": 806, "Icon": "👷"},
+    {"Seq": 2, "Direction": "Discharge", "Mvs": 10, "Bay": "10", "Crane": 806, "Icon": "📦"},
+    {"Seq": 3, "Direction": "Discharge", "Mvs": 15, "Bay": "30", "Crane": 807, "Icon": "⏱️"},
+    {"Seq": 4, "Direction": "Discharge", "Mvs": 40, "Bay": "26", "Crane": 807, "Icon": "🏗️"},
+]
 
-    <div class='step yellow'>
-        <h3>3 ⏱️</h3>
-        <p><strong>Discharge</strong></p>
-        <p>15 Moves</p>
-        <p>Bay 30<br>Crane 807</p>
-    </div>
+# Warna rotasi agar variatif
+colors = ["red", "blue", "yellow", "green"]
 
-    <div class='step green'>
-        <h3>4 🏗️</h3>
-        <p><strong>Discharge</strong></p>
-        <p>40 Moves</p>
-        <p>Bay 26<br>Crane 807</p>
+html = "<div style='display:flex; flex-wrap: wrap; align-items: flex-start;'>"
+
+for i, item in enumerate(data):
+    color_class = colors[i % len(colors)]
+    html += f"""
+    <div class='step {color_class}'>
+        <h3>{item['Seq']} {item['Icon']}</h3>
+        <p><strong>{item['Direction']}</strong></p>
+        <p>{item['Mvs']} Moves</p>
+        <p>Bay {item['Bay']}<br>Crane {item['Crane']}</p>
     </div>
-</div>
-""", unsafe_allow_html=True)
+    """
+
+html += "</div>"
+
+st.markdown(html, unsafe_allow_html=True)
 
 st.sidebar.header("🕒 Set Start Time (Dummy)")
 st.sidebar.time_input("Start Time", time(1, 0))
