@@ -6,7 +6,7 @@ import re
 
 st.set_page_config(layout="wide")
 
-st.markdown(\"\"\"
+st.markdown("""
 <style>
     .timeline {
         display: flex;
@@ -69,7 +69,7 @@ st.markdown(\"\"\"
         box-sizing: border-box;
     }
 </style>
-\"\"\", unsafe_allow_html=True)
+""", unsafe_allow_html=True)
 
 st.title("📊 Crane Sequence by Bay with Time Axis")
 
@@ -115,7 +115,7 @@ for item in data:
     crane_last_time[crane] = item['EndTime']
 
 def sort_key(bay):
-    match = re.search(r'\\d+', bay)
+    match = re.search(r'\d+', bay)
     return int(match.group()) if match else float('inf')
 
 html = "<div class='timeline'>"
