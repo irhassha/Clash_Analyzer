@@ -13,7 +13,7 @@ st.markdown("""
         flex-direction: row;
         align-items: flex-start;
         overflow-x: auto;
-        gap: 10px;
+        gap: 4px;
         padding: 10px;
     }
     .column {
@@ -21,51 +21,50 @@ st.markdown("""
         flex-direction: column;
         position: relative;
         min-height: 1000px;
-        width: 120px;
+        width: 90px;
     }
     .column-title {
         text-align: center;
         font-weight: bold;
-        font-size: 14px;
-        margin-bottom: 8px;
+        font-size: 12px;
+        margin-bottom: 4px;
     }
     .step {
         background-color: #f0f0f0;
         color: #333;
         border-radius: 6px;
-        padding: 4px 6px;
-        margin-bottom: 6px;
-        font-size: 9px;
+        padding: 2px 4px;
+        font-size: 8px;
         position: absolute;
-        width: 100px;
-        left: 10px;
+        width: 70px;
+        left: 8px;
     }
     .red { background-color: #e74c3c; color: white; }
     .blue { background-color: #3498db; color: white; }
     .yellow { background-color: #f1c40f; color: white; }
     .green { background-color: #2ecc71; color: white; }
     .step h3 {
-        margin: 0 0 4px;
-        font-size: 13px;
+        margin: 0 0 2px;
+        font-size: 10px;
     }
     .step p {
-        margin: 2px 0;
+        margin: 1px 0;
     }
     .time-grid {
         position: sticky;
         left: 0;
         top: 0;
-        width: 60px;
+        width: 50px;
         height: 100%;
         background-color: #111;
         z-index: 2;
     }
     .time-label {
         height: 40px;
-        font-size: 11px;
+        font-size: 10px;
         color: #888;
         text-align: right;
-        padding-right: 6px;
+        padding-right: 4px;
         box-sizing: border-box;
     }
 </style>
