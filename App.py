@@ -39,9 +39,22 @@ st.markdown("""
         width: 65px;
         left: 10px;
         border-width: 1px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
     }
-    .step.loading-step { border: 1px dashed #222; }
-    .step.discharge-step { border: 1px solid #222; }
+    .step.loading-step::before {
+        content: "\2192";
+        color: #3498db;
+        font-size: 10px;
+        margin-right: 2px;
+    }
+    .step.discharge-step::before {
+        content: "\2190";
+        color: #e74c3c;
+        font-size: 10px;
+        margin-right: 2px;
+    }
     .red { background-color: #e74c3c; color: white; }
     .blue { background-color: #3498db; color: white; }
     .yellow { background-color: #f1c40f; color: white; }
