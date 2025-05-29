@@ -38,7 +38,7 @@ st.markdown("""
         position: absolute;
         width: 65px;
         left: 10px;
-        border-width: 1px;
+        border: 1px solid #444;
         display: flex;
         align-items: center;
         justify-content: center;
@@ -130,7 +130,7 @@ for item in data:
     crane_last_time[crane] = item['EndTime']
 
 def sort_key(bay):
-    match = re.search(r'\d+', bay)
+    match = re.search(r'\\d+', bay)
     return int(match.group()) if match else float('inf')
 
 html = "<div class='timeline'>"
