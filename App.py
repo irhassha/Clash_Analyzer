@@ -2,10 +2,11 @@ import streamlit as st
 from datetime import time
 from collections import defaultdict
 import pandas as pd
+import re
 
 st.set_page_config(layout="wide")
 
-st.markdown("""
+st.markdown(\"\"\"
 <style>
     .timeline {
         display: flex;
@@ -68,7 +69,7 @@ st.markdown("""
         box-sizing: border-box;
     }
 </style>
-""", unsafe_allow_html=True)
+\"\"\", unsafe_allow_html=True)
 
 st.title("📊 Crane Sequence by Bay with Time Axis")
 
@@ -113,6 +114,10 @@ for item in data:
     timeline[item['Bay']].append(item)
     crane_last_time[crane] = item['EndTime']
 
+def sort_key(bay):
+    match = re.search(r'\\d+', bay)
+    return int(match.group()) if match else float('inf')
+
 html = "<div class='timeline'>"
 
 # Time scale background
@@ -122,7 +127,7 @@ for h in range(24):
 html += "</div>"
 
 if timeline:
-    for bay_index, (bay, items) in enumerate(sorted(timeline.items())):
+    for bay_index, (bay, items) in enumerate(sorted(timeline.items(), key=lambda x: sort_key(x[0]))):
         html += f"<div class='column'><div class='column-title'>Bay {bay}</div>"
         for i, item in enumerate(items):
             color_class = crane_colors.get(item['Crane'], 'red')
@@ -130,10 +135,6 @@ if timeline:
             height = max(6, int((item['EndTime'] - item['StartTime']) * 40))
             html += (
                 f"<div class='step {color_class}' style='top:{top_offset}px;height:{height}px;'>"
-                f""
-                f""
-                f""
-                f""
                 f"</div>"
             )
         html += "</div>"
