@@ -40,6 +40,8 @@ st.markdown("""
         left: 10px;
         border: 1px solid rgba(0, 0, 0, 0.2);
     }
+    .step.loading-step { border-style: dashed; }
+    .step.discharge-step { border-style: solid; }
     .red { background-color: #e74c3c; color: white; }
     .blue { background-color: #3498db; color: white; }
     .yellow { background-color: #f1c40f; color: white; }
@@ -131,10 +133,11 @@ if timeline:
         html += f"<div class='column'><div class='column-title'>Bay {bay}</div>"
         for i, item in enumerate(items):
             color_class = crane_colors.get(item['Crane'], 'red')
+            direction_class = 'loading-step' if item['Direction'].lower() == 'loading' else 'discharge-step'
             top_offset = int(item['StartTime'] * 40)
             height = max(6, int((item['EndTime'] - item['StartTime']) * 40))
             html += (
-                f"<div class='step {color_class}' style='top:{top_offset}px;height:{height}px;'>"
+                f"<div class='step {color_class} {direction_class}' style='top:{top_offset}px;height:{height}px;'>"
                 f"</div>"
             )
         html += "</div>"
