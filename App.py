@@ -42,15 +42,16 @@ st.markdown("""
         display: flex;
         align-items: center;
         justify-content: center;
+        font-weight: bold;
     }
     .step.loading-step::before {
-        content: "\2192";
+        content: "\2192 ";
         color: #3498db;
         font-size: 10px;
         margin-right: 2px;
     }
     .step.discharge-step::before {
-        content: "\2190";
+        content: "\2190 ";
         color: #e74c3c;
         font-size: 10px;
         margin-right: 2px;
@@ -130,7 +131,7 @@ for item in data:
     crane_last_time[crane] = item['EndTime']
 
 def sort_key(bay):
-    match = re.search(r'\\d+', bay)
+    match = re.search(r'\d+', bay)
     return int(match.group()) if match else float('inf')
 
 html = "<div class='timeline'>"
