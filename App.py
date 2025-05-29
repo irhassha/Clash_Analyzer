@@ -38,10 +38,10 @@ st.markdown("""
         position: absolute;
         width: 65px;
         left: 10px;
-        border: 1px solid rgba(0, 0, 0, 0.2);
+        border-width: 1px;
     }
-    .step.loading-step { border-style: dashed; }
-    .step.discharge-step { border-style: solid; }
+    .step.loading-step { border: 1px dashed #222; }
+    .step.discharge-step { border: 1px solid #222; }
     .red { background-color: #e74c3c; color: white; }
     .blue { background-color: #3498db; color: white; }
     .yellow { background-color: #f1c40f; color: white; }
@@ -73,10 +73,10 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-st.title("📊 Crane Sequence by Bay with Time Axis")
+st.title("\U0001F4CA Crane Sequence by Bay with Time Axis")
 
 # Upload Excel
-uploaded_file = st.sidebar.file_uploader("📂 Upload Excel", type=["xlsx"])
+uploaded_file = st.sidebar.file_uploader("\U0001F4C2 Upload Excel", type=["xlsx"])
 if uploaded_file:
     df = pd.read_excel(uploaded_file)
     df.columns = df.columns.str.strip().str.replace('.', '', regex=False)
@@ -91,7 +91,7 @@ else:
     data = []
 
 # Sidebar input waktu mulai per crane
-st.sidebar.header("🕒 Set Start Time per Crane")
+st.sidebar.header("\U0001F552 Set Start Time per Crane")
 crane_ids = sorted(set(item["Crane"] for item in data))
 start_times = {}
 for crane in crane_ids:
