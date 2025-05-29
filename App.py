@@ -130,10 +130,10 @@ if timeline:
             height = max(6, int((item['EndTime'] - item['StartTime']) * 40))
             html += (
                 f"<div class='step {color_class}' style='top:{top_offset}px;height:{height}px;'>"
-                f"<h3>{item['Seq']}</h3>"
-                f"<p><strong>{item['Direction']}</strong></p>"
-                f"<p>{item['Mvs']} Moves</p>"
-                f"<p>Crane {item['Crane']}</p>"
+                f""
+                f""
+                f""
+                f""
                 f"</div>"
             )
         html += "</div>"
