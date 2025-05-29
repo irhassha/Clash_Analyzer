@@ -21,7 +21,7 @@ st.markdown("""
         flex-direction: column;
         position: relative;
         min-height: 1000px;
-        width: 90px;
+        width: 85px;
     }
     .column-title {
         text-align: center;
@@ -32,12 +32,13 @@ st.markdown("""
     .step {
         background-color: #f0f0f0;
         color: #333;
-        border-radius: 6px;
-        padding: 2px 4px;
-        font-size: 8px;
+        border-radius: 4px;
+        padding: 1px;
+        font-size: 6px;
         position: absolute;
-        width: 70px;
-        left: 8px;
+        width: 65px;
+        left: 10px;
+        border: 1px solid rgba(0, 0, 0, 0.2);
     }
     .red { background-color: #e74c3c; color: white; }
     .blue { background-color: #3498db; color: white; }
@@ -45,10 +46,10 @@ st.markdown("""
     .green { background-color: #2ecc71; color: white; }
     .step h3 {
         margin: 0 0 2px;
-        font-size: 10px;
+        font-size: 8px;
     }
     .step p {
-        margin: 1px 0;
+        margin: 0;
     }
     .time-grid {
         position: sticky;
