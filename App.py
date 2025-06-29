@@ -13,7 +13,7 @@ st.info(
 
 # --- Fungsi untuk memuat file kode kapal dari repository ---
 @st.cache_data
-def load_vessel_codes_from_repo(possible_names=['vessel codes.xlsx', 'vessel_codes.xls', 'vessel_codes.csv']):
+def load_vessel_codes_from_repo(possible_names=['vessel_codes.xlsx', 'vessel_codes.xls', 'vessel_codes.csv']):
     """Mencari dan memuat file kode kapal dari daftar nama file yang mungkin."""
     for filename in possible_names:
         if os.path.exists(filename):
@@ -49,51 +49,57 @@ if process_button:
                 df_unit_list = pd.read_excel(unit_list_file) if unit_list_file.name.lower().endswith(('.xls', '.xlsx')) else pd.read_csv(unit_list_file)
 
                 # 2. Proses Penggabungan Data
-                # Langkah A: Gabungkan Jadwal dengan Kode
                 df_schedule_with_code = pd.merge(
                     df_schedule, df_vessel_codes,
                     left_on="VESSEL", right_on="Description",
                     how="left"
                 ).rename(columns={"Value": "CODE"})
 
-                # Langkah B: Gabungkan dengan Daftar Unit
-                final_df = pd.merge(
+                # Menggunakan 'how="inner"' sudah memastikan hanya kapal dari jadwal yang cocok yang akan diproses.
+                merged_df = pd.merge(
                     df_schedule_with_code, df_unit_list,
                     left_on=['CODE', 'VOY_OUT'],
                     right_on=['Carrier Out', 'Voyage Out'],
                     how='inner'
                 )
 
-                # 3. Transformasi Data ke Format Pivot (Perubahan Kunci Ada di Sini)
+                # 3. Menerapkan Filter (Perubahan Kunci Ada di Sini)
                 st.header("✅ Hasil Akhir (Format Pivot)")
-                if not final_df.empty:
-                    # Tentukan kolom-kolom utama untuk pengelompokan
+                if not merged_df.empty:
+                    # ---- FILTER 1: Buang Area (EXE) 801-808 ----
+                    # Membuat daftar area yang akan dikecualikan
+                    excluded_areas = [str(i) for i in range(801, 809)] 
+                    
+                    # Pastikan kolom 'Area (EXE)' bertipe string untuk perbandingan yang aman
+                    merged_df['Area (EXE)'] = merged_df['Area (EXE)'].astype(str)
+                    
+                    # Terapkan filter untuk membuang baris dengan area yang tidak diinginkan
+                    filtered_data = merged_df[~merged_df['Area (EXE)'].isin(excluded_areas)]
+
+                    if filtered_data.empty:
+                         st.warning("Setelah memfilter Area 801-808, tidak ada data yang tersisa untuk ditampilkan.")
+                         st.stop() # Hentikan eksekusi jika tidak ada data
+
+                    # 4. Transformasi Data ke Format Pivot
                     grouping_cols = ['VESSEL', 'CODE', 'VOY_OUT', 'ETA']
                     
-                    # Buat tabel pivot untuk menghitung jumlah tiap Area (EXE)
-                    pivot_df = final_df.pivot_table(
+                    pivot_df = filtered_data.pivot_table(
                         index=grouping_cols,
                         columns='Area (EXE)',
-                        aggfunc='size', # Menghitung jumlah kemunculan
+                        aggfunc='size',
                         fill_value=0
                     )
                     
-                    # Hitung kolom TOTAL
                     pivot_df['TOTAL'] = pivot_df.sum(axis=1)
-                    
-                    # Reset index agar kolom grouping kembali menjadi kolom biasa
                     pivot_df = pivot_df.reset_index()
 
-                    # Susun ulang urutan kolom sesuai permintaan
                     cols_awal = ['VESSEL', 'CODE', 'VOY_OUT', 'ETA', 'TOTAL']
-                    # Ambil nama-nama kolom cluster (semua kolom kecuali yang awal)
                     cols_clusters = [col for col in pivot_df.columns if col not in cols_awal]
                     
-                    # Gabungkan urutan kolom
                     final_display_cols = cols_awal + sorted(cols_clusters)
                     pivot_df = pivot_df[final_display_cols]
 
-                    st.success(f"Berhasil memproses dan mengelompokkan data untuk {len(pivot_df)} kapal unik.")
+                    st.success(f"Berhasil memproses dan mengelompokkan data untuk {len(pivot_df)} kapal unik (setelah filter).")
                     
                     st.dataframe(pivot_df)
                     
@@ -109,7 +115,6 @@ if process_button:
 
             except Exception as e:
                 st.error(f"Terjadi kesalahan saat memproses file: {e}")
-                # Tambahkan detail error untuk debugging
                 st.error(f"Detail error: {str(e)}")
     else:
         st.warning("Mohon unggah kedua file dan pastikan file kode kapal ada di repository sebelum memproses.")
