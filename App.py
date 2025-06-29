@@ -109,28 +109,12 @@ if st.session_state.processed_df is not None:
     df_for_grid = display_df.copy()
     df_for_grid['ETA_Date'] = pd.to_datetime(df_for_grid['ETA']).dt.strftime('%Y-%m-%d')
     
-    # Widget untuk memilih tanggal yang akan difokuskan
-    unique_dates_in_data = sorted(df_for_grid['ETA_Date'].unique())
-    selected_dates_str = st.multiselect(
-        "**Focus on Date(s):**",
-        options=unique_dates_in_data
-    )
-    
-    # Tentukan tanggal mana yang akan dibuat pudar
-    faded_dates_str = []
-    if selected_dates_str:
-        faded_dates_str = [d for d in unique_dates_in_data if d not in selected_dates_str]
+    # 1. Buat Peta Warna untuk Zebra Pattern per Tanggal
+    unique_dates = df_for_grid['ETA_Date'].unique()
+    zebra_colors = ['#FFFFFF', '#F0F2F6'] 
+    date_color_map = {date: zebra_colors[i % 2] for i, date in enumerate(unique_dates)}
 
-    # Buat Peta Warna untuk Zebra Pattern
-    # =======================================================
-    # GANTI WARNA ZEBRA PATTERN DI SINI
-    zebra_color_1 = '#FFFFFF' # Putih
-    zebra_color_2 = '#F0F2F6' # Abu-abu muda
-    # =======================================================
-    zebra_colors = [zebra_color_1, zebra_color_2]
-    date_color_map = {date: zebra_colors[i % 2] for i, date in enumerate(unique_dates_in_data)}
-    
-    # Tentukan sel mana saja yang bentrok
+    # 2. Tentukan sel mana saja yang bentrok
     clash_map = {}
     cluster_cols = [col for col in df_for_grid.columns if col not in ['VESSEL', 'CODE', 'VOY_OUT', 'ETA', 'Total Box', 'Total cluster', 'ETA_Date']]
     for date, group in df_for_grid.groupby('ETA_Date'):
@@ -145,79 +129,80 @@ if st.session_state.processed_df is not None:
     
     hide_zero_jscode = JsCode("""function(params) { if (params.value == 0 || params.value === null) { return ''; } return params.value; }""")
     
-    # JsCode untuk styling sel (Zebra + Fade + Highlight)
-    cell_style_jscode = JsCode(f"""
+    # JsCode untuk highlight bentrokan (menimpa warna zebra)
+    clash_cell_style_jscode = JsCode(f"""
         function(params) {{
-            // Lokasi untuk mengubah warna secara manual
-            // =======================================================
-            const FADED_TEXT_COLOR = '#E0E0E0';
-            const BRIGHT_ORANGE = '#FFAA33';
-            const FADED_ORANGE_BG = '#FFE8D6';
-            const FADED_ORANGE_TEXT = '#BDBDBD';
-            // =======================================================
-
-            // Data yang disuntikkan dari Python
-            const dateColorMap = {json.dumps(date_color_map)};
             const clashMap = {json.dumps(clash_map)};
-            const fadedDates = {json.dumps(faded_dates_str)};
-            
-            // Variabel untuk baris dan sel saat ini
             const date = params.data.ETA_Date;
             const colId = params.colDef.field;
-            const isFaded = fadedDates.includes(date);
             const isClash = clashMap[date] ? clashMap[date].includes(colId) : false;
-
-            // Logika styling
-            let style = {{}};
-            
-            // 1. Terapkan warna dasar Zebra Pattern
-            style.backgroundColor = dateColorMap[date];
-            
-            // 2. Terapkan efek fade jika perlu (menimpa warna teks)
-            if (isFaded) {{
-                style.color = FADED_TEXT_COLOR;
-            }}
-
-            // 3. Terapkan highlight bentrokan (menimpa semua style sebelumnya jika bentrok)
             if (isClash) {{
-                if (isFaded) {{
-                    style.backgroundColor = FADED_ORANGE_BG;
-                    style.color = FADED_ORANGE_TEXT;
-                }} else {{
-                    style.backgroundColor = BRIGHT_ORANGE;
-                    style.color = 'black';
-                }}
+                return {{'backgroundColor': '#FFAA33', 'color': 'black'}};
             }}
-            
-            return style;
+            return null;
         }}
     """)
     
-    # --- KONFIGURASI GRID SECARA MANUAL ---
-    gb = GridOptionsBuilder.from_dataframe(df_for_grid)
-    
-    gb.configure_default_column(
-        resizable=True, 
-        sortable=True, 
-        editable=False, 
-        suppressMenu=True,
-        minWidth=50
-    )
+    # JsCode untuk Zebra Pattern (sebagai dasar)
+    zebra_row_style_jscode = JsCode(f"""
+        function(params) {{
+            const dateColorMap = {json.dumps(date_color_map)};
+            const date = params.data.ETA_Date;
+            const color = dateColorMap[date];
+            return {{ 'background-color': color }};
+        }}
+    """)
 
+    # --- KONFIGURASI GRID SECARA MANUAL (LEBIH STABIL) ---
+    
+    # 1. Definisi default untuk semua kolom (Menghilangkan ikon menu)
+    default_col_def = {
+        "suppressMenu": True,
+        "sortable": True,
+        "resizable": True,
+        "editable": False,
+        "minWidth": 40, # Lebar minimum kolom diperkecil
+    }
+    
+    # 2. Bangun definisi untuk setiap kolom secara manual
+    column_defs = []
+    
+    # Kolom yang di-freeze
     pinned_cols = ['VESSEL', 'CODE', 'VOY_OUT', 'ETA', 'Total Box', 'Total cluster']
     for col in pinned_cols:
-        width = 115 if col == 'VESSEL' else 85
-        if col == 'ETA': width = 125 
-        gb.configure_column(col, pinned="left", width=width, cellStyle=cell_style_jscode)
+        width = 110 if col == 'VESSEL' else 80 # Lebar kolom diperkecil
+        if col == 'ETA':
+            width = 120 
+        
+        col_def = {
+            "field": col,
+            "headerName": col,
+            "pinned": "left",
+            "width": width,
+        }
         if col in ["Total Box", "Total cluster"]:
-            gb.configure_column(col, cellRenderer=hide_zero_jscode)
+            col_def["cellRenderer"] = hide_zero_jscode
+        column_defs.append(col_def)
 
+    # Kolom Cluster
     for col in cluster_cols:
-        gb.configure_column(col, width=65, cellRenderer=hide_zero_jscode, cellStyle=cell_style_jscode)
+        column_defs.append({
+            "field": col,
+            "headerName": col,
+            "width": 60, # Lebar kolom cluster diperkecil lagi
+            "cellRenderer": hide_zero_jscode,
+            "cellStyle": clash_cell_style_jscode,
+        })
     
-    gridOptions = gb.build()
-    
-    gridOptions['columnDefs'].append({"field": "ETA_Date", "hide": True})
+    # Sembunyikan kolom helper
+    column_defs.append({"field": "ETA_Date", "hide": True})
+
+    # 3. Gabungkan semua ke dalam gridOptions
+    gridOptions = {
+        "defaultColDef": default_col_def,
+        "columnDefs": column_defs,
+        "getRowStyle": zebra_row_style_jscode, # Terapkan Zebra Pattern di sini
+    }
 
     # Tampilkan tabel
     st.markdown("---")
