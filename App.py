@@ -147,7 +147,6 @@ if st.session_state.processed_df is not None:
     """)
     
     # Javascript for cell styling
-    # This will be injected with data from Python
     cell_style_jscode = JsCode(f"""
         function(params) {{
             const clashMap = {json.dumps(clash_map)};
@@ -178,22 +177,32 @@ if st.session_state.processed_df is not None:
     # 2. Configure pin (freeze) for main columns
     pinned_cols = ['VESSEL', 'CODE', 'VOY_OUT', 'ETA', 'Total Box', 'Total cluster']
     for col in pinned_cols:
-        gb.configure_column(col, pinned="left", width=120)
+        gb.configure_column(col, pinned="left", width=120, filterable=False) # Filter dinonaktifkan di sini
 
     # 3. Configure cluster columns with style and format
     for col in cluster_cols:
-        gb.configure_column(col, cellStyle=cell_style_jscode, cellRenderer=hide_zero_jscode, width=90)
+        gb.configure_column(col, cellStyle=cell_style_jscode, cellRenderer=hide_zero_jscode, width=90, filterable=False)
     
     # 4. Configure other and default columns
-    gb.configure_column("Total Box", cellRenderer=hide_zero_jscode)
-    gb.configure_column("Total cluster", cellRenderer=hide_zero_jscode)
-    # --- CHANGE IS HERE: filterable is set to False ---
+    gb.configure_column("Total Box", cellRenderer=hide_zero_jscode, filterable=False)
+    gb.configure_column("Total cluster", cellRenderer=hide_zero_jscode, filterable=False)
     gb.configure_default_column(resizable=True, filterable=False, sortable=True, editable=False)
 
     # 5. Build GridOptions
     gridOptions = gb.build()
 
-    # 6. Display table using AgGrid
+    # 6. Define Custom CSS for thicker grid lines
+    custom_css = {
+        ".ag-theme-streamlit .ag-cell": {
+            "border-right": "2px solid #DCDCDC !important",
+            "border-bottom": "2px solid #DCDCDC !important"
+        },
+        ".ag-theme-streamlit .ag-header-cell": {
+             "border-bottom": "2px solid #CCCCCC !important"
+        }
+    }
+
+    # 7. Display table using AgGrid
     st.markdown("---")
     AgGrid(
         df_for_grid,
@@ -201,8 +210,8 @@ if st.session_state.processed_df is not None:
         height=600,
         width='100%',
         theme='streamlit',
+        custom_css=custom_css, # Terapkan CSS kustom di sini
         allow_unsafe_jscode=True,
-        # Hide the helper ETA_Date column from view
         column_defs=[{"field": "ETA_Date", "hide": True}]
     )
     
