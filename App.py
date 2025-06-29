@@ -3,6 +3,39 @@ import pandas as pd
 import os
 from datetime import datetime, timedelta
 
+
+# --- FUNGSI BARU UNTUK TEMA KUSTOM ---
+def apply_custom_theme():
+    st.markdown(
+        """
+        <style>
+        @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;700&display=swap');
+
+        /* Mengganti font di seluruh aplikasi */
+        html, body, [class*="st-"], [class*="css-"] {
+            font-family: 'Plus Jakarta Sans', sans-serif;
+        }
+
+        /* Mengganti warna latar utama */
+        .main .block-container {
+            background-color: #FFFFFF;
+            color: #0a101d;
+        }
+
+        h1 {
+            color: #0a101d;
+        }
+
+        /* Mengganti warna latar sidebar */
+        section[data-testid="stSidebar"] {
+            background-color: #e3eefd;
+        }
+        </style>
+        """,
+        unsafe_allow_html=True
+    )
+
+
 # --- Konfigurasi Halaman & Judul ---
 st.set_page_config(page_title="App Pencocokan Vessel", layout="wide")
 st.title("🚢 Aplikasi Pencocokan Jadwal Kapal & Unit List")
