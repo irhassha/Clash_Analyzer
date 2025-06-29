@@ -111,7 +111,8 @@ if st.session_state.processed_df is not None:
     
     # 1. Buat Peta Warna untuk Zebra Pattern per Tanggal
     unique_dates = df_for_grid['ETA_Date'].unique()
-    colors = ['#FFFFFF', '#F5F5F5']
+    # PERUBAHAN WARNA ZEBRA PATTERN
+    colors = ['#FFFFFF', '#F0F2F6'] # Putih dan Abu-abu yang lebih terlihat
     date_color_map = {date: colors[i % 2] for i, date in enumerate(unique_dates)}
 
     # 2. Tentukan sel mana saja yang bentrok
@@ -127,10 +128,8 @@ if st.session_state.processed_df is not None:
 
     # --- PENGGUNAAN AG-GRID DENGAN SEMUA FITUR ---
     
-    # JsCode untuk menyembunyikan 0
     hide_zero_jscode = JsCode("""function(params) { if (params.value == 0 || params.value === null) { return ''; } return params.value; }""")
     
-    # JsCode untuk highlight bentrokan (menimpa warna zebra)
     clash_cell_style_jscode = JsCode(f"""
         function(params) {{
             const clashMap = {json.dumps(clash_map)};
@@ -144,7 +143,6 @@ if st.session_state.processed_df is not None:
         }}
     """)
     
-    # JsCode untuk Zebra Pattern (sebagai dasar)
     zebra_row_style_jscode = JsCode(f"""
         function(params) {{
             const dateColorMap = {json.dumps(date_color_map)};
@@ -162,7 +160,7 @@ if st.session_state.processed_df is not None:
         "sortable": True,
         "resizable": True,
         "editable": False,
-        "minWidth": 80,
+        "minWidth": 50, # Lebar minimum kolom diperkecil
     }
     
     # 2. Bangun definisi untuk setiap kolom secara manual
@@ -171,11 +169,15 @@ if st.session_state.processed_df is not None:
     # Kolom yang di-freeze
     pinned_cols = ['VESSEL', 'CODE', 'VOY_OUT', 'ETA', 'Total Box', 'Total cluster']
     for col in pinned_cols:
+        width = 115 if col == 'VESSEL' else 90 # VESSEL lebih lebar
+        if col == 'ETA':
+            width = 130 # ETA juga lebih lebar
+        
         col_def = {
             "field": col,
             "headerName": col,
             "pinned": "left",
-            "width": 120,
+            "width": width,
         }
         if col in ["Total Box", "Total cluster"]:
             col_def["cellRenderer"] = hide_zero_jscode
@@ -186,7 +188,7 @@ if st.session_state.processed_df is not None:
         column_defs.append({
             "field": col,
             "headerName": col,
-            "width": 90,
+            "width": 75, # PERUBAHAN LEBAR KOLOM CLUSTER
             "cellRenderer": hide_zero_jscode,
             "cellStyle": clash_cell_style_jscode,
         })
