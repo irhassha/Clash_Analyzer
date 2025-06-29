@@ -183,7 +183,11 @@ if st.session_state.processed_df is not None:
     gb.configure_default_column(resizable=True, filterable=False, sortable=False, editable=False)
 
     gridOptions = gb.build()
-
+    
+    # --- Force hide filter/sort icons from all columns ---
+    for col_def in gridOptions['columnDefs']:
+        col_def['suppressMenu'] = True  # <- ini yang penting
+    
     custom_css = {
         # HILANGKAN ICON FILTER & SORT
         ".ag-theme-streamlit .ag-header-cell-menu-button": {
