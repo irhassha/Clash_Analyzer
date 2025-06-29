@@ -7,9 +7,7 @@ from datetime import datetime, timedelta
 st.set_page_config(page_title="App Pencocokan Vessel", layout="wide")
 st.title("🚢 Aplikasi Pencocokan Jadwal Kapal & Unit List")
 
-st.info("Fitur: Freeze panes hingga kolom ETA, dan angka 0 disembunyikan untuk kejelasan.")
-
-# --- Fungsi-fungsi ---
+# ... (semua fungsi lainnya tetap sama) ...
 @st.cache_data
 def load_vessel_codes_from_repo(possible_names=['vessel codes.xlsx', 'vessel_codes.xls', 'vessel_codes.csv']):
     for filename in possible_names:
@@ -52,7 +50,6 @@ def apply_all_styles(df, selected_dates):
                 styler.loc[r_idx, c_name] = 'color: #E0E0E0;'
     return styler
 
-# --- Sidebar & Proses Utama ---
 st.sidebar.header("⚙️ Unggah File Anda")
 schedule_file = st.sidebar.file_uploader("1. Unggah File Jadwal Kapal", type=['xlsx', 'csv'])
 unit_list_file = st.sidebar.file_uploader("2. Unggah File Daftar Unit", type=['xlsx', 'csv'])
@@ -67,43 +64,36 @@ if process_button:
     if schedule_file and unit_list_file and (df_vessel_codes is not None and not df_vessel_codes.empty):
         with st.spinner('Memuat dan memproses data...'):
             try:
+                # ... (semua proses loading dan merging sama persis) ...
                 if schedule_file.name.lower().endswith(('.xls', '.xlsx')): df_schedule = pd.read_excel(schedule_file)
                 else: df_schedule = pd.read_csv(schedule_file)
                 df_schedule.columns = df_schedule.columns.str.strip()
-
                 if unit_list_file.name.lower().endswith(('.xls', '.xlsx')): df_unit_list = pd.read_excel(unit_list_file)
                 else: df_unit_list = pd.read_csv(unit_list_file)
                 df_unit_list.columns = df_unit_list.columns.str.strip()
-                
                 original_vessels_list = df_schedule['VESSEL'].unique().tolist()
                 df_schedule['ETA'] = pd.to_datetime(df_schedule['ETA'], errors='coerce')
                 df_schedule_with_code = pd.merge(df_schedule, df_vessel_codes, left_on="VESSEL", right_on="Description", how="left").rename(columns={"Value": "CODE"})
                 merged_df = pd.merge(df_schedule_with_code, df_unit_list, left_on=['CODE', 'VOY_OUT'], right_on=['Carrier Out', 'Voyage Out'], how='inner')
-                
                 if merged_df.empty: st.warning("Tidak ditemukan data yang cocok."); st.session_state.processed_df = None; st.stop()
-                
                 merged_df = merged_df[merged_df['VESSEL'].isin(original_vessels_list)]
-                excluded_areas = [str(i) for i in range(801, 809)] 
+                excluded_areas = [str(i) for i in range(801, 809)]
                 merged_df['Area (EXE)'] = merged_df['Area (EXE)'].astype(str)
                 filtered_data = merged_df[~merged_df['Area (EXE)'].isin(excluded_areas)]
                 if filtered_data.empty: st.warning("Setelah filter, tidak ada data tersisa."); st.session_state.processed_df = None; st.stop()
-
                 grouping_cols = ['VESSEL', 'CODE', 'VOY_OUT', 'ETA']
                 pivot_df = filtered_data.pivot_table(index=grouping_cols, columns='Area (EXE)', aggfunc='size', fill_value=0)
                 pivot_df['TOTAL'] = pivot_df.sum(axis=1)
                 pivot_df = pivot_df.reset_index()
-                
                 two_days_ago = pd.Timestamp.now() - timedelta(days=2)
                 condition_to_hide = (pivot_df['ETA'] < two_days_ago) & (pivot_df['TOTAL'] < 50)
                 pivot_df = pivot_df[~condition_to_hide]
                 if pivot_df.empty: st.warning("Setelah filter ETA & Total, tidak ada data tersisa."); st.session_state.processed_df = None; st.stop()
-
                 cols_awal = ['VESSEL', 'CODE', 'VOY_OUT', 'ETA', 'TOTAL']
                 cols_clusters = [col for col in pivot_df.columns if col not in cols_awal]
                 final_display_cols = cols_awal + sorted(cols_clusters)
                 pivot_df = pivot_df[final_display_cols]
                 pivot_df = pivot_df.sort_values(by='ETA', ascending=True).reset_index(drop=True)
-                
                 st.session_state.processed_df = pivot_df
                 st.success("Data berhasil diproses! Anda sekarang bisa menggunakan filter tanggal di sidebar.")
 
@@ -115,40 +105,27 @@ if process_button:
 
 if st.session_state.processed_df is not None:
     display_df = st.session_state.processed_df
-
     st.sidebar.header("Highlight Tanggal")
     display_df_copy = display_df.copy()
     display_df_copy['ETA_Date_Only'] = pd.to_datetime(display_df_copy['ETA']).dt.date
     unique_dates_in_data = sorted(display_df_copy['ETA_Date_Only'].unique())
-    
-    selected_dates = st.sidebar.multiselect(
-        "Pilih tanggal untuk difokuskan:",
-        options=unique_dates_in_data,
-        format_func=lambda date: date.strftime('%Y-%m-%d')
-    )
-
+    selected_dates = st.sidebar.multiselect("Pilih tanggal untuk difokuskan:", options=unique_dates_in_data, format_func=lambda date: date.strftime('%Y-%m-%d'))
     st.header("✅ Hasil Akhir")
-    
     df_to_style = display_df.copy()
-
-    # --- PENERAPAN FITUR BARU (FREEZE & HIDE ZEROS) ---
-
-    # 1. Tentukan kolom mana saja yang akan di-freeze
-    sticky_cols = ['VESSEL', 'CODE', 'VOY_OUT', 'ETA']
     
-    # 2. Buat format untuk menyembunyikan angka 0
-    # Ambil semua kolom cluster + kolom TOTAL
+    sticky_cols = ['VESSEL', 'CODE', 'VOY_OUT', 'ETA']
     cols_to_format = [col for col in df_to_style.columns if col not in ['VESSEL', 'CODE', 'VOY_OUT', 'ETA']]
-    # Buat dictionary formatter: jika nilai adalah 0, jadi string kosong, jika tidak, tampilkan sebagai angka integer
     zero_hide_formatter = {col: lambda x: '' if x == 0 else f'{x:.0f}' for col in cols_to_format}
-
-    # 3. Gabungkan semua style dalam satu chain
+    
+    # Gabungkan semua style dalam satu chain
     styled_df = (
         df_to_style.style
         .apply(apply_all_styles, axis=None, selected_dates=selected_dates)
-        .format(zero_hide_formatter) # Terapkan format sembunyikan nol
-        .format({'ETA': lambda x: x.strftime('%Y-%m-%d %H:%M:%S')}) # Format tanggal
-        .set_sticky(axis="columns", labels=sticky_cols) # Terapkan freeze panes
+        .format(zero_hide_formatter)
+        .format({'ETA': lambda x: x.strftime('%Y-%m-%d %H:%M:%S')})
+        # --- SOLUSI ALTERNATIF ---
+        # Jika update requirements.txt tidak berhasil, beri tanda # pada baris di bawah ini
+        .set_sticky(axis="columns", labels=sticky_cols)
     )
     
     st.dataframe(styled_df, use_container_width=True)
