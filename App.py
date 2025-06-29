@@ -3,15 +3,14 @@ import pandas as pd
 import os
 from datetime import datetime, timedelta
 
-# --- Konfigurasi Halaman & Judul ---
-st.set_page_config(page_title="App Pencocokan Vessel", layout="wide")
-st.title("🚢 Aplikasi Pencocokan Jadwal Kapal & Unit List")
+# --- Page & Title Configuration ---
+st.set_page_config(page_title="Clash Analyzer", layout="wide")
+st.title("Yard Clash Monitoring")
 
-st.info("Fitur: Pilih tanggal untuk fokus. Bentrokan jadwal akan selalu di-highlight.")
-
-# --- Fungsi-fungsi ---
+# --- Core Functions ---
 @st.cache_data
 def load_vessel_codes_from_repo(possible_names=['vessel codes.xlsx', 'vessel_codes.xls', 'vessel_codes.csv']):
+    """Searches for and loads the vessel code mapping file from a list of possible names."""
     for filename in possible_names:
         if os.path.exists(filename):
             try:
@@ -20,10 +19,11 @@ def load_vessel_codes_from_repo(possible_names=['vessel codes.xlsx', 'vessel_cod
                 df.columns = df.columns.str.strip()
                 return df
             except Exception as e:
-                st.error(f"Gagal membaca file '{filename}': {e}"); return None
-    st.error(f"File kode kapal tidak ditemukan."); return None
+                st.error(f"Failed to read file '{filename}': {e}"); return None
+    st.error(f"Vessel code file not found."); return None
 
 def apply_all_styles(df, selected_dates):
+    """Applies layered styling: fade for unselected rows, and orange highlight for clashes."""
     styler = pd.DataFrame('', index=df.index, columns=df.columns)
     df_copy = df.copy()
     df_copy['ETA'] = pd.to_datetime(df_copy['ETA'])
@@ -45,18 +45,25 @@ def apply_all_styles(df, selected_dates):
             is_faded = is_faded_row[r_idx]
             is_clash = clash_mask.loc[r_idx, c_name]
             if is_clash and is_faded:
-                styler.loc[r_idx, c_name] = 'background-color: #FFE8D6; color: #BDBDBD;'
+                styler.loc[r_idx, c_name] = 'background-color: #FFE8D6; color: #BDBDBD;' # Faded Orange
             elif is_clash and not is_faded:
-                styler.loc[r_idx, c_name] = 'background-color: #FFAA33; color: black;'
+                styler.loc[r_idx, c_name] = 'background-color: #FFAA33; color: black;'    # Bright Orange
             elif not is_clash and is_faded:
-                styler.loc[r_idx, c_name] = 'color: #E0E0E0;'
+                styler.loc[r_idx, c_name] = 'color: #E0E0E0;'                             # Faded Text
     return styler
 
-# --- Sidebar & Proses Utama ---
-st.sidebar.header("⚙️ Unggah File Anda")
-schedule_file = st.sidebar.file_uploader("1. Unggah File Jadwal Kapal", type=['xlsx', 'csv'])
-unit_list_file = st.sidebar.file_uploader("2. Unggah File Daftar Unit", type=['xlsx', 'csv'])
-process_button = st.sidebar.button("🚀 Proses Data", type="primary")
+def general_formatter(val):
+    """Global formatter: hides 0, formats other numbers, leaves the rest."""
+    if isinstance(val, (int, float)):
+        if val == 0: return ''
+        return f'{val:.0f}'
+    return val
+
+# --- Sidebar & Main Process ---
+st.sidebar.header("⚙️ Your File Uploads")
+schedule_file = st.sidebar.file_uploader("1. Upload Vessel Schedule", type=['xlsx', 'csv'])
+unit_list_file = st.sidebar.file_uploader("2. Upload Unit List", type=['xlsx', 'csv'])
+process_button = st.sidebar.button("🚀 Process Data", type="primary")
 
 if 'processed_df' not in st.session_state:
     st.session_state.processed_df = None
@@ -65,9 +72,9 @@ df_vessel_codes = load_vessel_codes_from_repo()
 
 if process_button:
     if schedule_file and unit_list_file and (df_vessel_codes is not None and not df_vessel_codes.empty):
-        with st.spinner('Memuat dan memproses data...'):
+        with st.spinner('Loading and processing data...'):
             try:
-                # ... (semua proses loading hingga pivot tidak berubah) ...
+                # All processing logic remains the same
                 if schedule_file.name.lower().endswith(('.xls', '.xlsx')): df_schedule = pd.read_excel(schedule_file)
                 else: df_schedule = pd.read_csv(schedule_file)
                 df_schedule.columns = df_schedule.columns.str.strip()
@@ -78,12 +85,12 @@ if process_button:
                 df_schedule['ETA'] = pd.to_datetime(df_schedule['ETA'], errors='coerce')
                 df_schedule_with_code = pd.merge(df_schedule, df_vessel_codes, left_on="VESSEL", right_on="Description", how="left").rename(columns={"Value": "CODE"})
                 merged_df = pd.merge(df_schedule_with_code, df_unit_list, left_on=['CODE', 'VOY_OUT'], right_on=['Carrier Out', 'Voyage Out'], how='inner')
-                if merged_df.empty: st.warning("Tidak ditemukan data yang cocok."); st.session_state.processed_df = None; st.stop()
+                if merged_df.empty: st.warning("No matching data found between the two files."); st.session_state.processed_df = None; st.stop()
                 merged_df = merged_df[merged_df['VESSEL'].isin(original_vessels_list)]
                 excluded_areas = [str(i) for i in range(801, 809)]
                 merged_df['Area (EXE)'] = merged_df['Area (EXE)'].astype(str)
                 filtered_data = merged_df[~merged_df['Area (EXE)'].isin(excluded_areas)]
-                if filtered_data.empty: st.warning("Setelah filter, tidak ada data tersisa."); st.session_state.processed_df = None; st.stop()
+                if filtered_data.empty: st.warning("No data remaining after filtering."); st.session_state.processed_df = None; st.stop()
                 grouping_cols = ['VESSEL', 'CODE', 'VOY_OUT', 'ETA']
                 pivot_df = filtered_data.pivot_table(index=grouping_cols, columns='Area (EXE)', aggfunc='size', fill_value=0)
                 pivot_df['TOTAL'] = pivot_df.sum(axis=1)
@@ -91,55 +98,58 @@ if process_button:
                 two_days_ago = pd.Timestamp.now() - timedelta(days=2)
                 condition_to_hide = (pivot_df['ETA'] < two_days_ago) & (pivot_df['TOTAL'] < 50)
                 pivot_df = pivot_df[~condition_to_hide]
-                if pivot_df.empty: st.warning("Setelah filter ETA & Total, tidak ada data tersisa."); st.session_state.processed_df = None; st.stop()
+                if pivot_df.empty: st.warning("No data remaining after ETA & Total filter."); st.session_state.processed_df = None; st.stop()
                 cols_awal = ['VESSEL', 'CODE', 'VOY_OUT', 'ETA', 'TOTAL']
                 cols_clusters = [col for col in pivot_df.columns if col not in cols_awal]
                 final_display_cols = cols_awal + sorted(cols_clusters)
                 pivot_df = pivot_df[final_display_cols]
                 pivot_df = pivot_df.sort_values(by='ETA', ascending=True).reset_index(drop=True)
+                
                 st.session_state.processed_df = pivot_df
-                st.success("Data berhasil diproses! Anda sekarang bisa menggunakan filter tanggal di sidebar.")
+                st.success("Data processed successfully! You can now use the date filter below.")
 
             except Exception as e:
-                st.error(f"Terjadi kesalahan saat memproses file: {e}")
+                st.error(f"An error occurred during processing: {e}")
                 st.session_state.processed_df = None
     else:
-        st.warning("Mohon unggah kedua file dan pastikan file kode kapal ada di repository sebelum memproses.")
+        st.warning("Please upload both files and ensure the vessel code file is in the repository before processing.")
 
+# --- Display Area ---
 if st.session_state.processed_df is not None:
     display_df = st.session_state.processed_df
-
-    st.sidebar.header("Highlight Tanggal")
-    display_df_copy = display_df.copy()
-    display_df_copy['ETA_Date_Only'] = pd.to_datetime(display_df_copy['ETA']).dt.date
-    unique_dates_in_data = sorted(display_df_copy['ETA_Date_Only'].unique())
-    selected_dates = st.sidebar.multiselect("Pilih tanggal untuk difokuskan:", options=unique_dates_in_data, format_func=lambda date: date.strftime('%Y-%m-%d'))
     
-    st.header("✅ Hasil Akhir")
+    st.header("Analysis Result")
+    st.markdown("---") # Adds a horizontal line for separation
+
+    # --- PERUBAHAN LOKASI WIDGET ---
+    # Widget pemilihan tanggal sekarang ada di area utama
+    col1, col2 = st.columns([1, 2]) # Create columns for layout
+    with col1:
+        display_df_copy = display_df.copy()
+        display_df_copy['ETA_Date_Only'] = pd.to_datetime(display_df_copy['ETA']).dt.date
+        unique_dates_in_data = sorted(display_df_copy['ETA_Date_Only'].unique())
+        
+        selected_dates = st.multiselect(
+            "**Focus on Date(s):**",
+            options=unique_dates_in_data,
+            format_func=lambda date: date.strftime('%Y-%m-%d')
+        )
+    # Column 2 is empty, creating space
     
     df_to_style = display_df.copy()
     
-    # --- PERBAIKAN FINAL PADA CARA FORMATTING ---
+    # Final Styling & Formatting
+    header_style = {'selector': 'th', 'props': [('font-weight', 'bold')]}
     
-    # 1. Buat dictionary format yang eksplisit
-    # Ambil semua kolom yang berupa angka (cluster dan TOTAL)
-    numeric_cols = [col for col in df_to_style.columns if df_to_style[col].dtype in ['int64', 'float64']]
-    
-    # Buat aturan format: jika 0 jadi blank, jika tidak, tampilkan sebagai integer
-    formatter = {col: lambda x: '' if x == 0 else f'{x:.0f}' for col in numeric_cols}
-    
-    # Tambahkan aturan format spesifik untuk kolom ETA
-    formatter['ETA'] = '{:%Y-%m-%d %H:%M:%S}'
-    
-    # 2. Terapkan semua style dan format
     styled_df = (
         df_to_style.style
         .apply(apply_all_styles, axis=None, selected_dates=selected_dates)
-        .format(formatter) # Gunakan dictionary format yang baru dan eksplisit
-        # .set_sticky(axis="columns", labels=['VESSEL', 'CODE', 'VOY_OUT', 'ETA']) # Tetap dinonaktifkan
+        .format(general_formatter)
+        .format({'ETA': '{:%Y-%m-%d %H:%M:%S}'})
+        .set_table_styles([header_style])
     )
     
     st.dataframe(styled_df, use_container_width=True)
     
     csv_export = display_df.to_csv(index=False).encode('utf-8')
-    st.download_button(label="📥 Unduh Hasil sebagai CSV", data=csv_export, file_name='hasil_pivot_clusters.csv', mime='text/csv')
+    st.download_button(label="📥 Download Result as CSV", data=csv_export, file_name='analysis_result.csv', mime='text/csv')
