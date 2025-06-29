@@ -11,13 +11,12 @@ st.info("Aplikasi ini secara otomatis membersihkan nama kolom dari spasi tambaha
 
 # --- Fungsi untuk memuat file kode kapal dari repository ---
 @st.cache_data
-def load_vessel_codes_from_repo(possible_names=['vessel codes.xlsx', 'vessel_codes.xls', 'vessel_codes.csv']):
+def load_vessel_codes_from_repo(possible_names=['vessel_codes.xlsx', 'vessel_codes.xls', 'vessel_codes.csv']):
     for filename in possible_names:
         if os.path.exists(filename):
             try:
                 if filename.lower().endswith('.csv'): df = pd.read_csv(filename)
                 else: df = pd.read_excel(filename)
-                # Pembersihan nama kolom untuk mencegah KeyError
                 df.columns = df.columns.str.strip()
                 return df
             except Exception as e:
@@ -28,31 +27,36 @@ def load_vessel_codes_from_repo(possible_names=['vessel codes.xlsx', 'vessel_cod
 def style_final_table(df):
     """
     Fungsi untuk membuat DataFrame style yang akan:
-    1. Mewarnai sel bentrokan dengan warna oranye.
-    2. Memberi garis pemisah antar tanggal ETA yang berbeda.
+    1. Memberi warna latar belakang bergantian (zebra) per grup tanggal.
+    2. Mewarnai sel bentrokan dengan warna oranye (menimpa warna zebra).
     """
-    # Buat DataFrame kosong dengan struktur yang sama untuk menyimpan style CSS
+    # Buat DataFrame kosong untuk menyimpan style CSS
     styler = pd.DataFrame('', index=df.index, columns=df.columns)
     df_copy = df.copy()
-    # Kolom ETA sudah dalam format datetime, kita hanya butuh tanggalnya untuk perbandingan
+    # Kolom ETA harus dalam format datetime untuk perbandingan
+    df_copy['ETA'] = pd.to_datetime(df_copy['ETA'])
     df_copy['ETA_Date'] = df_copy['ETA'].dt.date
     
-    # Logika 1: Highlight Bentrokan (Warna Oranye)
+    # === Logika 1: Zebra Pattern per Tanggal ===
+    unique_dates = df_copy['ETA_Date'].unique()
+    # Palet warna: putih untuk grup tanggal genap, abu-abu muda untuk ganjil
+    colors = ['#FFFFFF', '#F5F5F5'] 
+    date_color_map = {date: colors[i % 2] for i, date in enumerate(unique_dates)}
+    
+    # Terapkan warna dasar zebra ke seluruh baris
+    for idx, row in df_copy.iterrows():
+        color = date_color_map[row['ETA_Date']]
+        styler.loc[idx, :] = f'background-color: {color}'
+
+    # === Logika 2: Highlight Bentrokan (Menimpa Warna Zebra) ===
     cluster_cols = [col for col in df.columns if col not in ['VESSEL', 'CODE', 'VOY_OUT', 'ETA', 'TOTAL']]
     for col in cluster_cols:
         subset_df = df_copy[df_copy[col] > 0]
         clash_dates = subset_df[subset_df.duplicated(subset='ETA_Date', keep=False)]['ETA_Date'].unique()
         for date in clash_dates:
             clashing_indices = subset_df[subset_df['ETA_Date'] == date].index
-            styler.loc[clashing_indices, col] = 'background-color: #FFAA33' # Warna Oranye
-            
-    # Logika 2: Garis Pemisah Antar Tanggal
-    date_change_indices = df_copy.index[df_copy['ETA_Date'].diff() > pd.Timedelta(0)]
-    for idx in date_change_indices:
-        for col_name in styler.columns:
-            current_style = styler.loc[idx, col_name]
-            separator_style = 'border-top: 2px solid #555555;'
-            styler.loc[idx, col_name] = f"{current_style}; {separator_style}"
+            # Timpa style dengan warna oranye hanya pada sel yang bentrok
+            styler.loc[clashing_indices, col] = 'background-color: #FFAA33; color: #000000;'
             
     return styler
 
@@ -69,7 +73,7 @@ if process_button:
     if schedule_file and unit_list_file and (df_vessel_codes is not None and not df_vessel_codes.empty):
         with st.spinner('Memuat, memproses, dan mewarnai data...'):
             try:
-                # 1. Memuat file dan langsung membersihkan nama kolom
+                # 1. Memuat file dan membersihkan nama kolom
                 if schedule_file.name.lower().endswith(('.xls', '.xlsx')): df_schedule = pd.read_excel(schedule_file)
                 else: df_schedule = pd.read_csv(schedule_file)
                 df_schedule.columns = df_schedule.columns.str.strip()
@@ -81,7 +85,7 @@ if process_button:
                 # ---- Mulai proses utama ----
                 original_vessels_list = df_schedule['VESSEL'].unique().tolist()
                 df_schedule['ETA'] = pd.to_datetime(df_schedule['ETA'], errors='coerce')
-
+                
                 # 2. Penggabungan Data
                 df_schedule_with_code = pd.merge(df_schedule, df_vessel_codes, left_on="VESSEL", right_on="Description", how="left").rename(columns={"Value": "CODE"})
                 merged_df = pd.merge(df_schedule_with_code, df_unit_list, left_on=['CODE', 'VOY_OUT'], right_on=['Carrier Out', 'Voyage Out'], how='inner')
@@ -113,13 +117,15 @@ if process_button:
                     pivot_df = pivot_df[final_display_cols]
                     pivot_df = pivot_df.sort_values(by='ETA', ascending=True).reset_index(drop=True)
 
-                    # 7. Menampilkan Hasil dengan Highlight & Separator
+                    # 7. Menampilkan Hasil dengan Styling
                     st.header("✅ Hasil Akhir")
                     st.success(f"Berhasil memproses data untuk {len(pivot_df)} jadwal kapal.")
                     
-                    # ---- KODE YANG DIPERBAIKI ----
-                    # Panggil fungsi styling pada DataFrame yang sudah siap
-                    styled_df = pivot_df.style.apply(style_final_table, axis=None)
+                    # Simpan kolom ETA dalam format datetime sebelum diubah untuk display
+                    df_for_styling = pivot_df.copy()
+                    
+                    # Panggil fungsi styling pada DataFrame
+                    styled_df = df_for_styling.style.apply(style_final_table, axis=None)
                     
                     # Atur format tanggal dan angka untuk ditampilkan
                     styled_df = styled_df.format({'ETA': lambda x: x.strftime('%Y-%m-%d %H:%M:%S')})
@@ -131,7 +137,7 @@ if process_button:
                 else:
                     st.warning("Tidak ditemukan data yang cocok antara file Jadwal Kapal dan Daftar Unit.")
             except KeyError as e:
-                st.error(f"Error: Nama kolom tidak ditemukan: {e}. Pastikan file Excel/CSV Anda memiliki nama kolom yang benar (misal: 'VESSEL', 'CODE', 'VOY_OUT', dll).")
+                st.error(f"Error: Nama kolom tidak ditemukan: {e}. Pastikan file Excel/CSV Anda memiliki nama kolom yang benar.")
             except Exception as e:
                 st.error(f"Terjadi kesalahan saat memproses file: {e}"); st.error(f"Detail error: {str(e)}")
     else:
