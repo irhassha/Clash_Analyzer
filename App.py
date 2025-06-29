@@ -3,11 +3,13 @@ import pandas as pd
 import os
 from datetime import datetime, timedelta
 
-# --- Page & Title Configuration ---
+# --- Konfigurasi Halaman & Judul ---
 st.set_page_config(page_title="Clash Analyzer", layout="wide")
-st.title("Yard Clash Monitoring")
+st.title("🚢 Vessel Clash Analyzer")
 
-# --- Core Functions ---
+st.info("Feature: Select dates in the sidebar to focus. Schedule clashes will always be highlighted.")
+
+# --- Fungsi-fungsi Inti ---
 @st.cache_data
 def load_vessel_codes_from_repo(possible_names=['vessel codes.xlsx', 'vessel_codes.xls', 'vessel_codes.csv']):
     """Searches for and loads the vessel code mapping file from a list of possible names."""
@@ -45,36 +47,26 @@ def apply_all_styles(df, selected_dates):
             is_faded = is_faded_row[r_idx]
             is_clash = clash_mask.loc[r_idx, c_name]
             if is_clash and is_faded:
-                styler.loc[r_idx, c_name] = 'background-color: #FFE8D6; color: #BDBDBD;' # Faded Orange
+                styler.loc[r_idx, c_name] = 'background-color: #FFE8D6; color: #BDBDBD;'
             elif is_clash and not is_faded:
-                styler.loc[r_idx, c_name] = 'background-color: #FFAA33; color: black;'    # Bright Orange
+                styler.loc[r_idx, c_name] = 'background-color: #FFAA33; color: black;'
             elif not is_clash and is_faded:
-                styler.loc[r_idx, c_name] = 'color: #E0E0E0;'                             # Faded Text
+                styler.loc[r_idx, c_name] = 'color: #E0E0E0;'
     return styler
 
-def general_formatter(val):
-    """Global formatter: hides 0, formats other numbers, leaves the rest."""
-    if isinstance(val, (int, float)):
-        if val == 0: return ''
-        return f'{val:.0f}'
-    return val
-
-# --- Sidebar & Main Process ---
+# --- Sidebar & Proses Utama ---
 st.sidebar.header("⚙️ Your File Uploads")
+# ... (semua logika di bagian ini tidak berubah) ...
 schedule_file = st.sidebar.file_uploader("1. Upload Vessel Schedule", type=['xlsx', 'csv'])
 unit_list_file = st.sidebar.file_uploader("2. Upload Unit List", type=['xlsx', 'csv'])
 process_button = st.sidebar.button("🚀 Process Data", type="primary")
-
 if 'processed_df' not in st.session_state:
     st.session_state.processed_df = None
-
 df_vessel_codes = load_vessel_codes_from_repo()
-
 if process_button:
     if schedule_file and unit_list_file and (df_vessel_codes is not None and not df_vessel_codes.empty):
         with st.spinner('Loading and processing data...'):
             try:
-                # All processing logic remains the same
                 if schedule_file.name.lower().endswith(('.xls', '.xlsx')): df_schedule = pd.read_excel(schedule_file)
                 else: df_schedule = pd.read_csv(schedule_file)
                 df_schedule.columns = df_schedule.columns.str.strip()
@@ -104,10 +96,8 @@ if process_button:
                 final_display_cols = cols_awal + sorted(cols_clusters)
                 pivot_df = pivot_df[final_display_cols]
                 pivot_df = pivot_df.sort_values(by='ETA', ascending=True).reset_index(drop=True)
-                
                 st.session_state.processed_df = pivot_df
                 st.success("Data processed successfully! You can now use the date filter below.")
-
             except Exception as e:
                 st.error(f"An error occurred during processing: {e}")
                 st.session_state.processed_df = None
@@ -117,36 +107,40 @@ if process_button:
 # --- Display Area ---
 if st.session_state.processed_df is not None:
     display_df = st.session_state.processed_df
-    
-    st.header("Analysis Result")
-    st.markdown("---") # Adds a horizontal line for separation
 
-    # --- PERUBAHAN LOKASI WIDGET ---
-    # Widget pemilihan tanggal sekarang ada di area utama
-    col1, col2 = st.columns([1, 2]) # Create columns for layout
+    # ... (widget pemilihan tanggal tidak berubah) ...
+    st.header("✅ Analysis Result")
+    st.markdown("---")
+    col1, col2 = st.columns([1, 2])
     with col1:
         display_df_copy = display_df.copy()
         display_df_copy['ETA_Date_Only'] = pd.to_datetime(display_df_copy['ETA']).dt.date
         unique_dates_in_data = sorted(display_df_copy['ETA_Date_Only'].unique())
-        
         selected_dates = st.multiselect(
             "**Focus on Date(s):**",
             options=unique_dates_in_data,
             format_func=lambda date: date.strftime('%Y-%m-%d')
         )
-    # Column 2 is empty, creating space
     
     df_to_style = display_df.copy()
     
-    # Final Styling & Formatting
-    header_style = {'selector': 'th', 'props': [('font-weight', 'bold')]}
+    # --- FINAL STYLING & FORMATTING (VERSI PERBAIKAN) ---
     
+    # 1. Definisikan style untuk header tebal
+    header_style = [{'selector': 'th', 'props': [('font-weight', 'bold')]}]
+    
+    # 2. Buat kamus format eksplisit untuk menyembunyikan nol
+    numeric_cols = [col for col in df_to_style.columns if df_to_style[col].dtype in ['int64', 'float64']]
+    formatter = {col: lambda x: '' if x == 0 else f'{x:.0f}' for col in numeric_cols}
+    # Tambahkan format khusus untuk ETA ke dalam kamus yang sama
+    formatter['ETA'] = '{:%Y-%m-%d %H:%M:%S}'
+
+    # 3. Terapkan semua style dan format
     styled_df = (
         df_to_style.style
         .apply(apply_all_styles, axis=None, selected_dates=selected_dates)
-        .format(general_formatter)
-        .format({'ETA': '{:%Y-%m-%d %H:%M:%S}'})
-        .set_table_styles([header_style])
+        .format(formatter) # Gunakan kamus format yang sudah mencakup semuanya
+        .set_table_styles(header_style) # Terapkan style header tebal
     )
     
     st.dataframe(styled_df, use_container_width=True)
