@@ -11,7 +11,7 @@ st.info("Aplikasi ini secara otomatis membersihkan nama kolom dari spasi tambaha
 
 # --- Fungsi untuk memuat file kode kapal dari repository ---
 @st.cache_data
-def load_vessel_codes_from_repo(possible_names=['vessel_codes.xlsx', 'vessel_codes.xls', 'vessel_codes.csv']):
+def load_vessel_codes_from_repo(possible_names=['vessel codes.xlsx', 'vessel_codes.xls', 'vessel_codes.csv']):
     for filename in possible_names:
         if os.path.exists(filename):
             try:
