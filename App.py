@@ -23,30 +23,27 @@ def load_vessel_codes_from_repo(possible_names=['vessel codes.xlsx', 'vessel_cod
                 st.error(f"Gagal membaca file '{filename}': {e}"); return None
     st.error(f"File kode kapal tidak ditemukan."); return None
 
-# --- Fungsi untuk Styling Tabel ---
+# --- Fungsi untuk Styling Tabel (VERSI PERBAIKAN) ---
 def style_final_table(df):
     """
-    Fungsi untuk membuat DataFrame style yang akan:
-    1. Memberi warna latar belakang bergantian (zebra) per grup tanggal.
-    2. Mewarnai sel bentrokan dengan warna oranye (menimpa warna zebra).
+    Fungsi untuk membuat DataFrame style dengan zebra pattern dan highlight.
     """
-    # Buat DataFrame kosong untuk menyimpan style CSS
     styler = pd.DataFrame('', index=df.index, columns=df.columns)
     df_copy = df.copy()
-    # Kolom ETA harus dalam format datetime untuk perbandingan
+    # Pastikan kolom ETA adalah datetime untuk diolah
     df_copy['ETA'] = pd.to_datetime(df_copy['ETA'])
     df_copy['ETA_Date'] = df_copy['ETA'].dt.date
     
     # === Logika 1: Zebra Pattern per Tanggal ===
     unique_dates = df_copy['ETA_Date'].unique()
-    # Palet warna: putih untuk grup tanggal genap, abu-abu muda untuk ganjil
-    colors = ['#FFFFFF', '#F5F5F5'] 
+    # Warna abu-abu dibuat sedikit lebih terlihat
+    colors = ['white', '#EFEFEF'] 
     date_color_map = {date: colors[i % 2] for i, date in enumerate(unique_dates)}
     
-    # Terapkan warna dasar zebra ke seluruh baris
     for idx, row in df_copy.iterrows():
         color = date_color_map[row['ETA_Date']]
-        styler.loc[idx, :] = f'background-color: {color}'
+        # Menggunakan properti 'background' yang terkadang lebih robust
+        styler.loc[idx, :] = f'background: {color}'
 
     # === Logika 2: Highlight Bentrokan (Menimpa Warna Zebra) ===
     cluster_cols = [col for col in df.columns if col not in ['VESSEL', 'CODE', 'VOY_OUT', 'ETA', 'TOTAL']]
@@ -55,8 +52,7 @@ def style_final_table(df):
         clash_dates = subset_df[subset_df.duplicated(subset='ETA_Date', keep=False)]['ETA_Date'].unique()
         for date in clash_dates:
             clashing_indices = subset_df[subset_df['ETA_Date'] == date].index
-            # Timpa style dengan warna oranye hanya pada sel yang bentrok
-            styler.loc[clashing_indices, col] = 'background-color: #FFAA33; color: #000000;'
+            styler.loc[clashing_indices, col] = 'background: #FFAA33; color: black;' # Oranye
             
     return styler
 
@@ -121,10 +117,11 @@ if process_button:
                     st.header("✅ Hasil Akhir")
                     st.success(f"Berhasil memproses data untuk {len(pivot_df)} jadwal kapal.")
                     
-                    # Simpan kolom ETA dalam format datetime sebelum diubah untuk display
+                    # Membuat salinan untuk styling, memastikan tipe data ETA adalah datetime
                     df_for_styling = pivot_df.copy()
-                    
-                    # Panggil fungsi styling pada DataFrame
+                    df_for_styling['ETA'] = pd.to_datetime(df_for_styling['ETA'])
+
+                    # Panggil fungsi styling
                     styled_df = df_for_styling.style.apply(style_final_table, axis=None)
                     
                     # Atur format tanggal dan angka untuk ditampilkan
