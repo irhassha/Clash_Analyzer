@@ -1,0 +1,19 @@
+/* Mengimpor font dari Google Fonts */
+@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;700&display=swap');
+
+/* Menerapkan font dan warna teks default ke seluruh aplikasi */
+html, body, [class*="st-"], [class*="css-"] {
+    font-family: 'Plus Jakarta Sans', sans-serif;
+    color: #0a101d; /* Warna teks hitam keabuan */
+}
+
+/* Mengatur warna latar belakang utama aplikasi */
+/* Menargetkan elemen spesifik Streamlit untuk background */
+.st-emotion-cache-1jicfl2 {
+    background-color: #FFFFFF; /* Putih */
+}
+
+/* Mengatur warna latar belakang sidebar */
+section[data-testid="stSidebar"] {
+    background-color: #e3eefd; /* Biru muda lembut */
+}
