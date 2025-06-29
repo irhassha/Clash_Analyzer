@@ -7,7 +7,7 @@ from datetime import datetime, timedelta
 st.set_page_config(page_title="App Pencocokan Vessel", layout="wide")
 st.title("🚢 Aplikasi Pencocokan Jadwal Kapal & Unit List")
 
-st.info("Fitur: Freeze panes hingga kolom ETA, dan angka 0 disembunyikan untuk kejelasan.")
+st.info("Fitur: Pilih tanggal untuk fokus. Bentrokan jadwal akan selalu di-highlight.")
 
 # --- Fungsi-fungsi ---
 @st.cache_data
@@ -24,7 +24,6 @@ def load_vessel_codes_from_repo(possible_names=['vessel codes.xlsx', 'vessel_cod
     st.error(f"File kode kapal tidak ditemukan."); return None
 
 def apply_all_styles(df, selected_dates):
-    # ... (Fungsi styling ini tidak berubah) ...
     styler = pd.DataFrame('', index=df.index, columns=df.columns)
     df_copy = df.copy()
     df_copy['ETA'] = pd.to_datetime(df_copy['ETA'])
@@ -53,24 +52,17 @@ def apply_all_styles(df, selected_dates):
                 styler.loc[r_idx, c_name] = 'color: #E0E0E0;'
     return styler
 
-# --- FUNGSI BARU UNTUK FORMATTING ---
-def general_formatter(val):
-    """Fungsi global untuk format: sembunyikan 0, format angka lain, biarkan sisanya."""
-    if isinstance(val, (int, float)):
-        if val == 0:
-            return ''  # Kembalikan string kosong jika nilainya 0
-        return f'{val:.0f}' # Tampilkan sebagai integer jika bukan 0
-    return val # Kembalikan nilai asli jika bukan angka (misal: teks, tanggal)
-
 # --- Sidebar & Proses Utama ---
 st.sidebar.header("⚙️ Unggah File Anda")
-# ... (bagian ini tidak berubah) ...
 schedule_file = st.sidebar.file_uploader("1. Unggah File Jadwal Kapal", type=['xlsx', 'csv'])
 unit_list_file = st.sidebar.file_uploader("2. Unggah File Daftar Unit", type=['xlsx', 'csv'])
 process_button = st.sidebar.button("🚀 Proses Data", type="primary")
+
 if 'processed_df' not in st.session_state:
     st.session_state.processed_df = None
+
 df_vessel_codes = load_vessel_codes_from_repo()
+
 if process_button:
     if schedule_file and unit_list_file and (df_vessel_codes is not None and not df_vessel_codes.empty):
         with st.spinner('Memuat dan memproses data...'):
@@ -107,6 +99,7 @@ if process_button:
                 pivot_df = pivot_df.sort_values(by='ETA', ascending=True).reset_index(drop=True)
                 st.session_state.processed_df = pivot_df
                 st.success("Data berhasil diproses! Anda sekarang bisa menggunakan filter tanggal di sidebar.")
+
             except Exception as e:
                 st.error(f"Terjadi kesalahan saat memproses file: {e}")
                 st.session_state.processed_df = None
@@ -126,12 +119,23 @@ if st.session_state.processed_df is not None:
     
     df_to_style = display_df.copy()
     
-    # --- PERUBAHAN PADA CARA FORMATTING ---
+    # --- PERBAIKAN FINAL PADA CARA FORMATTING ---
+    
+    # 1. Buat dictionary format yang eksplisit
+    # Ambil semua kolom yang berupa angka (cluster dan TOTAL)
+    numeric_cols = [col for col in df_to_style.columns if df_to_style[col].dtype in ['int64', 'float64']]
+    
+    # Buat aturan format: jika 0 jadi blank, jika tidak, tampilkan sebagai integer
+    formatter = {col: lambda x: '' if x == 0 else f'{x:.0f}' for col in numeric_cols}
+    
+    # Tambahkan aturan format spesifik untuk kolom ETA
+    formatter['ETA'] = '{:%Y-%m-%d %H:%M:%S}'
+    
+    # 2. Terapkan semua style dan format
     styled_df = (
         df_to_style.style
         .apply(apply_all_styles, axis=None, selected_dates=selected_dates)
-        .format(general_formatter) # Terapkan fungsi format global yang baru
-        .format({'ETA': '{:%Y-%m-%d %H:%M:%S}'}) # Format spesifik untuk kolom ETA
+        .format(formatter) # Gunakan dictionary format yang baru dan eksplisit
         # .set_sticky(axis="columns", labels=['VESSEL', 'CODE', 'VOY_OUT', 'ETA']) # Tetap dinonaktifkan
     )
     
