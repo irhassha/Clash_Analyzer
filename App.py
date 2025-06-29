@@ -84,7 +84,7 @@ if process_button:
                 final_display_cols = cols_awal + sorted(final_cluster_cols)
                 pivot_df = pivot_df[final_display_cols]
                 
-                # --- PERBAIKAN FORMAT ETA: Hapus detik ---
+                # Format ETA untuk display
                 pivot_df['ETA'] = pd.to_datetime(pivot_df['ETA']).dt.strftime('%Y-%m-%d %H:%M')
                 
                 pivot_df = pivot_df.sort_values(by='ETA', ascending=True).reset_index(drop=True)
@@ -109,7 +109,12 @@ if st.session_state.processed_df is not None:
     df_for_grid = display_df.copy()
     df_for_grid['ETA_Date'] = pd.to_datetime(df_for_grid['ETA']).dt.strftime('%Y-%m-%d')
     
-    # 1. Tentukan sel mana saja yang bentrok
+    # 1. Buat Peta Warna untuk Zebra Pattern per Tanggal
+    unique_dates = df_for_grid['ETA_Date'].unique()
+    colors = ['#FFFFFF', '#F5F5F5']
+    date_color_map = {date: colors[i % 2] for i, date in enumerate(unique_dates)}
+
+    # 2. Tentukan sel mana saja yang bentrok
     clash_map = {}
     cluster_cols = [col for col in df_for_grid.columns if col not in ['VESSEL', 'CODE', 'VOY_OUT', 'ETA', 'Total Box', 'Total cluster', 'ETA_Date']]
     for date, group in df_for_grid.groupby('ETA_Date'):
@@ -119,72 +124,82 @@ if st.session_state.processed_df is not None:
                 clash_areas_for_date.append(col)
         if clash_areas_for_date:
             clash_map[date] = clash_areas_for_date
-            
+
     # --- PENGGUNAAN AG-GRID DENGAN SEMUA FITUR ---
     
-    # Javascript untuk menyembunyikan 0
-    hide_zero_jscode = JsCode("""
-        function(params) {
-            if (params.value == 0 || params.value === null) {
-                return '';
-            }
-            return params.value;
-        }
-    """)
+    # JsCode untuk menyembunyikan 0
+    hide_zero_jscode = JsCode("""function(params) { if (params.value == 0 || params.value === null) { return ''; } return params.value; }""")
     
-    # Javascript untuk styling sel bentrok (highlight oranye)
+    # JsCode untuk highlight bentrokan (menimpa warna zebra)
     clash_cell_style_jscode = JsCode(f"""
         function(params) {{
             const clashMap = {json.dumps(clash_map)};
             const date = params.data.ETA_Date;
             const colId = params.colDef.field;
-            
             const isClash = clashMap[date] ? clashMap[date].includes(colId) : false;
-            
             if (isClash) {{
-                return {{'backgroundColor': '#FFAA33', 'color': 'black'}}; // Oranye Terang
+                return {{'backgroundColor': '#FFAA33', 'color': 'black'}};
             }}
             return null;
         }}
     """)
     
-    # 1. Buat GridOptionsBuilder
-    gb = GridOptionsBuilder.from_dataframe(df_for_grid)
-    
-    # 2. Konfigurasi default untuk SEMUA kolom
-    gb.configure_default_column(
-        resizable=True, 
-        sortable=True, 
-        editable=False, 
-        suppressMenu=True # Hapus ikon menu/filter untuk semua kolom
-    )
+    # JsCode untuk Zebra Pattern (sebagai dasar)
+    zebra_row_style_jscode = JsCode(f"""
+        function(params) {{
+            const dateColorMap = {json.dumps(date_color_map)};
+            const date = params.data.ETA_Date;
+            const color = dateColorMap[date];
+            return {{ 'background-color': color }};
+        }}
+    """)
 
-    # 3. Konfigurasi pin (freeze) untuk kolom-kolom utama
+    # --- KONFIGURASI GRID SECARA MANUAL (LEBIH STABIL) ---
+    
+    # 1. Definisi default untuk semua kolom
+    default_col_def = {
+        "suppressMenu": True,
+        "sortable": True,
+        "resizable": True,
+        "editable": False,
+        "minWidth": 80,
+    }
+    
+    # 2. Bangun definisi untuk setiap kolom secara manual
+    column_defs = []
+    
+    # Kolom yang di-freeze
     pinned_cols = ['VESSEL', 'CODE', 'VOY_OUT', 'ETA', 'Total Box', 'Total cluster']
     for col in pinned_cols:
-        gb.configure_column(col, pinned="left", width=120)
-
-    # 4. Konfigurasi spesifik untuk kolom cluster
-    for col in cluster_cols:
-        gb.configure_column(col, cellStyle=clash_cell_style_jscode, cellRenderer=hide_zero_jscode, width=90)
-    
-    # 5. Konfigurasi spesifik untuk kolom Total (hanya renderer)
-    gb.configure_column("Total Box", cellRenderer=hide_zero_jscode)
-    gb.configure_column("Total cluster", cellRenderer=hide_zero_jscode)
-    
-    # 6. Aturan untuk Zebra Pattern
-    # Kita akan memberi style pada baris berdasarkan nomor barisnya (genap/ganjil)
-    gb.configure_grid_options(getRowStyle=JsCode(
-        """
-        function(params) {
-            if (params.node.rowIndex % 2 === 0) {
-                return { 'background-color': '#F5F5F5' };
-            }
+        col_def = {
+            "field": col,
+            "headerName": col,
+            "pinned": "left",
+            "width": 120,
         }
-        """
-    ))
+        if col in ["Total Box", "Total cluster"]:
+            col_def["cellRenderer"] = hide_zero_jscode
+        column_defs.append(col_def)
 
-    gridOptions = gb.build()
+    # Kolom Cluster
+    for col in cluster_cols:
+        column_defs.append({
+            "field": col,
+            "headerName": col,
+            "width": 90,
+            "cellRenderer": hide_zero_jscode,
+            "cellStyle": clash_cell_style_jscode,
+        })
+    
+    # Sembunyikan kolom helper
+    column_defs.append({"field": "ETA_Date", "hide": True})
+
+    # 3. Gabungkan semua ke dalam gridOptions
+    gridOptions = {
+        "defaultColDef": default_col_def,
+        "columnDefs": column_defs,
+        "getRowStyle": zebra_row_style_jscode, # Terapkan Zebra Pattern di sini
+    }
 
     # Tampilkan tabel
     st.markdown("---")
@@ -195,8 +210,6 @@ if st.session_state.processed_df is not None:
         width='100%',
         theme='streamlit',
         allow_unsafe_jscode=True,
-        # Sembunyikan kolom ETA_Date dari tampilan
-        column_defs=[{"field": "ETA_Date", "hide": True}]
     )
     
     csv_export = display_df.to_csv(index=False).encode('utf-8')
