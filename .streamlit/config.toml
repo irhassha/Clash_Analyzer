@@ -4,5 +4,5 @@
 base = "light"
 
 # Atur HANYA warna latar belakang utama di sini
-backgroundColor = "#FFFFFF"
+backgroundColor = "#F1EFEC"
 textColor = "#0a101d"
