@@ -16,4 +16,4 @@ secondaryBackgroundColor = "#e3eefd" # Biru muda yang sangat lembut
 textColor = "#0a101d"
 
 # Jenis Font (Streamlit akan otomatis mengambil dari Google Fonts)
-font = "Plus Jakarta Sans"
+font = "Roboto"
