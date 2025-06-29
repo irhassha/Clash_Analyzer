@@ -1,0 +1,10 @@
+[theme]
+
+# Mengubah warna latar belakang utama menjadi abu-abu muda
+backgroundColor = "#DDDDDD"
+
+# Mengubah warna sidebar menjadi oranye
+secondaryBackgroundColor = "#FE7743"
+
+# Mengubah warna teks agar tetap terbaca
+textColor = "#0a101d"
