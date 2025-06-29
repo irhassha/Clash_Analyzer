@@ -21,41 +21,45 @@ def load_vessel_codes_from_repo(possible_names=['vessel codes.xlsx', 'vessel_cod
                 if filename.lower().endswith('.csv'): return pd.read_csv(filename)
                 else: return pd.read_excel(filename)
             except Exception as e:
-                st.error(f"Gagal membaca file '{filename}': {e}")
-                return None
-    st.error(f"File kode kapal tidak ditemukan. Pastikan ada file dengan nama vessel_codes.xlsx atau .csv di repository Anda.")
-    return None
+                st.error(f"Gagal membaca file '{filename}': {e}"); return None
+    st.error(f"File kode kapal tidak ditemukan."); return None
 
-# --- Fungsi untuk Styling ---
-def highlight_clashes(df):
-    """Fungsi untuk membuat DataFrame style yang akan mewarnai sel bentrokan."""
+# --- Fungsi untuk Styling Tabel ---
+def style_final_table(df):
+    """
+    Fungsi untuk membuat DataFrame style yang akan:
+    1. Mewarnai sel bentrokan dengan warna oranye.
+    2. Memberi garis pemisah antar tanggal ETA yang berbeda.
+    """
     # Buat DataFrame kosong dengan struktur yang sama untuk menyimpan style CSS
     styler = pd.DataFrame('', index=df.index, columns=df.columns)
-    
-    # Ambil hanya tanggal dari ETA untuk perbandingan
     df_copy = df.copy()
-    df_copy['ETA_Date'] = pd.to_datetime(df_copy['ETA']).dt.date
+    # Konversi kolom ETA (yang sudah dalam format datetime) ke tanggal saja untuk perbandingan
+    df_copy['ETA_Date'] = df_copy['ETA'].dt.date
     
-    # Tentukan kolom mana saja yang merupakan cluster
+    # === Logika 1: Highlight Bentrokan (Warna Oranye) ===
     cluster_cols = [col for col in df.columns if col not in ['VESSEL', 'CODE', 'VOY_OUT', 'ETA', 'TOTAL']]
-    
-    # Loop melalui setiap kolom cluster untuk mencari bentrokan
     for col in cluster_cols:
-        # Ambil data di mana ada muatan di cluster ini (nilai > 0)
         subset_df = df_copy[df_copy[col] > 0]
-        
-        # Cari tanggal ETA yang duplikat (lebih dari 1 kapal di hari yang sama)
         clash_dates = subset_df[subset_df.duplicated(subset='ETA_Date', keep=False)]['ETA_Date'].unique()
-        
-        # Tandai sel yang bentrok di DataFrame styler
         for date in clash_dates:
-            # Dapatkan baris/index dari kapal yang bentrok pada tanggal ini
             clashing_indices = subset_df[subset_df['ETA_Date'] == date].index
-            # Beri warna pada sel yang bentrok
-            styler.loc[clashing_indices, col] = 'background-color: #FFC700' # Warna kuning/gold
+            # Warna diubah menjadi oranye yang lebih terlihat
+            styler.loc[clashing_indices, col] = 'background-color: #FFAA33'
+            
+    # === Logika 2: Garis Pemisah Antar Tanggal ===
+    # Cari index di mana tanggal berubah dari baris sebelumnya
+    date_change_indices = df_copy.index[df_copy['ETA_Date'].diff() > pd.Timedelta(0)]
+    
+    # Terapkan style border-top pada baris-baris tersebut
+    for idx in date_change_indices:
+        for col_name in styler.columns:
+            current_style = styler.loc[idx, col_name]
+            separator_style = 'border-top: 2px solid #555555;'
+            # Gabungkan style highlight (jika ada) dengan style pemisah
+            styler.loc[idx, col_name] = f"{current_style}; {separator_style}"
             
     return styler
-
 
 # --- Sidebar untuk Input Pengguna ---
 st.sidebar.header("⚙️ Unggah File Anda")
@@ -86,9 +90,7 @@ if process_button:
                     excluded_areas = [str(i) for i in range(801, 809)] 
                     merged_df['Area (EXE)'] = merged_df['Area (EXE)'].astype(str)
                     filtered_data = merged_df[~merged_df['Area (EXE)'].isin(excluded_areas)]
-
-                    if filtered_data.empty:
-                         st.warning("Setelah filter, tidak ada data yang tersisa untuk ditampilkan."); st.stop()
+                    if filtered_data.empty: st.warning("Setelah filter, tidak ada data tersisa."); st.stop()
 
                     # 4. Transformasi ke Pivot
                     grouping_cols = ['VESSEL', 'CODE', 'VOY_OUT', 'ETA']
@@ -100,9 +102,7 @@ if process_button:
                     two_days_ago = pd.Timestamp.now() - timedelta(days=2)
                     condition_to_hide = (pivot_df['ETA'] < two_days_ago) & (pivot_df['TOTAL'] < 50)
                     pivot_df = pivot_df[~condition_to_hide]
-                    
-                    if pivot_df.empty:
-                         st.warning("Setelah filter ETA dan Total, tidak ada data tersisa."); st.stop()
+                    if pivot_df.empty: st.warning("Setelah filter ETA & Total, tidak ada data tersisa."); st.stop()
 
                     # 6. Menata & Mengurutkan
                     cols_awal = ['VESSEL', 'CODE', 'VOY_OUT', 'ETA', 'TOTAL']
@@ -111,17 +111,18 @@ if process_button:
                     pivot_df = pivot_df[final_display_cols]
                     pivot_df = pivot_df.sort_values(by='ETA', ascending=True).reset_index(drop=True)
 
-                    # 7. Menampilkan Hasil dengan Highlight
-                    st.header("✅ Hasil Akhir (dengan Highlight Bentrokan Jadwal)")
-                    st.success(f"Berhasil memproses dan mengelompokkan data untuk {len(pivot_df)} kapal unik (sesuai semua filter).")
+                    # 7. Menampilkan Hasil dengan Highlight & Separator
+                    st.header("✅ Hasil Akhir (dengan Highlight & Separator Tanggal)")
+                    st.success(f"Berhasil memproses data untuk {len(pivot_df)} jadwal kapal (sesuai semua filter).")
                     
+                    # Simpan kolom ETA asli sebelum diformat untuk styling
+                    eta_for_styling = pivot_df['ETA']
                     # Buat DataFrame Styler dengan menerapkan fungsi highlight
-                    styled_df = pivot_df.style.apply(highlight_clashes, axis=None)
-                    
+                    styled_df = pivot_df.style.apply(style_final_table, axis=None, df=eta_for_styling)
                     # Atur format tanggal dan angka untuk ditampilkan
                     styled_df = styled_df.format({'ETA': lambda x: x.strftime('%Y-%m-%d %H:%M:%S')})
                     
-                    st.dataframe(styled_df)
+                    st.dataframe(styled_df, height=(len(pivot_df) + 1) * 35 + 3)
                     
                     csv_export = pivot_df.to_csv(index=False).encode('utf-8')
                     st.download_button(label="📥 Unduh Hasil sebagai CSV", data=csv_export, file_name='hasil_pivot_clusters.csv', mime='text/csv')
