@@ -7,7 +7,7 @@ from datetime import datetime, timedelta
 st.set_page_config(page_title="App Pencocokan Vessel", layout="wide")
 st.title("🚢 Aplikasi Pencocokan Jadwal Kapal & Unit List")
 
-# ... (semua fungsi lainnya tetap sama) ...
+# ... (semua fungsi lainnya tetap sama persis) ...
 @st.cache_data
 def load_vessel_codes_from_repo(possible_names=['vessel codes.xlsx', 'vessel_codes.xls', 'vessel_codes.csv']):
     for filename in possible_names:
@@ -64,7 +64,7 @@ if process_button:
     if schedule_file and unit_list_file and (df_vessel_codes is not None and not df_vessel_codes.empty):
         with st.spinner('Memuat dan memproses data...'):
             try:
-                # ... (semua proses loading dan merging sama persis) ...
+                # ... (semua proses loading, merging, filtering, dan pivoting sama persis) ...
                 if schedule_file.name.lower().endswith(('.xls', '.xlsx')): df_schedule = pd.read_excel(schedule_file)
                 else: df_schedule = pd.read_csv(schedule_file)
                 df_schedule.columns = df_schedule.columns.str.strip()
@@ -110,7 +110,9 @@ if st.session_state.processed_df is not None:
     display_df_copy['ETA_Date_Only'] = pd.to_datetime(display_df_copy['ETA']).dt.date
     unique_dates_in_data = sorted(display_df_copy['ETA_Date_Only'].unique())
     selected_dates = st.sidebar.multiselect("Pilih tanggal untuk difokuskan:", options=unique_dates_in_data, format_func=lambda date: date.strftime('%Y-%m-%d'))
+    
     st.header("✅ Hasil Akhir")
+    
     df_to_style = display_df.copy()
     
     sticky_cols = ['VESSEL', 'CODE', 'VOY_OUT', 'ETA']
@@ -123,9 +125,10 @@ if st.session_state.processed_df is not None:
         .apply(apply_all_styles, axis=None, selected_dates=selected_dates)
         .format(zero_hide_formatter)
         .format({'ETA': lambda x: x.strftime('%Y-%m-%d %H:%M:%S')})
-        # --- SOLUSI ALTERNATIF ---
-        # Jika update requirements.txt tidak berhasil, beri tanda # pada baris di bawah ini
-        .set_sticky(axis="columns", labels=sticky_cols)
+        # --- PERBAIKAN: FITUR FREEZE PANES DINONAKTIFKAN ---
+        # Baris di bawah ini menyebabkan error jika versi pandas di Streamlit Cloud < 1.4.0.
+        # Baris ini dinonaktifkan agar aplikasi berjalan tanpa error.
+        # .set_sticky(axis="columns", labels=sticky_cols)
     )
     
     st.dataframe(styled_df, use_container_width=True)
