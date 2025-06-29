@@ -3,6 +3,11 @@
 # Tentukan tema dasar agar tidak kembali ke hitam
 base = "light"
 
-# Atur HANYA warna latar belakang utama di sini
-backgroundColor = "#F0F0F0"
+# Mengubah warna latar belakang utama menjadi abu-abu muda
+backgroundColor = "#F8F0E5"
+
+# Mengubah warna sidebar menjadi oranye
+secondaryBackgroundColor = "#102C57"
+
+# Mengubah warna teks agar tetap terbaca
 textColor = "#0a101d"
