@@ -21,7 +21,7 @@ st.title("🚢 Aplikasi Pencocokan Jadwal Kapal & Unit List")
 
 # ... sisa skrip Anda dari sini ke bawah tidak perlu diubah sama sekali ...
 @st.cache_data
-def load_vessel_codes_from_repo(possible_names=['vessel_codes.xlsx', 'vessel_codes.xls', 'vessel_codes.csv']):
+def load_vessel_codes_from_repo(possible_names=['vessel codes.xlsx', 'vessel_codes.xls', 'vessel_codes.csv']):
     for filename in possible_names:
         if os.path.exists(filename):
             try:
