@@ -5,9 +5,9 @@ from datetime import datetime, timedelta
 
 # --- Konfigurasi Halaman & Judul ---
 st.set_page_config(page_title="Clash Analyzer", layout="wide")
-st.title("🚢 Vessel Clash Analyzer")
+st.title("🚨 Yard Clash Monitoring")
 
-st.info("Feature: Select dates in the sidebar to focus. Schedule clashes will always be highlighted.")
+st.info("Feature: Select dates to focus. Schedule clashes will always be highlighted.")
 
 # --- Fungsi-fungsi Inti ---
 @st.cache_data
@@ -109,7 +109,7 @@ if st.session_state.processed_df is not None:
     display_df = st.session_state.processed_df
 
     # ... (widget pemilihan tanggal tidak berubah) ...
-    st.header("✅ Analysis Result")
+    st.header("📄 Analysis Result")
     st.markdown("---")
     col1, col2 = st.columns([1, 2])
     with col1:
