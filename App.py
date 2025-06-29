@@ -7,7 +7,7 @@ from datetime import datetime, timedelta
 st.set_page_config(page_title="App Pencocokan Vessel", layout="wide")
 st.title("🚢 Aplikasi Pencocokan Jadwal Kapal & Unit List")
 
-st.info("Fitur: Pilih tanggal untuk fokus. Bentrokan jadwal akan selalu di-highlight.")
+st.info("Fitur: Freeze panes hingga kolom ETA, dan angka 0 disembunyikan untuk kejelasan.")
 
 # --- Fungsi-fungsi ---
 @st.cache_data
@@ -28,43 +28,28 @@ def apply_all_styles(df, selected_dates):
     df_copy = df.copy()
     df_copy['ETA'] = pd.to_datetime(df_copy['ETA'])
     df_copy['ETA_Date'] = df_copy['ETA'].dt.date
-    
-    # Pra-kalkulasi Faded Rows
     is_faded_row = pd.Series(False, index=df.index)
     if selected_dates and len(selected_dates) < len(df_copy['ETA_Date'].unique()):
         is_faded_row[~df_copy['ETA_Date'].isin(selected_dates)] = True
-
-    # Pra-kalkulasi Clash Cells
     clash_mask = pd.DataFrame(False, index=df.index, columns=df.columns)
     cluster_cols = [col for col in df.columns if col not in ['VESSEL', 'CODE', 'VOY_OUT', 'ETA', 'TOTAL']]
     for col in cluster_cols:
-        
-        # --- PERBAIKAN UTAMA ADA DI SINI ---
-        # Paksa kolom menjadi numerik sebelum perbandingan, ubah error menjadi 0
         numeric_col = pd.to_numeric(df_copy[col], errors='coerce').fillna(0)
-        
-        # Lakukan perbandingan pada kolom yang sudah pasti numerik
         subset_df = df_copy[numeric_col > 0]
-        # --- AKHIR DARI PERBAIKAN ---
-
         clash_dates = subset_df[subset_df.duplicated(subset='ETA_Date', keep=False)]['ETA_Date'].unique()
         for date in clash_dates:
             clashing_indices = subset_df[subset_df['ETA_Date'] == date].index
             clash_mask.loc[clashing_indices, col] = True
-
-    # Terapkan style berdasarkan 4 kondisi
     for r_idx in df.index:
         for c_name in df.columns:
             is_faded = is_faded_row[r_idx]
             is_clash = clash_mask.loc[r_idx, c_name]
-
             if is_clash and is_faded:
                 styler.loc[r_idx, c_name] = 'background-color: #FFE8D6; color: #BDBDBD;'
             elif is_clash and not is_faded:
                 styler.loc[r_idx, c_name] = 'background-color: #FFAA33; color: black;'
             elif not is_clash and is_faded:
                 styler.loc[r_idx, c_name] = 'color: #E0E0E0;'
-            
     return styler
 
 # --- Sidebar & Proses Utama ---
@@ -145,8 +130,26 @@ if st.session_state.processed_df is not None:
     st.header("✅ Hasil Akhir")
     
     df_to_style = display_df.copy()
-    styled_df = df_to_style.style.apply(apply_all_styles, axis=None, selected_dates=selected_dates)
-    styled_df = styled_df.format({'ETA': lambda x: x.strftime('%Y-%m-%d %H:%M:%S')})
+
+    # --- PENERAPAN FITUR BARU (FREEZE & HIDE ZEROS) ---
+
+    # 1. Tentukan kolom mana saja yang akan di-freeze
+    sticky_cols = ['VESSEL', 'CODE', 'VOY_OUT', 'ETA']
+    
+    # 2. Buat format untuk menyembunyikan angka 0
+    # Ambil semua kolom cluster + kolom TOTAL
+    cols_to_format = [col for col in df_to_style.columns if col not in ['VESSEL', 'CODE', 'VOY_OUT', 'ETA']]
+    # Buat dictionary formatter: jika nilai adalah 0, jadi string kosong, jika tidak, tampilkan sebagai angka integer
+    zero_hide_formatter = {col: lambda x: '' if x == 0 else f'{x:.0f}' for col in cols_to_format}
+
+    # 3. Gabungkan semua style dalam satu chain
+    styled_df = (
+        df_to_style.style
+        .apply(apply_all_styles, axis=None, selected_dates=selected_dates)
+        .format(zero_hide_formatter) # Terapkan format sembunyikan nol
+        .format({'ETA': lambda x: x.strftime('%Y-%m-%d %H:%M:%S')}) # Format tanggal
+        .set_sticky(axis="columns", labels=sticky_cols) # Terapkan freeze panes
+    )
     
     st.dataframe(styled_df, use_container_width=True)
     
