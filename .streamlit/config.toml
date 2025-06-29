@@ -1,0 +1,8 @@
+[theme]
+
+# Tentukan tema dasar agar tidak kembali ke hitam
+base = "light"
+
+# Atur HANYA warna latar belakang utama di sini
+backgroundColor = "#FFFFFF"
+textColor = "#0a101d"
