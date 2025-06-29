@@ -18,7 +18,7 @@ def apply_custom_theme():
 
         /* Mengganti warna latar utama */
         .main .block-container {
-            background-color: #FFFFFF;
+            background-color: #DDDDDD;
             color: #0a101d;
         }
 
