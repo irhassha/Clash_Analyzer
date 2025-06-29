@@ -1,13 +1,23 @@
+# --- File Konfigurasi Final ---
+
+# Section untuk server, disarankan dari forum agar aset termuat dengan benar
+[server]
+headless = true
+
+# Section untuk browser
+[browser]
+gatherUsageStats = false
+
+# Section untuk tema kustom Anda
 [theme]
+# Tentukan tema dasar agar tidak kembali ke hitam
+base = "light"
 
-# Mengubah warna latar belakang utama menjadi abu-abu muda
-backgroundColor = "#EFE4D2"
-
-# Mengubah warna sidebar menjadi oranye
-secondaryBackgroundColor = "#27548A"
-
-# Mengubah warna teks agar tetap terbaca
+# Warna-warna yang Anda inginkan
+primaryColor = "#1c64d1"
+backgroundColor = "#FFFFFF"
+secondaryBackgroundColor = "#e3eefd"
 textColor = "#0a101d"
 
-# Menambahkan pengaturan font
+# Pengaturan font yang kita coba aktifkan kembali
 font = "Plus Jakarta Sans"
