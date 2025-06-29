@@ -7,7 +7,7 @@ from datetime import datetime, timedelta
 st.set_page_config(page_title="App Pencocokan Vessel", layout="wide")
 st.title("🚢 Aplikasi Pencocokan Jadwal Kapal & Unit List")
 
-st.info("Fitur Baru: Pilih tanggal di sidebar untuk menyorot jadwal tertentu.")
+st.info("Fitur: Pilih tanggal untuk fokus, bentrokan jadwal akan selalu di-highlight.")
 
 # --- Fungsi-fungsi ---
 @st.cache_data
@@ -23,24 +23,33 @@ def load_vessel_codes_from_repo(possible_names=['vessel codes.xlsx', 'vessel_cod
                 st.error(f"Gagal membaca file '{filename}': {e}"); return None
     st.error(f"File kode kapal tidak ditemukan."); return None
 
-# --- FUNGSI STYLING BARU (METODE FADE) ---
-def style_by_date_selection(df, selected_dates):
+# --- FUNGSI STYLING BARU (FADE + HIGHLIGHT ORANYE) ---
+def apply_all_styles(df, selected_dates):
     """
-    Memberi style 'fade' (teks abu-abu) pada baris yang TIDAK dipilih.
+    Menggabungkan semua style:
+    1. Memberi style 'fade' pada baris yang TIDAK dipilih.
+    2. Memberi highlight oranye pada sel yang bentrok (prioritas utama).
     """
     styler = pd.DataFrame('', index=df.index, columns=df.columns)
+    df_copy = df.copy()
+    df_copy['ETA'] = pd.to_datetime(df_copy['ETA'])
+    df_copy['ETA_Date'] = df_copy['ETA'].dt.date
     
-    # Hanya terapkan style jika ada tanggal yang dipilih
-    # dan jika tidak semua tanggal dipilih (agar tidak semua jadi abu-abu)
-    if selected_dates and len(selected_dates) < len(df['ETA'].dt.date.unique()):
-        df_copy = df.copy()
-        df_copy['ETA_Date'] = pd.to_datetime(df_copy['ETA']).dt.date
-        
-        # Cari baris yang tanggal ETA-nya TIDAK ada di dalam daftar pilihan
+    # --- Logika 1: Terapkan FADE sebagai dasar ---
+    if selected_dates and len(selected_dates) < len(df_copy['ETA_Date'].unique()):
         fade_indices = df_copy[~df_copy['ETA_Date'].isin(selected_dates)].index
-        
-        # Beri style warna teks abu-abu pada baris-baris tersebut
-        styler.loc[fade_indices, :] = "color: #9E9E9E" # Warna abu-abu medium
+        # Menggunakan warna abu-abu yang lebih terang/pudar
+        styler.loc[fade_indices, :] = "color: #CCCCCC;"
+
+    # --- Logika 2: Terapkan HIGHLIGHT ORANYE (akan menimpa style fade jika perlu) ---
+    cluster_cols = [col for col in df.columns if col not in ['VESSEL', 'CODE', 'VOY_OUT', 'ETA', 'TOTAL']]
+    for col in cluster_cols:
+        subset_df = df_copy[df_copy[col] > 0]
+        clash_dates = subset_df[subset_df.duplicated(subset='ETA_Date', keep=False)]['ETA_Date'].unique()
+        for date in clash_dates:
+            clashing_indices = subset_df[subset_df['ETA_Date'] == date].index
+            styler.loc[clashing_indices, col] = 'background-color: #FFAA33; color: black;'
+            
     return styler
 
 # --- Sidebar untuk Input Pengguna ---
@@ -69,7 +78,7 @@ if process_button:
                 else: df_unit_list = pd.read_csv(unit_list_file)
                 df_unit_list.columns = df_unit_list.columns.str.strip()
                 
-                # Proses inti
+                # Proses inti...
                 original_vessels_list = df_schedule['VESSEL'].unique().tolist()
                 df_schedule['ETA'] = pd.to_datetime(df_schedule['ETA'], errors='coerce')
                 df_schedule_with_code = pd.merge(df_schedule, df_vessel_codes, left_on="VESSEL", right_on="Description", how="left").rename(columns={"Value": "CODE"})
@@ -77,14 +86,14 @@ if process_button:
                 
                 if merged_df.empty: st.warning("Tidak ditemukan data yang cocok."); st.session_state.processed_df = None; st.stop()
                 
-                # Filter-filter
+                # Filter-filter...
                 merged_df = merged_df[merged_df['VESSEL'].isin(original_vessels_list)]
                 excluded_areas = [str(i) for i in range(801, 809)] 
                 merged_df['Area (EXE)'] = merged_df['Area (EXE)'].astype(str)
                 filtered_data = merged_df[~merged_df['Area (EXE)'].isin(excluded_areas)]
                 if filtered_data.empty: st.warning("Setelah filter, tidak ada data tersisa."); st.session_state.processed_df = None; st.stop()
 
-                # Transformasi ke Pivot
+                # Transformasi ke Pivot...
                 grouping_cols = ['VESSEL', 'CODE', 'VOY_OUT', 'ETA']
                 pivot_df = filtered_data.pivot_table(index=grouping_cols, columns='Area (EXE)', aggfunc='size', fill_value=0)
                 pivot_df['TOTAL'] = pivot_df.sum(axis=1)
@@ -95,7 +104,7 @@ if process_button:
                 pivot_df = pivot_df[~condition_to_hide]
                 if pivot_df.empty: st.warning("Setelah filter ETA & Total, tidak ada data tersisa."); st.session_state.processed_df = None; st.stop()
 
-                # Menata & Mengurutkan
+                # Menata & Mengurutkan...
                 cols_awal = ['VESSEL', 'CODE', 'VOY_OUT', 'ETA', 'TOTAL']
                 cols_clusters = [col for col in pivot_df.columns if col not in cols_awal]
                 final_display_cols = cols_awal + sorted(cols_clusters)
@@ -108,7 +117,7 @@ if process_button:
 
             except Exception as e:
                 st.error(f"Terjadi kesalahan saat memproses file: {e}")
-                st.session_state.processed_df = None # Reset jika error
+                st.session_state.processed_df = None
     else:
         st.warning("Mohon unggah kedua file dan pastikan file kode kapal ada di repository sebelum memproses.")
 
@@ -130,7 +139,8 @@ if st.session_state.processed_df is not None:
     
     # Terapkan styling berdasarkan pilihan user
     df_to_style = display_df.drop(columns=['ETA_Date_Only'])
-    styled_df = df_to_style.style.apply(style_by_date_selection, axis=None, selected_dates=selected_dates)
+    # Menggunakan fungsi styling yang sudah diperbaiki
+    styled_df = df_to_style.style.apply(apply_all_styles, axis=None, selected_dates=selected_dates)
     styled_df = styled_df.format({'ETA': lambda x: x.strftime('%Y-%m-%d %H:%M:%S')})
     
     st.dataframe(styled_df, use_container_width=True)
