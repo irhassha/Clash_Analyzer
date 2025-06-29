@@ -3,23 +3,31 @@
 @import url('https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined');
 
 
+/* --- ATURAN PERBAIKAN UNTUK IKON --- */
+/* Aturan ini memaksa semua elemen ikon untuk menggunakan font ikonnya */
+.material-symbols-outlined {
+    font-family: 'Material Symbols Outlined' !important;
+}
+
+
+/* --- Aturan Styling Umum Lainnya --- */
+
 /* Menerapkan font teks ke seluruh aplikasi */
 html, body, [class*="st-"], [class*="css-"] {
     font-family: 'Plus Jakarta Sans', sans-serif;
     color: #0a101d; /* Warna teks hitam keabuan */
 }
 
-/* Mengatur warna latar belakang utama aplikasi dengan menargetkan elemen body */
+/* Mengatur warna latar belakang utama aplikasi */
 body {
     background-color: #FFFFFF; /* Putih */
 }
 
-/* Selector yang lebih stabil untuk memastikan background konten utama juga putih */
 .main .block-container {
     background-color: #FFFFFF;
 }
 
-/* Mengatur warna latar belakang sidebar (selector ini sudah benar dan stabil) */
+/* Mengatur warna latar belakang sidebar */
 section[data-testid="stSidebar"] {
     background-color: #e3eefd; /* Latar Biru Muda */
 }
