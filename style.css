@@ -7,13 +7,17 @@ html, body, [class*="st-"], [class*="css-"] {
     color: #0a101d; /* Warna teks hitam keabuan */
 }
 
-/* Mengatur warna latar belakang utama aplikasi */
-/* Menargetkan elemen spesifik Streamlit untuk background */
-.st-emotion-cache-1jicfl2 {
+/* Mengatur warna latar belakang utama aplikasi dengan menargetkan elemen body */
+body {
     background-color: #FFFFFF; /* Putih */
 }
 
-/* Mengatur warna latar belakang sidebar */
+/* Selector yang lebih stabil untuk memastikan background konten utama juga putih */
+.main .block-container {
+    background-color: #FFFFFF;
+}
+
+/* Mengatur warna latar belakang sidebar (selector ini sudah benar dan stabil) */
 section[data-testid="stSidebar"] {
-    background-color: #e3eefd; /* Biru muda lembut */
+    background-color: #e3eefd; /* Latar Biru Muda */
 }
