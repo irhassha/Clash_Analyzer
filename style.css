@@ -1,12 +1,25 @@
-/* Mengimpor font dari Google Fonts */
+/* Mengimpor KEDUA font: satu untuk teks, satu untuk ikon */
 @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined');
 
-/* Menerapkan font ke seluruh aplikasi */
+
+/* Menerapkan font teks ke seluruh aplikasi */
 html, body, [class*="st-"], [class*="css-"] {
     font-family: 'Plus Jakarta Sans', sans-serif;
+    color: #0a101d; /* Warna teks hitam keabuan */
 }
 
-/* Mengatur warna latar belakang sidebar SAJA */
+/* Mengatur warna latar belakang utama aplikasi dengan menargetkan elemen body */
+body {
+    background-color: #FFFFFF; /* Putih */
+}
+
+/* Selector yang lebih stabil untuk memastikan background konten utama juga putih */
+.main .block-container {
+    background-color: #FFFFFF;
+}
+
+/* Mengatur warna latar belakang sidebar (selector ini sudah benar dan stabil) */
 section[data-testid="stSidebar"] {
-    background-color: #e3eefd;
+    background-color: #e3eefd; /* Latar Biru Muda */
 }
