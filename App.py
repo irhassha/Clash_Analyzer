@@ -1,103 +1,135 @@
 import streamlit as st
 import pandas as pd
-from bs4 import BeautifulSoup
-from selenium import webdriver
-from selenium.webdriver.chrome.service import Service as ChromeService
-from webdriver_manager.chrome import ChromeDriverManager
-from selenium.webdriver.common.by import By
-from selenium.webdriver.support.ui import WebDriverWait
-from selenium.webdriver.support import expected_conditions as EC
-from selenium.webdriver.chrome.options import Options
+import requests
+import io
 
-# URL Halaman Web (bukan lagi API)
-PAGE_URL = "https://www.npct1.co.id/vessel-schedule"
+# --- Konfigurasi Halaman & Judul ---
+st.set_page_config(page_title="App Pencocokan Vessel", layout="wide")
+st.title("🚢 Aplikasi Pencocokan Jadwal Kapal & Unit List")
+st.write("""
+Aplikasi ini mengotomatiskan proses pencocokan data dari tiga sumber:
+1.  **File Jadwal Kapal (Vessel Schedule):** Berisi jadwal kedatangan kapal.
+2.  **File Daftar Unit (Unit List):** Berisi detail muatan per kapal.
+3.  **File Kode Kapal (Vessel Codes):** File pemetaan dari nama kapal ke kode unik (diambil dari GitHub).
+""")
 
-@st.cache_data(ttl=600) # Cache data selama 10 menit
-def get_schedule_with_selenium():
-    """
-    Mengambil jadwal kapal dengan mengotomatiskan browser Chrome menggunakan Selenium
-    untuk melewati proteksi anti-scraping.
-    """
-    st.info("Menginisialisasi browser virtual untuk scraping...")
-    
-    # Mengatur opsi untuk menjalankan Chrome dalam mode 'headless' (tanpa UI)
-    chrome_options = Options()
-    chrome_options.add_argument("--headless")
-    chrome_options.add_argument("--no-sandbox")
-    chrome_options.add_argument("--disable-dev-shm-usage")
-    chrome_options.add_argument("--disable-gpu")
-    chrome_options.add_argument("window-size=1920x1080")
-
-    # Menginstal dan mengelola ChromeDriver secara otomatis
-    service = ChromeService(ChromeDriverManager().install())
-    
-    driver = None # Inisialisasi driver
+# --- Fungsi untuk mengambil data dari GitHub ---
+@st.cache_data
+def load_data_from_url(url):
+    """Mengambil dan memuat file CSV dari URL mentah GitHub ke dalam DataFrame."""
     try:
-        # Memulai driver browser Chrome
-        driver = webdriver.Chrome(service=service, options=chrome_options)
-        
-        # Membuka halaman web
-        st.write("Mengunjungi halaman jadwal kapal...")
-        driver.get(PAGE_URL)
-
-        # Menunggu hingga tabel dengan ID 'schedule' muncul dan terlihat
-        # Ini adalah langkah krusial, menunggu maksimal 30 detik
-        st.write("Menunggu data tabel dimuat oleh JavaScript...")
-        WebDriverWait(driver, 30).until(
-            EC.presence_of_element_located((By.ID, "schedule"))
-        )
-        st.write("Tabel ditemukan! Mengekstrak data...")
-
-        # Setelah tabel dimuat, ambil source HTML halaman
-        html_source = driver.page_source
-        
-        # Parsing HTML menggunakan BeautifulSoup
-        soup = BeautifulSoup(html_source, 'html.parser')
-        table = soup.find('table', id='schedule')
-
-        if not table:
-            st.error("Gagal menemukan tabel bahkan setelah menunggu.")
-            return pd.DataFrame()
-
-        # Mengekstrak header dan baris data (sama seperti metode awal)
-        headers = [th.text.strip() for th in table.find('thead').find_all('th')]
-        rows = []
-        for row in table.find('tbody').find_all('tr'):
-            cols = [td.text.strip() for td in row.find_all('td')]
-            rows.append(cols)
-
-        return pd.DataFrame(rows, columns=headers)
-
+        # Memastikan URL adalah URL raw GitHub
+        if "github.com" in url and "blob" in url:
+            url = url.replace("blob/", "raw/")
+            
+        response = requests.get(url)
+        response.raise_for_status()  # Cek jika ada error HTTP
+        return pd.read_csv(io.StringIO(response.text))
+    except requests.exceptions.RequestException as e:
+        st.error(f"Error saat mengambil data dari URL: {e}")
     except Exception as e:
-        st.error(f"Terjadi kesalahan saat proses scraping dengan Selenium: {e}")
-        return pd.DataFrame()
-    finally:
-        # Pastikan browser ditutup untuk membebaskan sumber daya
-        if driver:
-            driver.quit()
-        st.info("Proses scraping selesai. Browser virtual telah ditutup.")
+        st.error(f"Gagal memproses file dari URL. Pastikan file adalah CSV yang valid. Error: {e}")
+    return None
+
+# --- Sidebar untuk Input dari Pengguna ---
+st.sidebar.header("⚙️ 1. Masukkan Data")
+
+# Input URL untuk file Vessel Codes
+github_url = st.sidebar.text_input(
+    "URL file 'Vessel Codes' di GitHub (raw)",
+    "https://raw.githubusercontent.com/USERNAME/REPOSITORY/main/vessel_codes.csv" # Ganti dengan URL Anda
+)
+
+# File Uploader
+schedule_file = st.sidebar.file_uploader(
+    "Unggah File Jadwal Kapal (Excel/CSV)", 
+    type=['xlsx', 'csv']
+)
+unit_list_file = st.sidebar.file_uploader(
+    "Unggah File Daftar Unit (Excel/CSV)", 
+    type=['xlsx', 'csv']
+)
+
+# Tombol untuk memulai proses
+process_button = st.sidebar.button("🚀 Proses Data", type="primary")
 
 
-# --- Konfigurasi Tampilan Aplikasi Streamlit ---
+# --- Area Proses Utama ---
+if process_button:
+    # Validasi semua input sudah ada
+    if schedule_file and unit_list_file and github_url:
+        st.header("⏳ Sedang memproses...")
 
-st.set_page_config(page_title="Jadwal Kapal NPCT1", layout="wide")
+        # 1. Memuat semua data ke DataFrame
+        try:
+            # Baca file yang diunggah
+            df_schedule = pd.read_excel(schedule_file) if schedule_file.name.endswith('.xlsx') else pd.read_csv(schedule_file)
+            df_unit_list = pd.read_excel(unit_list_file) if unit_list_file.name.endswith('.xlsx') else pd.read_csv(unit_list_file)
+            
+            # Ambil data kode kapal dari GitHub
+            df_vessel_codes = load_data_from_url(github_url)
+            
+            if df_vessel_codes is None:
+                st.stop() # Hentikan eksekusi jika gagal mengambil data dari GitHub
 
-st.title("🚢 Scraper Jadwal Kapal NPCT1 (Metode Selenium)")
-st.markdown("Menggunakan otomasi browser untuk mengambil data dari situs yang dilindungi.")
+            with st.expander("🔬 Lihat Data Awal yang Dimuat"):
+                st.subheader("Data Jadwal Kapal")
+                st.dataframe(df_schedule.head())
+                st.subheader("Data Daftar Unit")
+                st.dataframe(df_unit_list.head())
+                st.subheader("Data Kode Kapal (dari GitHub)")
+                st.dataframe(df_vessel_codes.head())
 
-if st.button("🔄 Ambil Data Terbaru"):
-    st.cache_data.clear()
-    st.toast("Memulai proses scraping baru...")
+            # 2. Proses Penggabungan Data (sesuai logika yang sudah diperbaiki)
+            st.header("🔄 Proses Penggabungan")
 
-# Memanggil fungsi untuk mendapatkan data
-schedule_df = get_schedule_with_selenium()
+            # Langkah A: Gabungkan Jadwal Kapal dengan Kode Kapal untuk mendapatkan 'CODE'
+            # Kita tidak menggunakan 'CODE' ini untuk join akhir, tapi bisa ditampilkan untuk referensi
+            df_schedule_with_code = pd.merge(
+                df_schedule,
+                df_vessel_codes,
+                left_on="VESSEL",
+                right_on="Description",
+                how="left"
+            ).rename(columns={"Value": "CODE"})
 
-# Menampilkan data jika berhasil di-scrape
-if schedule_df is not None and not schedule_df.empty:
-    st.success("Data jadwal kapal berhasil dimuat!")
-    st.dataframe(schedule_df, use_container_width=True, hide_index=True)
-else:
-    st.warning("Tidak ada data untuk ditampilkan atau terjadi kesalahan selama proses.")
+            # Langkah B: Gabungkan hasil dengan Daftar Unit menggunakan 'LINE' dan 'VOY_OUT'
+            # Ini adalah logika kunci yang kita perbaiki sebelumnya
+            final_df = pd.merge(
+                df_schedule_with_code,
+                df_unit_list,
+                left_on=['LINE', 'VOY_OUT'],
+                right_on=['Carrier Out', 'Voyage Out'],
+                how='inner' # 'inner' join hanya akan mengambil baris yang cocok di kedua file
+            )
 
-st.markdown("---")
-st.write("Dibuat dengan Streamlit, Selenium, dan Python.")
+            # 3. Menampilkan Hasil
+            st.header("✅ Hasil Akhir")
+
+            if not final_df.empty:
+                st.success(f"Berhasil menemukan {len(final_df)} baris data yang cocok!")
+
+                # Menampilkan Area (EXE) unik
+                st.subheader("Area (EXE) Unik yang Ditemukan:")
+                unique_areas = final_df['Area (EXE)'].unique()
+                st.write(list(unique_areas))
+
+                # Menampilkan DataFrame hasil akhir
+                st.subheader("Tabel Data Gabungan:")
+                st.dataframe(final_df)
+
+                # Tombol Download
+                csv = final_df.to_csv(index=False).encode('utf-8')
+                st.download_button(
+                   label="📥 Unduh Hasil sebagai CSV",
+                   data=csv,
+                   file_name='hasil_gabungan.csv',
+                   mime='text/csv',
+                )
+            else:
+                st.warning("Tidak ditemukan data yang cocok antara file Jadwal Kapal dan Daftar Unit berdasarkan 'LINE' dan 'VOY_OUT'.")
+
+        except Exception as e:
+            st.error(f"Terjadi kesalahan saat memproses file: {e}")
+    else:
+        st.warning("Mohon unggah kedua file dan pastikan URL GitHub sudah terisi untuk memulai proses.")
