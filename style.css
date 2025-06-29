@@ -9,12 +9,12 @@ html, body, [class*="st-"], [class*="css-"] {
 
 /* Mengatur warna latar belakang utama aplikasi dengan menargetkan elemen body */
 body {
-    background-color: #FFFFFF; /* Putih */
+    background-color: #83B4FF; /* Putih */
 }
 
 /* Selector yang lebih stabil untuk memastikan background konten utama juga putih */
 .main .block-container {
-    background-color: #FFFFFF;
+    background-color: #83B4FF;
 }
 
 /* Mengatur warna latar belakang sidebar (selector ini sudah benar dan stabil) */
