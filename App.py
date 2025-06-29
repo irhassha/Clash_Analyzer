@@ -133,7 +133,7 @@ if st.session_state.processed_df is not None:
     
     hide_zero_jscode = JsCode("""
         function(params) {
-            if (params.value == 0) {
+            if (params.value == 0 || params.value === null) {
                 return '';
             }
             return params.value;
@@ -166,15 +166,14 @@ if st.session_state.processed_df is not None:
     
     gb = GridOptionsBuilder.from_dataframe(df_for_grid)
     
-    # --- PERBAIKAN DI SINI ---
+    # --- PERBAIKAN FINAL DI SINI ---
     # 1. Konfigurasi default untuk SEMUA kolom
-    default_col_def = {
-        "suppressMenu": True, 
-        "resizable": True,
-        "sortable": True,
-        "editable": False,
-    }
-    gb.configure_default_column(**default_col_def)
+    gb.configure_default_column(
+        resizable=True, 
+        sortable=True, 
+        editable=False, 
+        suppressMenu=True # Hapus ikon menu/filter untuk semua kolom
+    )
 
     # 2. Konfigurasi spesifik untuk kolom yang di-freeze (pinned)
     pinned_cols = ['VESSEL', 'CODE', 'VOY_OUT', 'ETA', 'Total Box', 'Total cluster']
