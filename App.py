@@ -185,6 +185,15 @@ if st.session_state.processed_df is not None:
     gridOptions = gb.build()
 
     custom_css = {
+        # HILANGKAN ICON FILTER & SORT
+        ".ag-theme-streamlit .ag-header-cell-menu-button": {
+            "display": "none !important"
+        },
+        # RATAKAN HEADER TEXT KE TENGAH
+        ".ag-theme-streamlit .ag-header-cell-label": {
+            "justify-content": "center !important"
+        },
+        # GARIS-GARIS TABEL
         ".ag-theme-streamlit .ag-cell": {
             "border-right": "2px solid #DCDCDC !important",
             "border-bottom": "2px solid #DCDCDC !important"
