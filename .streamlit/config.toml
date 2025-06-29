@@ -7,7 +7,7 @@ base = "light"
 backgroundColor = "#F8F0E5"
 
 # Mengubah warna sidebar menjadi oranye
-secondaryBackgroundColor = "#102C57"
+secondaryBackgroundColor = "#DAC0A3"
 
 # Mengubah warna teks agar tetap terbaca
 textColor = "#0a101d"
