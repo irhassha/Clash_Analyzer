@@ -32,6 +32,12 @@ schedule_file = st.sidebar.file_uploader("1. Upload Vessel Schedule", type=['xls
 unit_list_file = st.sidebar.file_uploader("2. Upload Unit List", type=['xlsx', 'csv'])
 process_button = st.sidebar.button("🚀 Process Data", type="primary")
 
+# --- FITUR BARU: Pemilih Warna di Sidebar ---
+st.sidebar.header("🎨 Display Options")
+color1 = st.sidebar.color_picker('Zebra Color 1 (Odd)', '#FFFFFF')
+color2 = st.sidebar.color_picker('Zebra Color 2 (Even)', '#F0F2F6')
+
+
 if 'processed_df' not in st.session_state:
     st.session_state.processed_df = None
 
@@ -111,8 +117,8 @@ if st.session_state.processed_df is not None:
     
     # 1. Buat Peta Warna untuk Zebra Pattern per Tanggal
     unique_dates = df_for_grid['ETA_Date'].unique()
-    # PERUBAHAN WARNA ZEBRA PATTERN
-    colors = ['#FFFFFF', '#F0F2F6'] # Putih dan Abu-abu yang lebih terlihat
+    # Gunakan warna dari color_picker
+    colors = [color1, color2] 
     date_color_map = {date: colors[i % 2] for i, date in enumerate(unique_dates)}
 
     # 2. Tentukan sel mana saja yang bentrok
@@ -160,7 +166,7 @@ if st.session_state.processed_df is not None:
         "sortable": True,
         "resizable": True,
         "editable": False,
-        "minWidth": 50, # Lebar minimum kolom diperkecil
+        "minWidth": 50,
     }
     
     # 2. Bangun definisi untuk setiap kolom secara manual
@@ -169,9 +175,9 @@ if st.session_state.processed_df is not None:
     # Kolom yang di-freeze
     pinned_cols = ['VESSEL', 'CODE', 'VOY_OUT', 'ETA', 'Total Box', 'Total cluster']
     for col in pinned_cols:
-        width = 115 if col == 'VESSEL' else 90 # VESSEL lebih lebar
+        width = 115 if col == 'VESSEL' else 85 # Lebar kolom diperkecil
         if col == 'ETA':
-            width = 130 # ETA juga lebih lebar
+            width = 125 
         
         col_def = {
             "field": col,
@@ -188,7 +194,7 @@ if st.session_state.processed_df is not None:
         column_defs.append({
             "field": col,
             "headerName": col,
-            "width": 75, # PERUBAHAN LEBAR KOLOM CLUSTER
+            "width": 65, # PERUBAHAN LEBAR KOLOM CLUSTER
             "cellRenderer": hide_zero_jscode,
             "cellStyle": clash_cell_style_jscode,
         })
@@ -200,7 +206,7 @@ if st.session_state.processed_df is not None:
     gridOptions = {
         "defaultColDef": default_col_def,
         "columnDefs": column_defs,
-        "getRowStyle": zebra_row_style_jscode, # Terapkan Zebra Pattern di sini
+        "getRowStyle": zebra_row_style_jscode,
     }
 
     # Tampilkan tabel
