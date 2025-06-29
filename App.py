@@ -13,7 +13,7 @@ st.info(
 
 # --- Fungsi untuk memuat file kode kapal dari repository ---
 @st.cache_data # Cache data agar tidak perlu dibaca ulang setiap ada interaksi
-def load_vessel_codes_from_repo(possible_names=['vessel_codes.xlsx', 'vessel_codes.xls', 'vessel_codes.csv']):
+def load_vessel_codes_from_repo(possible_names=['vessel codes.xlsx', 'vessel codes.xls', 'vessel codes.csv']):
     """Mencari dan memuat file kode kapal dari daftar nama file yang mungkin."""
     for filename in possible_names:
         if os.path.exists(filename):
