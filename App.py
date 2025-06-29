@@ -24,15 +24,18 @@ def load_vessel_codes_from_repo(possible_names=['vessel codes.xlsx', 'vessel_cod
 
 def apply_all_styles(df, selected_dates):
     styler = pd.DataFrame('', index=df.index, columns=df.columns)
-    df_copy = df.copy()
+    # PERBAIKAN: Buat salinan dan langsung reset index di awal
+    df_copy = df.copy().reset_index(drop=True)
+    styler.index = df_copy.index
+
     df_copy['ETA'] = pd.to_datetime(df_copy['ETA'])
     df_copy['ETA_Date'] = df_copy['ETA'].dt.date
-    is_faded_row = pd.Series(False, index=df.index)
+    is_faded_row = pd.Series(False, index=df_copy.index)
     if selected_dates and len(selected_dates) < len(df_copy['ETA_Date'].unique()):
         is_faded_row[~df_copy['ETA_Date'].isin(selected_dates)] = True
-    clash_mask = pd.DataFrame(False, index=df.index, columns=df.columns)
+    clash_mask = pd.DataFrame(False, index=df_copy.index, columns=df.columns)
     non_cluster_cols = ['VESSEL', 'CODE', 'VOY_OUT', 'ETA', 'Total Box', 'Total cluster']
-    cluster_cols = [col for col in df.columns if col not in non_cluster_cols]
+    cluster_cols = [col for col in df_copy.columns if col not in non_cluster_cols]
     for col in cluster_cols:
         numeric_col = pd.to_numeric(df_copy[col], errors='coerce').fillna(0)
         subset_df = df_copy[numeric_col > 0]
@@ -40,9 +43,9 @@ def apply_all_styles(df, selected_dates):
         for date in clash_dates:
             clashing_indices = subset_df[subset_df['ETA_Date'] == date].index
             clash_mask.loc[clashing_indices, col] = True
-    for r_idx in df.index:
-        for c_name in df.columns:
-            is_faded = is_faded_row.get(r_idx, False)
+    for r_idx in df_copy.index:
+        for c_name in df_copy.columns:
+            is_faded = is_faded_row[r_idx]
             is_clash = clash_mask.loc[r_idx, c_name] if c_name in clash_mask.columns else False
             if is_clash and is_faded:
                 styler.loc[r_idx, c_name] = 'background-color: #FFE8D6; color: #BDBDBD;'
@@ -51,12 +54,6 @@ def apply_all_styles(df, selected_dates):
             elif not is_clash and is_faded:
                 styler.loc[r_idx, c_name] = 'color: #E0E0E0;'
     return styler
-
-def general_formatter(val):
-    if isinstance(val, (int, float)):
-        if val == 0: return ''
-        return f'{val:.0f}'
-    return val
 
 # --- Sidebar & Proses Utama ---
 st.sidebar.header("⚙️ Your File Uploads")
@@ -136,21 +133,21 @@ if st.session_state.processed_df is not None:
     
     # --- PENERAPAN FITUR BARU (FREEZE & HIDE ZEROS) ---
     header_style = {'selector': 'th', 'props': [('font-weight', 'bold')]}
-    sticky_cols = ['VESSEL', 'CODE', 'VOY_OUT', 'ETA']
     numeric_cols = [col for col in df_to_style.columns if df_to_style[col].dtype in ['int64', 'float64']]
     formatter = {col: lambda x: '' if x == 0 else f'{x:.0f}' for col in numeric_cols}
     formatter['ETA'] = '{:%Y-%m-%d %H:%M:%S}'
 
-    # Sembunyikan index default pandas agar tidak berkonflik dengan freeze pane kustom
+    # --- PERUBAHAN DI SINI ---
+    # Buat Styler object dan langsung sembunyikan indexnya
     styler = df_to_style.style.hide(axis="index")
 
-    # Terapkan semua style dan format
+    # Terapkan semua style dan format ke Styler yang sudah ada
     styled_df = (
         styler
         .apply(apply_all_styles, axis=None, selected_dates=selected_dates)
         .format(formatter)
         .set_table_styles([header_style])
-        # .set_sticky(axis="columns", labels=sticky_cols) # Kita coba aktifkan kembali
+        # .set_sticky(axis="columns", labels=['VESSEL', 'CODE', 'VOY_OUT', 'ETA']) # Tetap dinonaktifkan sementara
     )
     
     st.dataframe(styled_df, use_container_width=True)
