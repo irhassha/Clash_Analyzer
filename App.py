@@ -1,6 +1,7 @@
 import streamlit as st
 import pandas as pd
 import os
+from datetime import datetime, timedelta
 
 # --- Konfigurasi Halaman & Judul ---
 st.set_page_config(page_title="App Pencocokan Vessel", layout="wide")
@@ -48,9 +49,7 @@ if process_button:
                 df_schedule = pd.read_excel(schedule_file) if schedule_file.name.lower().endswith(('.xls', '.xlsx')) else pd.read_csv(schedule_file)
                 df_unit_list = pd.read_excel(unit_list_file) if unit_list_file.name.lower().endswith(('.xls', '.xlsx')) else pd.read_csv(unit_list_file)
 
-                # --- PERUBAHAN 1: Simpan daftar kapal asli dari jadwal ---
                 original_vessels_list = df_schedule['VESSEL'].unique().tolist()
-
                 df_schedule['ETA'] = pd.to_datetime(df_schedule['ETA'], errors='coerce')
 
                 # 2. Proses Penggabungan Data
@@ -67,13 +66,10 @@ if process_button:
                     how='inner'
                 )
 
-                # 3. Menerapkan Filter
+                # 3. Menerapkan Filter Awal
                 st.header("✅ Hasil Akhir (Format Pivot)")
                 if not merged_df.empty:
-                    
-                    # --- PERUBAHAN 2: Filter final untuk memastikan hanya kapal dari jadwal awal ---
                     merged_df = merged_df[merged_df['VESSEL'].isin(original_vessels_list)]
-
                     excluded_areas = [str(i) for i in range(801, 809)] 
                     merged_df['Area (EXE)'] = merged_df['Area (EXE)'].astype(str)
                     filtered_data = merged_df[~merged_df['Area (EXE)'].isin(excluded_areas)]
@@ -84,17 +80,30 @@ if process_button:
 
                     # 4. Transformasi Data ke Format Pivot
                     grouping_cols = ['VESSEL', 'CODE', 'VOY_OUT', 'ETA']
-                    
                     pivot_df = filtered_data.pivot_table(
-                        index=grouping_cols,
-                        columns='Area (EXE)',
-                        aggfunc='size',
-                        fill_value=0
+                        index=grouping_cols, columns='Area (EXE)',
+                        aggfunc='size', fill_value=0
                     )
-                    
                     pivot_df['TOTAL'] = pivot_df.sum(axis=1)
                     pivot_df = pivot_df.reset_index()
+                    
+                    # --- PERUBAHAN 1: Menerapkan Filter Gabungan ETA dan TOTAL ---
+                    # Menghitung batas waktu (2 hari yang lalu dari sekarang)
+                    two_days_ago = pd.Timestamp.now() - timedelta(days=2)
+                    
+                    # Kondisi untuk baris yang akan DIHAPUS/DISEMBUNYIKAN
+                    # ETA lebih lama dari 2 hari yang lalu DAN Total kurang dari 50
+                    condition_to_hide = (pivot_df['ETA'] < two_days_ago) & (pivot_df['TOTAL'] < 50)
+                    
+                    # Terapkan filter dengan mengambil baris yang TIDAK memenuhi kondisi di atas
+                    pivot_df = pivot_df[~condition_to_hide]
+                    
+                    # Cek lagi jika setelah filter data menjadi kosong
+                    if pivot_df.empty:
+                         st.warning("Setelah filter ETA dan Total, tidak ada data yang tersisa untuk ditampilkan.")
+                         st.stop()
 
+                    # 5. Menata dan Menampilkan Hasil
                     cols_awal = ['VESSEL', 'CODE', 'VOY_OUT', 'ETA', 'TOTAL']
                     cols_clusters = [col for col in pivot_df.columns if col not in cols_awal]
                     final_display_cols = cols_awal + sorted(cols_clusters)
@@ -102,10 +111,9 @@ if process_button:
                     
                     pivot_df = pivot_df.sort_values(by='ETA', ascending=True)
 
-                    st.success(f"Berhasil memproses dan mengelompokkan data untuk {len(pivot_df)} kapal unik (sesuai file jadwal).")
+                    st.success(f"Berhasil memproses dan mengelompokkan data untuk {len(pivot_df)} kapal unik (sesuai semua filter).")
                     
                     pivot_df['ETA'] = pivot_df['ETA'].dt.strftime('%Y-%m-%d %H:%M:%S')
-                    
                     st.dataframe(pivot_df)
                     
                     csv_export = pivot_df.to_csv(index=False).encode('utf-8')
