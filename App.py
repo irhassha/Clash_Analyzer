@@ -4,17 +4,17 @@ import os
 from datetime import datetime, timedelta
 import json
 
-# Import pustaka baru
+# Import new library
 from st_aggrid import AgGrid, GridOptionsBuilder, JsCode
 
-# --- Konfigurasi Halaman & Judul ---
+# --- Page & Title Configuration ---
 st.set_page_config(page_title="Clash Analyzer", layout="wide")
-st.title("🚢 Vessel Clash Analyzer")
+st.title("🚨 Yard Clash Monitoring")
 
-# --- Fungsi-fungsi Inti ---
+# --- Core Functions ---
 @st.cache_data
 def load_vessel_codes_from_repo(possible_names=['vessel codes.xlsx', 'vessel_codes.xls', 'vessel_codes.csv']):
-    """Mencari dan memuat file kode kapal."""
+    """Searches for and loads the vessel code mapping file."""
     for filename in possible_names:
         if os.path.exists(filename):
             try:
@@ -26,7 +26,7 @@ def load_vessel_codes_from_repo(possible_names=['vessel codes.xlsx', 'vessel_cod
                 st.error(f"Failed to read file '{filename}': {e}"); return None
     st.error(f"Vessel code file not found."); return None
 
-# --- Sidebar & Proses Utama ---
+# --- Sidebar & Main Process ---
 st.sidebar.header("⚙️ Your File Uploads")
 schedule_file = st.sidebar.file_uploader("1. Upload Vessel Schedule", type=['xlsx', 'csv'])
 unit_list_file = st.sidebar.file_uploader("2. Upload Unit List", type=['xlsx', 'csv'])
@@ -98,20 +98,20 @@ if process_button:
     else:
         st.warning("Please upload both files.")
 
-# --- Area Tampilan ---
+# --- Display Area ---
 if st.session_state.processed_df is not None:
     display_df = st.session_state.processed_df
     
     st.header("✅ Analysis Result")
 
-    # --- Persiapan untuk Styling AG Grid ---
+    # --- Preparation for AG Grid Styling ---
     
-    # Buat salinan untuk dimanipulasi
+    # Create a copy for manipulation
     df_for_grid = display_df.copy()
-    # Tambahkan kolom tanggal saja untuk perbandingan
+    # Add a date-only column for comparison
     df_for_grid['ETA_Date'] = pd.to_datetime(df_for_grid['ETA']).dt.strftime('%Y-%m-%d')
     
-    # 1. Tentukan sel mana saja yang bentrok
+    # 1. Determine which cells are clashing
     clash_map = {}
     cluster_cols = [col for col in df_for_grid.columns if col not in ['VESSEL', 'CODE', 'VOY_OUT', 'ETA', 'Total Box', 'Total cluster', 'ETA_Date']]
     for date, group in df_for_grid.groupby('ETA_Date'):
@@ -122,21 +122,21 @@ if st.session_state.processed_df is not None:
         if clash_areas_for_date:
             clash_map[date] = clash_areas_for_date
             
-    # Widget pemilihan tanggal
+    # Date selection widget
     unique_dates_in_data = sorted(df_for_grid['ETA_Date'].unique())
     selected_dates_str = st.multiselect(
         "**Focus on Date(s):**",
         options=unique_dates_in_data
     )
     
-    # Tentukan baris yang akan "fade"
+    # Determine which rows to "fade"
     faded_dates_str = []
     if selected_dates_str:
         faded_dates_str = [d for d in unique_dates_in_data if d not in selected_dates_str]
 
-    # --- Penggunaan AG-GRID ---
+    # --- AG-GRID USAGE ---
     
-    # Javascript untuk menyembunyikan 0
+    # Javascript to hide zeros
     hide_zero_jscode = JsCode("""
         function(params) {
             if (params.value == 0) {
@@ -146,8 +146,8 @@ if st.session_state.processed_df is not None:
         }
     """)
     
-    # Javascript untuk styling sel
-    # Ini akan disuntikkan dengan data dari Python
+    # Javascript for cell styling
+    # This will be injected with data from Python
     cell_style_jscode = JsCode(f"""
         function(params) {{
             const clashMap = {json.dumps(clash_map)};
@@ -159,40 +159,41 @@ if st.session_state.processed_df is not None:
             const isClash = clashMap[date] ? clashMap[date].includes(colId) : false;
             
             if (isClash && isFaded) {{
-                return {{'backgroundColor': '#FFE8D6', 'color': '#BDBDBD'}}; // Oranye Pudar
+                return {{'backgroundColor': '#FFE8D6', 'color': '#BDBDBD'}}; // Faded Orange
             }}
             if (isClash && !isFaded) {{
-                return {{'backgroundColor': '#FFAA33', 'color': 'black'}}; // Oranye Terang
+                return {{'backgroundColor': '#FFAA33', 'color': 'black'}}; // Bright Orange
             }}
             if (isFaded) {{
-                return {{'color': '#E0E0E0'}}; // Teks Sangat Pudar
+                return {{'color': '#E0E0E0'}}; // Faded Text
             }}
             
-            return null; // Style default
+            return null; // Default style
         }}
     """)
     
-    # 1. Buat GridOptionsBuilder
+    # 1. Create GridOptionsBuilder
     gb = GridOptionsBuilder.from_dataframe(df_for_grid)
     
-    # 2. Konfigurasi pin (freeze) untuk kolom-kolom utama
+    # 2. Configure pin (freeze) for main columns
     pinned_cols = ['VESSEL', 'CODE', 'VOY_OUT', 'ETA', 'Total Box', 'Total cluster']
     for col in pinned_cols:
         gb.configure_column(col, pinned="left", width=120)
 
-    # 3. Konfigurasi kolom-kolom cluster dengan style dan format
+    # 3. Configure cluster columns with style and format
     for col in cluster_cols:
         gb.configure_column(col, cellStyle=cell_style_jscode, cellRenderer=hide_zero_jscode, width=90)
     
-    # 4. Konfigurasi kolom lain dan default
+    # 4. Configure other and default columns
     gb.configure_column("Total Box", cellRenderer=hide_zero_jscode)
     gb.configure_column("Total cluster", cellRenderer=hide_zero_jscode)
-    gb.configure_default_column(resizable=True, filterable=True, sortable=True, editable=False)
+    # --- CHANGE IS HERE: filterable is set to False ---
+    gb.configure_default_column(resizable=True, filterable=False, sortable=True, editable=False)
 
-    # 5. Bangun GridOptions
+    # 5. Build GridOptions
     gridOptions = gb.build()
 
-    # 6. Tampilkan tabel menggunakan AgGrid
+    # 6. Display table using AgGrid
     st.markdown("---")
     AgGrid(
         df_for_grid,
@@ -201,7 +202,7 @@ if st.session_state.processed_df is not None:
         width='100%',
         theme='streamlit',
         allow_unsafe_jscode=True,
-        # Sembunyikan kolom ETA_Date dari tampilan
+        # Hide the helper ETA_Date column from view
         column_defs=[{"field": "ETA_Date", "hide": True}]
     )
     
