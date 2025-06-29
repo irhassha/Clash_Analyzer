@@ -4,17 +4,17 @@ import os
 from datetime import datetime, timedelta
 import json
 
-# Import new library
+# Import pustaka baru
 from st_aggrid import AgGrid, GridOptionsBuilder, JsCode
 
-# --- Page & Title Configuration ---
+# --- Konfigurasi Halaman & Judul ---
 st.set_page_config(page_title="Clash Analyzer", layout="wide")
 st.title("🚨 Yard Clash Monitoring")
 
-# --- Core Functions ---
+# --- Fungsi-fungsi Inti ---
 @st.cache_data
 def load_vessel_codes_from_repo(possible_names=['vessel codes.xlsx', 'vessel_codes.xls', 'vessel_codes.csv']):
-    """Searches for and loads the vessel code mapping file."""
+    """Mencari dan memuat file kode kapal."""
     for filename in possible_names:
         if os.path.exists(filename):
             try:
@@ -26,7 +26,7 @@ def load_vessel_codes_from_repo(possible_names=['vessel codes.xlsx', 'vessel_cod
                 st.error(f"Failed to read file '{filename}': {e}"); return None
     st.error(f"Vessel code file not found."); return None
 
-# --- Sidebar & Main Process ---
+# --- Sidebar & Proses Utama ---
 st.sidebar.header("⚙️ Your File Uploads")
 schedule_file = st.sidebar.file_uploader("1. Upload Vessel Schedule", type=['xlsx', 'csv'])
 unit_list_file = st.sidebar.file_uploader("2. Upload Unit List", type=['xlsx', 'csv'])
@@ -84,8 +84,8 @@ if process_button:
                 final_display_cols = cols_awal + sorted(final_cluster_cols)
                 pivot_df = pivot_df[final_display_cols]
                 
-                # Format ETA for display right after creation
-                pivot_df['ETA'] = pd.to_datetime(pivot_df['ETA']).dt.strftime('%Y-%m-%d %H:%M:%S')
+                # --- PERBAIKAN FORMAT ETA: Hapus detik ---
+                pivot_df['ETA'] = pd.to_datetime(pivot_df['ETA']).dt.strftime('%Y-%m-%d %H:%M')
                 
                 pivot_df = pivot_df.sort_values(by='ETA', ascending=True).reset_index(drop=True)
                 
@@ -98,17 +98,18 @@ if process_button:
     else:
         st.warning("Please upload both files.")
 
-# --- Display Area ---
+# --- Area Tampilan ---
 if st.session_state.processed_df is not None:
     display_df = st.session_state.processed_df
     
     st.header("✅ Analysis Result")
 
-    # --- Preparation for AG Grid Styling ---
+    # --- Persiapan untuk Styling AG Grid ---
     
     df_for_grid = display_df.copy()
     df_for_grid['ETA_Date'] = pd.to_datetime(df_for_grid['ETA']).dt.strftime('%Y-%m-%d')
     
+    # 1. Tentukan sel mana saja yang bentrok
     clash_map = {}
     cluster_cols = [col for col in df_for_grid.columns if col not in ['VESSEL', 'CODE', 'VOY_OUT', 'ETA', 'Total Box', 'Total cluster', 'ETA_Date']]
     for date, group in df_for_grid.groupby('ETA_Date'):
@@ -119,18 +120,9 @@ if st.session_state.processed_df is not None:
         if clash_areas_for_date:
             clash_map[date] = clash_areas_for_date
             
-    unique_dates_in_data = sorted(df_for_grid['ETA_Date'].unique())
-    selected_dates_str = st.multiselect(
-        "**Focus on Date(s):**",
-        options=unique_dates_in_data
-    )
+    # --- PENGGUNAAN AG-GRID DENGAN SEMUA FITUR ---
     
-    faded_dates_str = []
-    if selected_dates_str:
-        faded_dates_str = [d for d in unique_dates_in_data if d not in selected_dates_str]
-
-    # --- AG-GRID USAGE ---
-    
+    # Javascript untuk menyembunyikan 0
     hide_zero_jscode = JsCode("""
         function(params) {
             if (params.value == 0 || params.value === null) {
@@ -140,34 +132,26 @@ if st.session_state.processed_df is not None:
         }
     """)
     
-    cell_style_jscode = JsCode(f"""
+    # Javascript untuk styling sel bentrok (highlight oranye)
+    clash_cell_style_jscode = JsCode(f"""
         function(params) {{
             const clashMap = {json.dumps(clash_map)};
-            const fadedDates = {json.dumps(faded_dates_str)};
             const date = params.data.ETA_Date;
             const colId = params.colDef.field;
             
-            const isFaded = fadedDates.includes(date);
             const isClash = clashMap[date] ? clashMap[date].includes(colId) : false;
             
-            if (isClash && isFaded) {{
-                return {{'backgroundColor': '#FFE8D6', 'color': '#BDBDBD'}}; // Faded Orange
+            if (isClash) {{
+                return {{'backgroundColor': '#FFAA33', 'color': 'black'}}; // Oranye Terang
             }}
-            if (isClash && !isFaded) {{
-                return {{'backgroundColor': '#FFAA33', 'color': 'black'}}; // Bright Orange
-            }}
-            if (isFaded) {{
-                return {{'color': '#E0E0E0'}}; // Faded Text
-            }}
-            
-            return null; // Default style
+            return null;
         }}
     """)
     
+    # 1. Buat GridOptionsBuilder
     gb = GridOptionsBuilder.from_dataframe(df_for_grid)
     
-    # --- PERBAIKAN FINAL DI SINI ---
-    # 1. Konfigurasi default untuk SEMUA kolom
+    # 2. Konfigurasi default untuk SEMUA kolom
     gb.configure_default_column(
         resizable=True, 
         sortable=True, 
@@ -175,34 +159,34 @@ if st.session_state.processed_df is not None:
         suppressMenu=True # Hapus ikon menu/filter untuk semua kolom
     )
 
-    # 2. Konfigurasi spesifik untuk kolom yang di-freeze (pinned)
+    # 3. Konfigurasi pin (freeze) untuk kolom-kolom utama
     pinned_cols = ['VESSEL', 'CODE', 'VOY_OUT', 'ETA', 'Total Box', 'Total cluster']
     for col in pinned_cols:
         gb.configure_column(col, pinned="left", width=120)
 
-    # 3. Konfigurasi spesifik untuk kolom cluster
+    # 4. Konfigurasi spesifik untuk kolom cluster
     for col in cluster_cols:
-        gb.configure_column(col, cellStyle=cell_style_jscode, cellRenderer=hide_zero_jscode, width=90)
+        gb.configure_column(col, cellStyle=clash_cell_style_jscode, cellRenderer=hide_zero_jscode, width=90)
     
-    # 4. Konfigurasi spesifik untuk kolom Total (hanya renderer)
+    # 5. Konfigurasi spesifik untuk kolom Total (hanya renderer)
     gb.configure_column("Total Box", cellRenderer=hide_zero_jscode)
     gb.configure_column("Total cluster", cellRenderer=hide_zero_jscode)
+    
+    # 6. Aturan untuk Zebra Pattern
+    # Kita akan memberi style pada baris berdasarkan nomor barisnya (genap/ganjil)
+    gb.configure_grid_options(getRowStyle=JsCode(
+        """
+        function(params) {
+            if (params.node.rowIndex % 2 === 0) {
+                return { 'background-color': '#F5F5F5' };
+            }
+        }
+        """
+    ))
 
     gridOptions = gb.build()
 
-    # Define Custom CSS for thicker grid lines
-    custom_css = {
-        ".ag-theme-streamlit .ag-cell": {
-            "border-right": "2px solid #D6D6D6 !important",
-            "border-bottom": "2px solid #D6D6D6 !important"
-        },
-        ".ag-theme-streamlit .ag-header-cell": {
-             "border-bottom": "2px solid #AAAAAA !important",
-             "border-right": "2px solid #D6D6D6 !important"
-        }
-    }
-
-    # Display table using AgGrid
+    # Tampilkan tabel
     st.markdown("---")
     AgGrid(
         df_for_grid,
@@ -210,8 +194,8 @@ if st.session_state.processed_df is not None:
         height=600,
         width='100%',
         theme='streamlit',
-        custom_css=custom_css,
         allow_unsafe_jscode=True,
+        # Sembunyikan kolom ETA_Date dari tampilan
         column_defs=[{"field": "ETA_Date", "hide": True}]
     )
     
