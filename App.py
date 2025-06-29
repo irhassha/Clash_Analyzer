@@ -22,22 +22,41 @@ def load_vessel_codes_from_repo(possible_names=['vessel codes.xlsx', 'vessel_cod
                 st.error(f"Failed to read file '{filename}': {e}"); return None
     st.error(f"Vessel code file not found."); return None
 
-# --- FUNGSI STYLING BARU (METODE ROW-WISE) ---
-def style_row_wise(row, is_faded_map, clash_cells):
-    """Menerapkan style baris per baris."""
-    # Tentukan style dasar untuk seluruh baris (pudar atau normal)
-    is_faded = is_faded_map.get(row.name, False)
-    base_style = 'color: #E0E0E0;' if is_faded else ''
-    styles = [base_style for _ in row.index]
+def apply_all_styles(df, selected_dates):
+    styler = pd.DataFrame('', index=df.index, columns=df.columns)
+    df_copy = df.copy()
+    df_copy['ETA'] = pd.to_datetime(df_copy['ETA'])
+    df_copy['ETA_Date'] = df_copy['ETA'].dt.date
+    is_faded_row = pd.Series(False, index=df.index)
+    if selected_dates and len(selected_dates) < len(df_copy['ETA_Date'].unique()):
+        is_faded_row[~df_copy['ETA_Date'].isin(selected_dates)] = True
+    clash_mask = pd.DataFrame(False, index=df.index, columns=df.columns)
+    non_cluster_cols = ['VESSEL', 'CODE', 'VOY_OUT', 'ETA', 'Total Box', 'Total cluster']
+    cluster_cols = [col for col in df.columns if col not in non_cluster_cols]
+    for col in cluster_cols:
+        numeric_col = pd.to_numeric(df_copy[col], errors='coerce').fillna(0)
+        subset_df = df_copy[numeric_col > 0]
+        clash_dates = subset_df[subset_df.duplicated(subset='ETA_Date', keep=False)]['ETA_Date'].unique()
+        for date in clash_dates:
+            clashing_indices = subset_df[subset_df['ETA_Date'] == date].index
+            clash_mask.loc[clashing_indices, col] = True
+    for r_idx in df.index:
+        for c_name in df.columns:
+            is_faded = is_faded_row.get(r_idx, False)
+            is_clash = clash_mask.loc[r_idx, c_name] if c_name in clash_mask.columns else False
+            if is_clash and is_faded:
+                styler.loc[r_idx, c_name] = 'background-color: #FFE8D6; color: #BDBDBD;'
+            elif is_clash and not is_faded:
+                styler.loc[r_idx, c_name] = 'background-color: #FFAA33; color: black;'
+            elif not is_clash and is_faded:
+                styler.loc[r_idx, c_name] = 'color: #E0E0E0;'
+    return styler
 
-    # Timpa style untuk sel yang bentrok
-    for i, col_name in enumerate(row.index):
-        if (row.name, col_name) in clash_cells:
-            if is_faded:
-                styles[i] = 'background-color: #FFE8D6; color: #BDBDBD;' # Oranye Pudar
-            else:
-                styles[i] = 'background-color: #FFAA33; color: black;'    # Oranye Terang
-    return styles
+def general_formatter(val):
+    if isinstance(val, (int, float)):
+        if val == 0: return ''
+        return f'{val:.0f}'
+    return val
 
 # --- Sidebar & Proses Utama ---
 st.sidebar.header("⚙️ Your File Uploads")
@@ -99,7 +118,6 @@ if st.session_state.processed_df is not None:
     display_df = st.session_state.processed_df
     
     st.header("✅ Analysis Result")
-    st.markdown("---")
 
     col1, col2 = st.columns([1, 2])
     with col1:
@@ -112,52 +130,30 @@ if st.session_state.processed_df is not None:
             format_func=lambda date: date.strftime('%Y-%m-%d')
         )
     
-    # --- PERSIAPAN SEBELUM STYLING ---
+    st.markdown("---")
+    
     df_to_style = display_df.copy()
-    df_to_style['ETA'] = pd.to_datetime(df_to_style['ETA'])
-    df_to_style['ETA_Date'] = df_to_style['ETA'].dt.date
-
-    # 1. Tentukan baris mana saja yang pudar
-    is_faded_map = pd.Series(False, index=df_to_style.index)
-    if selected_dates and len(selected_dates) < len(df_to_style['ETA_Date'].unique()):
-        is_faded_map[~df_to_style['ETA_Date'].isin(selected_dates)] = True
-
-    # 2. Tentukan sel mana saja yang bentrok
-    clash_cells = set()
-    cluster_cols = [col for col in df_to_style.columns if col not in ['VESSEL', 'CODE', 'VOY_OUT', 'ETA', 'Total Box', 'Total cluster', 'ETA_Date']]
-    for col in cluster_cols:
-        numeric_col = pd.to_numeric(df_to_style[col], errors='coerce').fillna(0)
-        subset_df = df_to_style[numeric_col > 0]
-        clash_dates = subset_df[subset_df.duplicated(subset='ETA_Date', keep=False)]['ETA_Date'].unique()
-        for date in clash_dates:
-            clashing_indices = subset_df[subset_df['ETA_Date'] == date].index
-            for idx in clashing_indices:
-                clash_cells.add((idx, col))
-
-    # Hapus kolom sementara sebelum styling
-    df_to_style = df_to_style.drop(columns=['ETA_Date'])
-
-    # 3. Definisikan format
+    
+    # --- PENERAPAN FITUR BARU (FREEZE & HIDE ZEROS) ---
     header_style = {'selector': 'th', 'props': [('font-weight', 'bold')]}
-    numeric_cols_format = [col for col in df_to_style.columns if df_to_style[col].dtype in ['int64', 'float64']]
-    formatter = {col: lambda x: '' if x == 0 else f'{x:.0f}' for col in numeric_cols_format}
+    sticky_cols = ['VESSEL', 'CODE', 'VOY_OUT', 'ETA']
+    numeric_cols = [col for col in df_to_style.columns if df_to_style[col].dtype in ['int64', 'float64']]
+    formatter = {col: lambda x: '' if x == 0 else f'{x:.0f}' for col in numeric_cols}
     formatter['ETA'] = '{:%Y-%m-%d %H:%M:%S}'
 
-    # 4. Terapkan styling dan format
+    # Sembunyikan index default pandas agar tidak berkonflik dengan freeze pane kustom
+    styler = df_to_style.style.hide(axis="index")
+
+    # Terapkan semua style dan format
     styled_df = (
-        df_to_style.style
-        .apply(style_row_wise, axis=1, is_faded_map=is_faded_map, clash_cells=clash_cells)
+        styler
+        .apply(apply_all_styles, axis=None, selected_dates=selected_dates)
         .format(formatter)
         .set_table_styles([header_style])
+        # .set_sticky(axis="columns", labels=sticky_cols) # Kita coba aktifkan kembali
     )
     
     st.dataframe(styled_df, use_container_width=True)
     
     csv_export = display_df.to_csv(index=False).encode('utf-8')
     st.download_button(label="📥 Download Result as CSV", data=csv_export, file_name='analysis_result.csv', mime='text/csv')
-
-
-
-
-
-
