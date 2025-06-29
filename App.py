@@ -5,7 +5,7 @@ from datetime import datetime, timedelta
 
 # --- Konfigurasi Halaman & Judul ---
 st.set_page_config(page_title="Clash Analyzer", layout="wide")
-st.title("👷 Yard Clash Monitoring")
+st.title("🚨 Yard Clash Monitoring")
 
 # --- Fungsi-fungsi Inti ---
 @st.cache_data
