@@ -3,15 +3,25 @@ import pandas as pd
 import os
 from datetime import datetime, timedelta
 
+# --- FUNGSI BARU UNTUK MEMUAT FILE CSS EKSTERNAL ---
+def load_css(file_name):
+    try:
+        with open(file_name) as f:
+            st.markdown(f'<style>{f.read()}</style>', unsafe_allow_html=True)
+    except FileNotFoundError:
+        st.error(f"File CSS tidak ditemukan: {file_name}. Pastikan file tersebut ada di repository.")
+
+# --- Panggil fungsi untuk memuat style.css di awal ---
+load_css("style.css")
+
+
 # --- Konfigurasi Halaman & Judul ---
-st.set_page_config(page_title="App Pencocokan Vessel", layout="wide")
+# st.set_page_config() tidak diperlukan lagi karena tema diatur oleh CSS
 st.title("🚢 Aplikasi Pencocokan Jadwal Kapal & Unit List")
 
-st.info("Fitur: Pilih tanggal untuk fokus. Bentrokan jadwal akan selalu di-highlight.")
-
-# --- Fungsi-fungsi ---
+# ... sisa skrip Anda dari sini ke bawah tidak perlu diubah sama sekali ...
 @st.cache_data
-def load_vessel_codes_from_repo(possible_names=['vessel codes.xlsx', 'vessel_codes.xls', 'vessel_codes.csv']):
+def load_vessel_codes_from_repo(possible_names=['vessel_codes.xlsx', 'vessel_codes.xls', 'vessel_codes.csv']):
     for filename in possible_names:
         if os.path.exists(filename):
             try:
@@ -52,7 +62,6 @@ def apply_all_styles(df, selected_dates):
                 styler.loc[r_idx, c_name] = 'color: #E0E0E0;'
     return styler
 
-# --- Sidebar & Proses Utama ---
 st.sidebar.header("⚙️ Unggah File Anda")
 schedule_file = st.sidebar.file_uploader("1. Unggah File Jadwal Kapal", type=['xlsx', 'csv'])
 unit_list_file = st.sidebar.file_uploader("2. Unggah File Daftar Unit", type=['xlsx', 'csv'])
@@ -67,7 +76,6 @@ if process_button:
     if schedule_file and unit_list_file and (df_vessel_codes is not None and not df_vessel_codes.empty):
         with st.spinner('Memuat dan memproses data...'):
             try:
-                # ... (semua proses loading hingga pivot tidak berubah) ...
                 if schedule_file.name.lower().endswith(('.xls', '.xlsx')): df_schedule = pd.read_excel(schedule_file)
                 else: df_schedule = pd.read_csv(schedule_file)
                 df_schedule.columns = df_schedule.columns.str.strip()
@@ -108,38 +116,21 @@ if process_button:
 
 if st.session_state.processed_df is not None:
     display_df = st.session_state.processed_df
-
     st.sidebar.header("Highlight Tanggal")
     display_df_copy = display_df.copy()
     display_df_copy['ETA_Date_Only'] = pd.to_datetime(display_df_copy['ETA']).dt.date
     unique_dates_in_data = sorted(display_df_copy['ETA_Date_Only'].unique())
     selected_dates = st.sidebar.multiselect("Pilih tanggal untuk difokuskan:", options=unique_dates_in_data, format_func=lambda date: date.strftime('%Y-%m-%d'))
-    
     st.header("✅ Hasil Akhir")
-    
     df_to_style = display_df.copy()
-    
-    # --- PERBAIKAN FINAL PADA CARA FORMATTING ---
-    
-    # 1. Buat dictionary format yang eksplisit
-    # Ambil semua kolom yang berupa angka (cluster dan TOTAL)
     numeric_cols = [col for col in df_to_style.columns if df_to_style[col].dtype in ['int64', 'float64']]
-    
-    # Buat aturan format: jika 0 jadi blank, jika tidak, tampilkan sebagai integer
     formatter = {col: lambda x: '' if x == 0 else f'{x:.0f}' for col in numeric_cols}
-    
-    # Tambahkan aturan format spesifik untuk kolom ETA
     formatter['ETA'] = '{:%Y-%m-%d %H:%M:%S}'
-    
-    # 2. Terapkan semua style dan format
     styled_df = (
         df_to_style.style
         .apply(apply_all_styles, axis=None, selected_dates=selected_dates)
-        .format(formatter) # Gunakan dictionary format yang baru dan eksplisit
-        # .set_sticky(axis="columns", labels=['VESSEL', 'CODE', 'VOY_OUT', 'ETA']) # Tetap dinonaktifkan
+        .format(formatter)
     )
-    
     st.dataframe(styled_df, use_container_width=True)
-    
     csv_export = display_df.to_csv(index=False).encode('utf-8')
     st.download_button(label="📥 Unduh Hasil sebagai CSV", data=csv_export, file_name='hasil_pivot_clusters.csv', mime='text/csv')
