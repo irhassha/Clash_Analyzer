@@ -106,12 +106,9 @@ if st.session_state.processed_df is not None:
 
     # --- Preparation for AG Grid Styling ---
     
-    # Create a copy for manipulation
     df_for_grid = display_df.copy()
-    # Add a date-only column for comparison
     df_for_grid['ETA_Date'] = pd.to_datetime(df_for_grid['ETA']).dt.strftime('%Y-%m-%d')
     
-    # 1. Determine which cells are clashing
     clash_map = {}
     cluster_cols = [col for col in df_for_grid.columns if col not in ['VESSEL', 'CODE', 'VOY_OUT', 'ETA', 'Total Box', 'Total cluster', 'ETA_Date']]
     for date, group in df_for_grid.groupby('ETA_Date'):
@@ -122,21 +119,18 @@ if st.session_state.processed_df is not None:
         if clash_areas_for_date:
             clash_map[date] = clash_areas_for_date
             
-    # Date selection widget
     unique_dates_in_data = sorted(df_for_grid['ETA_Date'].unique())
     selected_dates_str = st.multiselect(
         "**Focus on Date(s):**",
         options=unique_dates_in_data
     )
     
-    # Determine which rows to "fade"
     faded_dates_str = []
     if selected_dates_str:
         faded_dates_str = [d for d in unique_dates_in_data if d not in selected_dates_str]
 
     # --- AG-GRID USAGE ---
     
-    # Javascript to hide zeros
     hide_zero_jscode = JsCode("""
         function(params) {
             if (params.value == 0) {
@@ -146,7 +140,6 @@ if st.session_state.processed_df is not None:
         }
     """)
     
-    # Javascript for cell styling
     cell_style_jscode = JsCode(f"""
         function(params) {{
             const clashMap = {json.dumps(clash_map)};
@@ -171,40 +164,45 @@ if st.session_state.processed_df is not None:
         }}
     """)
     
-    # 1. Create GridOptionsBuilder
     gb = GridOptionsBuilder.from_dataframe(df_for_grid)
     
-    # 2. Configure pin (freeze) for main columns
+    # --- PERBAIKAN DI SINI ---
+    # 1. Konfigurasi default untuk SEMUA kolom
+    gb.configure_default_column(
+        resizable=True, 
+        sortable=True, 
+        editable=False, 
+        suppressMenu=True # Hapus ikon menu/filter untuk semua kolom
+    )
+
+    # 2. Konfigurasi spesifik untuk kolom yang di-freeze (pinned)
     pinned_cols = ['VESSEL', 'CODE', 'VOY_OUT', 'ETA', 'Total Box', 'Total cluster']
     for col in pinned_cols:
-        gb.configure_column(col, pinned="left", width=120, suppressMenu=True) # Gunakan suppressMenu
+        gb.configure_column(col, pinned="left", width=120)
 
-    # 3. Configure cluster columns with style and format
+    # 3. Konfigurasi spesifik untuk kolom cluster
     for col in cluster_cols:
-        gb.configure_column(col, cellStyle=cell_style_jscode, cellRenderer=hide_zero_jscode, width=90, suppressMenu=True)
+        gb.configure_column(col, cellStyle=cell_style_jscode, cellRenderer=hide_zero_jscode, width=90)
     
-    # 4. Configure other and default columns
-    gb.configure_column("Total Box", cellRenderer=hide_zero_jscode, suppressMenu=True)
-    gb.configure_column("Total cluster", cellRenderer=hide_zero_jscode, suppressMenu=True)
-    # Konfigurasi default sekarang juga menonaktifkan menu
-    gb.configure_default_column(resizable=True, filterable=False, sortable=True, editable=False, suppressMenu=True)
+    # 4. Konfigurasi spesifik untuk kolom Total (hanya renderer)
+    gb.configure_column("Total Box", cellRenderer=hide_zero_jscode)
+    gb.configure_column("Total cluster", cellRenderer=hide_zero_jscode)
 
-    # 5. Build GridOptions
     gridOptions = gb.build()
 
-    # 6. Define Custom CSS for thicker grid lines
+    # Define Custom CSS for thicker grid lines
     custom_css = {
         ".ag-theme-streamlit .ag-cell": {
-            "border-right": "2px solid #bbb !important", # Garis lebih tebal dan gelap
-            "border-bottom": "2px solid #bbb !important"
+            "border-right": "2px solid #D6D6D6 !important",
+            "border-bottom": "2px solid #D6D6D6 !important"
         },
         ".ag-theme-streamlit .ag-header-cell": {
-             "border-bottom": "2px solid #999 !important", # Garis header lebih gelap
-             "border-right": "2px solid #bbb !important"
+             "border-bottom": "2px solid #AAAAAA !important",
+             "border-right": "2px solid #D6D6D6 !important"
         }
     }
 
-    # 7. Display table using AgGrid
+    # Display table using AgGrid
     st.markdown("---")
     AgGrid(
         df_for_grid,
@@ -212,7 +210,7 @@ if st.session_state.processed_df is not None:
         height=600,
         width='100%',
         theme='streamlit',
-        custom_css=custom_css, # Terapkan CSS kustom di sini
+        custom_css=custom_css,
         allow_unsafe_jscode=True,
         column_defs=[{"field": "ETA_Date", "hide": True}]
     )
