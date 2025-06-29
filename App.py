@@ -67,6 +67,7 @@ if process_button:
                 grouping_cols = ['VESSEL', 'CODE', 'VOY_OUT', 'ETA']
                 pivot_df = filtered_data.pivot_table(index=grouping_cols, columns='Area (EXE)', aggfunc='size', fill_value=0)
                 
+                # --- PERUBAHAN NAMA KOLOM DI SINI ---
                 cluster_cols_for_calc = pivot_df.columns.tolist()
                 pivot_df['TTL BOX'] = pivot_df[cluster_cols_for_calc].sum(axis=1)
                 pivot_df['TTL CLSTR'] = (pivot_df[cluster_cols_for_calc] > 0).sum(axis=1)
@@ -109,12 +110,12 @@ if st.session_state.processed_df is not None:
     df_for_grid = display_df.copy()
     df_for_grid['ETA_Date'] = pd.to_datetime(df_for_grid['ETA']).dt.strftime('%Y-%m-%d')
     
-    # 1. Buat Peta Warna untuk Zebra Pattern per Tanggal
+    # Buat Peta Warna untuk Zebra Pattern
     unique_dates = df_for_grid['ETA_Date'].unique()
     zebra_colors = ['#F8F0E5', '#DAC0A3'] 
     date_color_map = {date: zebra_colors[i % 2] for i, date in enumerate(unique_dates)}
 
-    # 2. Tentukan sel mana saja yang bentrok
+    # Tentukan sel mana saja yang bentrok
     clash_map = {}
     cluster_cols = [col for col in df_for_grid.columns if col not in ['VESSEL', 'CODE', 'VOY_OUT', 'ETA', 'TTL BOX', 'TTL CLSTR', 'ETA_Date']]
     for date, group in df_for_grid.groupby('ETA_Date'):
@@ -129,7 +130,6 @@ if st.session_state.processed_df is not None:
     
     hide_zero_jscode = JsCode("""function(params) { if (params.value == 0 || params.value === null) { return ''; } return params.value; }""")
     
-    # JsCode untuk highlight bentrokan (menimpa warna zebra)
     clash_cell_style_jscode = JsCode(f"""
         function(params) {{
             const clashMap = {json.dumps(clash_map)};
@@ -143,7 +143,6 @@ if st.session_state.processed_df is not None:
         }}
     """)
     
-    # JsCode untuk Zebra Pattern (sebagai dasar)
     zebra_row_style_jscode = JsCode(f"""
         function(params) {{
             const dateColorMap = {json.dumps(date_color_map)};
@@ -155,22 +154,20 @@ if st.session_state.processed_df is not None:
 
     # --- KONFIGURASI GRID SECARA MANUAL (LEBIH STABIL) ---
     
-    # 1. Definisi default untuk semua kolom (Menghilangkan ikon menu)
     default_col_def = {
         "suppressMenu": True,
         "sortable": True,
         "resizable": True,
         "editable": False,
-        "minWidth": 40, # Lebar minimum kolom diperkecil
+        "minWidth": 40,
     }
     
-    # 2. Bangun definisi untuk setiap kolom secara manual
     column_defs = []
     
     # Kolom yang di-freeze
     pinned_cols = ['VESSEL', 'CODE', 'VOY_OUT', 'ETA', 'TTL BOX', 'TTL CLSTR']
     for col in pinned_cols:
-        width = 110 if col == 'VESSEL' else 80 # Lebar kolom diperkecil
+        width = 110 if col == 'VESSEL' else 80
         if col == 'ETA':
             width = 120 
         
@@ -189,19 +186,17 @@ if st.session_state.processed_df is not None:
         column_defs.append({
             "field": col,
             "headerName": col,
-            "width": 60, # Lebar kolom cluster diperkecil lagi
+            "width": 60,
             "cellRenderer": hide_zero_jscode,
             "cellStyle": clash_cell_style_jscode,
         })
     
-    # Sembunyikan kolom helper
     column_defs.append({"field": "ETA_Date", "hide": True})
 
-    # 3. Gabungkan semua ke dalam gridOptions
     gridOptions = {
         "defaultColDef": default_col_def,
         "columnDefs": column_defs,
-        "getRowStyle": zebra_row_style_jscode, # Terapkan Zebra Pattern di sini
+        "getRowStyle": zebra_row_style_jscode,
     }
 
     # Tampilkan tabel
