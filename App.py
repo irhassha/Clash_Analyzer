@@ -5,7 +5,7 @@ from datetime import datetime, timedelta
 
 # --- Konfigurasi Halaman & Judul ---
 st.set_page_config(page_title="Clash Analyzer", layout="wide")
-st.title("🚨 Yard Clash Monitoring")
+st.title("👷 Yard Clash Monitoring")
 
 # --- Fungsi-fungsi Inti ---
 @st.cache_data
@@ -156,4 +156,21 @@ if st.session_state.processed_df is not None:
     df_to_style = display_df.copy()
     
     # Final Styling & Formatting
-    header_style = {'selector': 'th
+    header_style = {'selector': 'th', 'props': [('font-weight', 'bold')]}
+    
+    # Aturan format sekarang sudah mencakup kolom-kolom baru
+    numeric_cols = [col for col in df_to_style.columns if df_to_style[col].dtype in ['int64', 'float64']]
+    formatter = {col: lambda x: '' if x == 0 else f'{x:.0f}' for col in numeric_cols}
+    formatter['ETA'] = '{:%Y-%m-%d %H:%M:%S}'
+
+    styled_df = (
+        df_to_style.style
+        .apply(apply_all_styles, axis=None, selected_dates=selected_dates)
+        .format(formatter)
+        .set_table_styles([header_style])
+    )
+    
+    st.dataframe(styled_df, use_container_width=True)
+    
+    csv_export = display_df.to_csv(index=False).encode('utf-8')
+    st.download_button(label="📥 Download Result as CSV", data=csv_export, file_name='analysis_result.csv', mime='text/csv')
