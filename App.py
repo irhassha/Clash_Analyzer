@@ -68,18 +68,18 @@ if process_button:
                 pivot_df = filtered_data.pivot_table(index=grouping_cols, columns='Area (EXE)', aggfunc='size', fill_value=0)
                 
                 cluster_cols_for_calc = pivot_df.columns.tolist()
-                pivot_df['Total Box'] = pivot_df[cluster_cols_for_calc].sum(axis=1)
-                pivot_df['Total cluster'] = (pivot_df[cluster_cols_for_calc] > 0).sum(axis=1)
+                pivot_df['TTL BOX'] = pivot_df[cluster_cols_for_calc].sum(axis=1)
+                pivot_df['TTL CLSTR'] = (pivot_df[cluster_cols_for_calc] > 0).sum(axis=1)
                 pivot_df = pivot_df.reset_index()
                 
                 # 5. Conditional Filtering
                 two_days_ago = pd.Timestamp.now() - timedelta(days=2)
-                condition_to_hide = (pivot_df['ETA'] < two_days_ago) & (pivot_df['Total Box'] < 50)
+                condition_to_hide = (pivot_df['ETA'] < two_days_ago) & (pivot_df['TTL BOX'] < 50)
                 pivot_df = pivot_df[~condition_to_hide]
                 if pivot_df.empty: st.warning("No data remaining after ETA & Total filter."); st.session_state.processed_df = None; st.stop()
 
                 # 6. Sorting and Ordering
-                cols_awal = ['VESSEL', 'CODE', 'VOY_OUT', 'ETA', 'Total Box', 'Total cluster']
+                cols_awal = ['VESSEL', 'CODE', 'VOY_OUT', 'ETA', 'TTL BOX', 'TTL CLSTR']
                 final_cluster_cols = [col for col in pivot_df.columns if col not in cols_awal]
                 final_display_cols = cols_awal + sorted(final_cluster_cols)
                 pivot_df = pivot_df[final_display_cols]
@@ -116,7 +116,7 @@ if st.session_state.processed_df is not None:
 
     # 2. Tentukan sel mana saja yang bentrok
     clash_map = {}
-    cluster_cols = [col for col in df_for_grid.columns if col not in ['VESSEL', 'CODE', 'VOY_OUT', 'ETA', 'Total Box', 'Total cluster', 'ETA_Date']]
+    cluster_cols = [col for col in df_for_grid.columns if col not in ['VESSEL', 'CODE', 'VOY_OUT', 'ETA', 'TTL BOX', 'TTL CLSTR', 'ETA_Date']]
     for date, group in df_for_grid.groupby('ETA_Date'):
         clash_areas_for_date = []
         for col in cluster_cols:
@@ -168,7 +168,7 @@ if st.session_state.processed_df is not None:
     column_defs = []
     
     # Kolom yang di-freeze
-    pinned_cols = ['VESSEL', 'CODE', 'VOY_OUT', 'ETA', 'Total Box', 'Total cluster']
+    pinned_cols = ['VESSEL', 'CODE', 'VOY_OUT', 'ETA', 'TTL BOX', 'TTL CLSTR']
     for col in pinned_cols:
         width = 110 if col == 'VESSEL' else 80 # Lebar kolom diperkecil
         if col == 'ETA':
@@ -180,7 +180,7 @@ if st.session_state.processed_df is not None:
             "pinned": "left",
             "width": width,
         }
-        if col in ["Total Box", "Total cluster"]:
+        if col in ["TTL BOX", "TTL CLSTR"]:
             col_def["cellRenderer"] = hide_zero_jscode
         column_defs.append(col_def)
 
