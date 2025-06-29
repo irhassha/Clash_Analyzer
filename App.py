@@ -13,7 +13,7 @@ st.info(
 
 # --- Fungsi untuk memuat file kode kapal dari repository ---
 @st.cache_data # Cache data agar tidak perlu dibaca ulang setiap ada interaksi
-def load_vessel_codes_from_repo(possible_names=['vessel codes.xlsx', 'vessel codes.xls', 'vessel codes.csv']):
+def load_vessel_codes_from_repo(possible_names=['vessel codes.xlsx', 'vessel_codes.xls', 'vessel_codes.csv']):
     """Mencari dan memuat file kode kapal dari daftar nama file yang mungkin."""
     for filename in possible_names:
         if os.path.exists(filename):
@@ -63,7 +63,7 @@ if process_button:
                 # 2. Proses Penggabungan Data (Logika Inti)
                 st.header("🔄 Proses Penggabungan")
                 
-                # Langkah A: Gabungkan Jadwal Kapal dengan Kode Kapal
+                # Langkah A: Gabungkan Jadwal Kapal dengan Kode Kapal untuk mendapatkan kolom 'CODE'
                 df_schedule_with_code = pd.merge(
                     df_schedule,
                     df_vessel_codes,
@@ -72,11 +72,12 @@ if process_button:
                     how="left"
                 ).rename(columns={"Value": "CODE"})
 
-                # Langkah B: Gabungkan hasil dengan Daftar Unit menggunakan 'LINE' dan 'VOY_OUT'
+                # Langkah B: Gabungkan hasil dengan Daftar Unit
+                # --- PERUBAHAN LOGIKA KUNCI JOIN ADA DI SINI ---
                 final_df = pd.merge(
                     df_schedule_with_code,
                     df_unit_list,
-                    left_on=['LINE', 'VOY_OUT'],
+                    left_on=['CODE', 'VOY_OUT'], # Diubah dari ['LINE', 'VOY_OUT'] sesuai revisi
                     right_on=['Carrier Out', 'Voyage Out'],
                     how='inner'
                 )
@@ -100,7 +101,7 @@ if process_button:
                        mime='text/csv',
                     )
                 else:
-                    st.warning("Tidak ditemukan data yang cocok antara file Jadwal Kapal dan Daftar Unit.")
+                    st.warning("Tidak ditemukan data yang cocok antara file Jadwal Kapal dan Daftar Unit menggunakan 'CODE' dan 'VOY_OUT'.")
 
             except Exception as e:
                 st.error(f"Terjadi kesalahan saat memproses file: {e}")
