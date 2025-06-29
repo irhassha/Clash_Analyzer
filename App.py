@@ -2,6 +2,8 @@ import streamlit as st
 import pandas as pd
 import os
 from datetime import datetime, timedelta
+import json
+
 # Import pustaka baru
 from st_aggrid import AgGrid, GridOptionsBuilder, JsCode
 
@@ -9,9 +11,10 @@ from st_aggrid import AgGrid, GridOptionsBuilder, JsCode
 st.set_page_config(page_title="Clash Analyzer", layout="wide")
 st.title("🚢 Vessel Clash Analyzer")
 
-# --- Fungsi-fungsi Inti (tidak ada fungsi styling lama) ---
+# --- Fungsi-fungsi Inti ---
 @st.cache_data
 def load_vessel_codes_from_repo(possible_names=['vessel codes.xlsx', 'vessel_codes.xls', 'vessel_codes.csv']):
+    """Mencari dan memuat file kode kapal."""
     for filename in possible_names:
         if os.path.exists(filename):
             try:
@@ -38,40 +41,57 @@ if process_button:
     if schedule_file and unit_list_file and (df_vessel_codes is not None and not df_vessel_codes.empty):
         with st.spinner('Loading and processing data...'):
             try:
-                # ... (semua proses loading hingga pivot tidak berubah) ...
+                # 1. Loading & Cleaning
                 if schedule_file.name.lower().endswith(('.xls', '.xlsx')): df_schedule = pd.read_excel(schedule_file)
                 else: df_schedule = pd.read_csv(schedule_file)
                 df_schedule.columns = df_schedule.columns.str.strip()
                 if unit_list_file.name.lower().endswith(('.xls', '.xlsx')): df_unit_list = pd.read_excel(unit_list_file)
                 else: df_unit_list = pd.read_csv(unit_list_file)
                 df_unit_list.columns = df_unit_list.columns.str.strip()
+                
+                # 2. Main Processing
                 original_vessels_list = df_schedule['VESSEL'].unique().tolist()
                 df_schedule['ETA'] = pd.to_datetime(df_schedule['ETA'], errors='coerce')
                 df_schedule_with_code = pd.merge(df_schedule, df_vessel_codes, left_on="VESSEL", right_on="Description", how="left").rename(columns={"Value": "CODE"})
                 merged_df = pd.merge(df_schedule_with_code, df_unit_list, left_on=['CODE', 'VOY_OUT'], right_on=['Carrier Out', 'Voyage Out'], how='inner')
                 if merged_df.empty: st.warning("No matching data found."); st.session_state.processed_df = None; st.stop()
+                
+                # 3. Filtering
                 merged_df = merged_df[merged_df['VESSEL'].isin(original_vessels_list)]
                 excluded_areas = [str(i) for i in range(801, 809)]
                 merged_df['Area (EXE)'] = merged_df['Area (EXE)'].astype(str)
                 filtered_data = merged_df[~merged_df['Area (EXE)'].isin(excluded_areas)]
                 if filtered_data.empty: st.warning("No data remaining after filtering."); st.session_state.processed_df = None; st.stop()
+
+                # 4. Pivoting
                 grouping_cols = ['VESSEL', 'CODE', 'VOY_OUT', 'ETA']
                 pivot_df = filtered_data.pivot_table(index=grouping_cols, columns='Area (EXE)', aggfunc='size', fill_value=0)
+                
                 cluster_cols_for_calc = pivot_df.columns.tolist()
                 pivot_df['Total Box'] = pivot_df[cluster_cols_for_calc].sum(axis=1)
                 pivot_df['Total cluster'] = (pivot_df[cluster_cols_for_calc] > 0).sum(axis=1)
                 pivot_df = pivot_df.reset_index()
+                
+                # 5. Conditional Filtering
                 two_days_ago = pd.Timestamp.now() - timedelta(days=2)
                 condition_to_hide = (pivot_df['ETA'] < two_days_ago) & (pivot_df['Total Box'] < 50)
                 pivot_df = pivot_df[~condition_to_hide]
                 if pivot_df.empty: st.warning("No data remaining after ETA & Total filter."); st.session_state.processed_df = None; st.stop()
+
+                # 6. Sorting and Ordering
                 cols_awal = ['VESSEL', 'CODE', 'VOY_OUT', 'ETA', 'Total Box', 'Total cluster']
                 final_cluster_cols = [col for col in pivot_df.columns if col not in cols_awal]
                 final_display_cols = cols_awal + sorted(final_cluster_cols)
                 pivot_df = pivot_df[final_display_cols]
+                
+                # Format ETA for display right after creation
+                pivot_df['ETA'] = pd.to_datetime(pivot_df['ETA']).dt.strftime('%Y-%m-%d %H:%M:%S')
+                
                 pivot_df = pivot_df.sort_values(by='ETA', ascending=True).reset_index(drop=True)
+                
                 st.session_state.processed_df = pivot_df
                 st.success("Data processed successfully!")
+
             except Exception as e:
                 st.error(f"An error occurred during processing: {e}")
                 st.session_state.processed_df = None
@@ -83,39 +103,106 @@ if st.session_state.processed_df is not None:
     display_df = st.session_state.processed_df
     
     st.header("✅ Analysis Result")
-    st.markdown("---")
-    
-    # --- PENGGUNAAN AG-GRID DIMULAI DI SINI ---
-    
-    # 1. Buat GridOptionsBuilder dari DataFrame Anda
-    gb = GridOptionsBuilder.from_dataframe(display_df)
 
-    # 2. Konfigurasi "Freeze Panes" (disebut 'pinning' di AG Grid)
-    gb.configure_column("VESSEL", pinned="left")
-    gb.configure_column("CODE", pinned="left")
-    gb.configure_column("VOY_OUT", pinned="left")
-    gb.configure_column("ETA", pinned="left", type=["dateColumnFilter","customDateTimeFormat"], custom_format_string='yyyy-MM-dd HH:mm:ss', pivot=True)
-    gb.configure_column("Total Box", pinned="left")
-    gb.configure_column("Total cluster", pinned="left")
+    # --- Persiapan untuk Styling AG Grid ---
     
-    # 3. Konfigurasi default untuk semua kolom lainnya (misal: bisa di-resize)
-    gb.configure_default_column(resizable=True, filterable=True, sortable=True, editable=False, minWidth=100)
+    # Buat salinan untuk dimanipulasi
+    df_for_grid = display_df.copy()
+    # Tambahkan kolom tanggal saja untuk perbandingan
+    df_for_grid['ETA_Date'] = pd.to_datetime(df_for_grid['ETA']).dt.strftime('%Y-%m-%d')
     
-    # 4. Bangun GridOptions
+    # 1. Tentukan sel mana saja yang bentrok
+    clash_map = {}
+    cluster_cols = [col for col in df_for_grid.columns if col not in ['VESSEL', 'CODE', 'VOY_OUT', 'ETA', 'Total Box', 'Total cluster', 'ETA_Date']]
+    for date, group in df_for_grid.groupby('ETA_Date'):
+        clash_areas_for_date = []
+        for col in cluster_cols:
+            if (group[col] > 0).sum() > 1:
+                clash_areas_for_date.append(col)
+        if clash_areas_for_date:
+            clash_map[date] = clash_areas_for_date
+            
+    # Widget pemilihan tanggal
+    unique_dates_in_data = sorted(df_for_grid['ETA_Date'].unique())
+    selected_dates_str = st.multiselect(
+        "**Focus on Date(s):**",
+        options=unique_dates_in_data
+    )
+    
+    # Tentukan baris yang akan "fade"
+    faded_dates_str = []
+    if selected_dates_str:
+        faded_dates_str = [d for d in unique_dates_in_data if d not in selected_dates_str]
+
+    # --- Penggunaan AG-GRID ---
+    
+    # Javascript untuk menyembunyikan 0
+    hide_zero_jscode = JsCode("""
+        function(params) {
+            if (params.value == 0) {
+                return '';
+            }
+            return params.value;
+        }
+    """)
+    
+    # Javascript untuk styling sel
+    # Ini akan disuntikkan dengan data dari Python
+    cell_style_jscode = JsCode(f"""
+        function(params) {{
+            const clashMap = {json.dumps(clash_map)};
+            const fadedDates = {json.dumps(faded_dates_str)};
+            const date = params.data.ETA_Date;
+            const colId = params.colDef.field;
+            
+            const isFaded = fadedDates.includes(date);
+            const isClash = clashMap[date] ? clashMap[date].includes(colId) : false;
+            
+            if (isClash && isFaded) {{
+                return {{'backgroundColor': '#FFE8D6', 'color': '#BDBDBD'}}; // Oranye Pudar
+            }}
+            if (isClash && !isFaded) {{
+                return {{'backgroundColor': '#FFAA33', 'color': 'black'}}; // Oranye Terang
+            }}
+            if (isFaded) {{
+                return {{'color': '#E0E0E0'}}; // Teks Sangat Pudar
+            }}
+            
+            return null; // Style default
+        }}
+    """)
+    
+    # 1. Buat GridOptionsBuilder
+    gb = GridOptionsBuilder.from_dataframe(df_for_grid)
+    
+    # 2. Konfigurasi pin (freeze) untuk kolom-kolom utama
+    pinned_cols = ['VESSEL', 'CODE', 'VOY_OUT', 'ETA', 'Total Box', 'Total cluster']
+    for col in pinned_cols:
+        gb.configure_column(col, pinned="left", width=120)
+
+    # 3. Konfigurasi kolom-kolom cluster dengan style dan format
+    for col in cluster_cols:
+        gb.configure_column(col, cellStyle=cell_style_jscode, cellRenderer=hide_zero_jscode, width=90)
+    
+    # 4. Konfigurasi kolom lain dan default
+    gb.configure_column("Total Box", cellRenderer=hide_zero_jscode)
+    gb.configure_column("Total cluster", cellRenderer=hide_zero_jscode)
+    gb.configure_default_column(resizable=True, filterable=True, sortable=True, editable=False)
+
+    # 5. Bangun GridOptions
     gridOptions = gb.build()
 
-    # 5. Tampilkan tabel menggunakan AgGrid
+    # 6. Tampilkan tabel menggunakan AgGrid
+    st.markdown("---")
     AgGrid(
-        display_df,
+        df_for_grid,
         gridOptions=gridOptions,
         height=600,
         width='100%',
-        # Pilih tema, 'streamlit' adalah tema default yang bersih
-        theme='streamlit', 
-        # Izinkan konversi tipe data yang tidak aman (diperlukan untuk beberapa fitur)
+        theme='streamlit',
         allow_unsafe_jscode=True,
-        # Fitur tambahan agar pas dengan lebar
-        fit_columns_on_grid_load=False
+        # Sembunyikan kolom ETA_Date dari tampilan
+        column_defs=[{"field": "ETA_Date", "hide": True}]
     )
     
     csv_export = display_df.to_csv(index=False).encode('utf-8')
