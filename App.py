@@ -48,6 +48,11 @@ if process_button:
                 df_schedule = pd.read_excel(schedule_file) if schedule_file.name.lower().endswith(('.xls', '.xlsx')) else pd.read_csv(schedule_file)
                 df_unit_list = pd.read_excel(unit_list_file) if unit_list_file.name.lower().endswith(('.xls', '.xlsx')) else pd.read_csv(unit_list_file)
 
+                # --- PERUBAHAN 1: Konversi tipe data ETA untuk sorting ---
+                # Mengubah kolom ETA menjadi tipe datetime, format akan dideteksi otomatis.
+                # Jika ada error saat konversi (misal, format tidak dikenali), akan diubah menjadi NaT (Not a Time)
+                df_schedule['ETA'] = pd.to_datetime(df_schedule['ETA'], errors='coerce')
+
                 # 2. Proses Penggabungan Data
                 df_schedule_with_code = pd.merge(
                     df_schedule, df_vessel_codes,
@@ -55,7 +60,6 @@ if process_button:
                     how="left"
                 ).rename(columns={"Value": "CODE"})
 
-                # Menggunakan 'how="inner"' sudah memastikan hanya kapal dari jadwal yang cocok yang akan diproses.
                 merged_df = pd.merge(
                     df_schedule_with_code, df_unit_list,
                     left_on=['CODE', 'VOY_OUT'],
@@ -63,22 +67,16 @@ if process_button:
                     how='inner'
                 )
 
-                # 3. Menerapkan Filter (Perubahan Kunci Ada di Sini)
+                # 3. Menerapkan Filter
                 st.header("✅ Hasil Akhir (Format Pivot)")
                 if not merged_df.empty:
-                    # ---- FILTER 1: Buang Area (EXE) 801-808 ----
-                    # Membuat daftar area yang akan dikecualikan
                     excluded_areas = [str(i) for i in range(801, 809)] 
-                    
-                    # Pastikan kolom 'Area (EXE)' bertipe string untuk perbandingan yang aman
                     merged_df['Area (EXE)'] = merged_df['Area (EXE)'].astype(str)
-                    
-                    # Terapkan filter untuk membuang baris dengan area yang tidak diinginkan
                     filtered_data = merged_df[~merged_df['Area (EXE)'].isin(excluded_areas)]
 
                     if filtered_data.empty:
                          st.warning("Setelah memfilter Area 801-808, tidak ada data yang tersisa untuk ditampilkan.")
-                         st.stop() # Hentikan eksekusi jika tidak ada data
+                         st.stop()
 
                     # 4. Transformasi Data ke Format Pivot
                     grouping_cols = ['VESSEL', 'CODE', 'VOY_OUT', 'ETA']
@@ -95,11 +93,16 @@ if process_button:
 
                     cols_awal = ['VESSEL', 'CODE', 'VOY_OUT', 'ETA', 'TOTAL']
                     cols_clusters = [col for col in pivot_df.columns if col not in cols_awal]
-                    
                     final_display_cols = cols_awal + sorted(cols_clusters)
                     pivot_df = pivot_df[final_display_cols]
+                    
+                    # --- PERUBAHAN 2: Mengurutkan tabel berdasarkan ETA ---
+                    pivot_df = pivot_df.sort_values(by='ETA', ascending=True)
 
                     st.success(f"Berhasil memproses dan mengelompokkan data untuk {len(pivot_df)} kapal unik (setelah filter).")
+                    
+                    # Mengatur format tanggal untuk ditampilkan, agar lebih rapi
+                    pivot_df['ETA'] = pivot_df['ETA'].dt.strftime('%Y-%m-%d %H:%M:%S')
                     
                     st.dataframe(pivot_df)
                     
