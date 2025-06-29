@@ -1,102 +1,103 @@
 import streamlit as st
 import pandas as pd
-import requests
-from datetime import datetime
+from bs4 import BeautifulSoup
+from selenium import webdriver
+from selenium.webdriver.chrome.service import Service as ChromeService
+from webdriver_manager.chrome import ChromeDriverManager
+from selenium.webdriver.common.by import By
+from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support import expected_conditions as EC
+from selenium.webdriver.chrome.options import Options
 
-# URL API BARU yang menyediakan data jadwal dalam format JSON
-# Endpoint lama (vessel-schedules) tidak lagi valid (404 Not Found).
-API_URL = "https://www.npct1.co.id/api/vessel/schedule"
+# URL Halaman Web (bukan lagi API)
+PAGE_URL = "https://www.npct1.co.id/vessel-schedule"
 
-@st.cache_data(ttl=300) # Cache data selama 5 menit untuk performa
-def get_vessel_schedule():
+@st.cache_data(ttl=600) # Cache data selama 10 menit
+def get_schedule_with_selenium():
     """
-    Fungsi ini mengambil data jadwal kapal langsung dari API NPCT1 yang baru
-    dan mengembalikannya sebagai sebuah Pandas DataFrame.
+    Mengambil jadwal kapal dengan mengotomatiskan browser Chrome menggunakan Selenium
+    untuk melewati proteksi anti-scraping.
     """
+    st.info("Menginisialisasi browser virtual untuk scraping...")
+    
+    # Mengatur opsi untuk menjalankan Chrome dalam mode 'headless' (tanpa UI)
+    chrome_options = Options()
+    chrome_options.add_argument("--headless")
+    chrome_options.add_argument("--no-sandbox")
+    chrome_options.add_argument("--disable-dev-shm-usage")
+    chrome_options.add_argument("--disable-gpu")
+    chrome_options.add_argument("window-size=1920x1080")
+
+    # Menginstal dan mengelola ChromeDriver secara otomatis
+    service = ChromeService(ChromeDriverManager().install())
+    
+    driver = None # Inisialisasi driver
     try:
-        # Mengatur User-Agent untuk meniru browser agar tidak diblokir
-        headers = {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
-            'Accept': 'application/json'
-        }
+        # Memulai driver browser Chrome
+        driver = webdriver.Chrome(service=service, options=chrome_options)
         
-        # Mengirim permintaan HTTP GET ke URL API
-        response = requests.get(API_URL, headers=headers, timeout=15)
-        response.raise_for_status()  # Cek jika ada error HTTP (spt 404, 500)
+        # Membuka halaman web
+        st.write("Mengunjungi halaman jadwal kapal...")
+        driver.get(PAGE_URL)
 
-        # Mengurai respons JSON
-        data = response.json()
+        # Menunggu hingga tabel dengan ID 'schedule' muncul dan terlihat
+        # Ini adalah langkah krusial, menunggu maksimal 30 detik
+        st.write("Menunggu data tabel dimuat oleh JavaScript...")
+        WebDriverWait(driver, 30).until(
+            EC.presence_of_element_located((By.ID, "schedule"))
+        )
+        st.write("Tabel ditemukan! Mengekstrak data...")
 
-        # Membuat DataFrame pandas langsung dari data JSON
-        if not data:
-            st.warning("API tidak mengembalikan data jadwal saat ini.")
+        # Setelah tabel dimuat, ambil source HTML halaman
+        html_source = driver.page_source
+        
+        # Parsing HTML menggunakan BeautifulSoup
+        soup = BeautifulSoup(html_source, 'html.parser')
+        table = soup.find('table', id='schedule')
+
+        if not table:
+            st.error("Gagal menemukan tabel bahkan setelah menunggu.")
             return pd.DataFrame()
 
-        df = pd.DataFrame(data)
-        
-        # --- Pembersihan dan Pemformatan Data ---
-        # Memilih kolom yang paling relevan untuk ditampilkan
-        # Kunci di kiri adalah nama kolom dari API, nilai di kanan adalah header tabel yang akan ditampilkan
-        relevant_columns = {
-            'vessel_name': 'Vessel Name',
-            'voyage_no': 'Voyage No',
-            'service_name': 'Service',
-            'eta': 'ETA',
-            'etd': 'ETD',
-            'berthing_time': 'Berthing Time',
-            'closing_time': 'Closing Time'
-        }
-        
-        # Filter DataFrame agar hanya berisi kolom yang kita inginkan
-        # Cek kolom mana saja dari 'relevant_columns' yang benar-benar ada di DataFrame
-        existing_columns = {k: v for k, v in relevant_columns.items() if k in df.columns}
-        
-        if not existing_columns:
-            st.error("Struktur data dari API telah berubah dan kolom yang diharapkan tidak ditemukan.")
-            return pd.DataFrame()
-            
-        df_filtered = df[list(existing_columns.keys())]
-        
-        # Mengganti nama kolom agar lebih mudah dibaca
-        df_renamed = df_filtered.rename(columns=existing_columns)
+        # Mengekstrak header dan baris data (sama seperti metode awal)
+        headers = [th.text.strip() for th in table.find('thead').find_all('th')]
+        rows = []
+        for row in table.find('tbody').find_all('tr'):
+            cols = [td.text.strip() for td in row.find_all('td')]
+            rows.append(cols)
 
-        # Mengonversi kolom tanggal ke format yang lebih rapi (contoh: 28 Jun 2024, 15:30)
-        date_cols = ['ETA', 'ETD', 'Berthing Time', 'Closing Time']
-        for col in date_cols:
-            if col in df_renamed.columns:
-                # Menggunakan errors='coerce' akan mengubah nilai yang tidak valid menjadi NaT (Not a Time)
-                df_renamed[col] = pd.to_datetime(df_renamed[col], errors='coerce').dt.strftime('%d %b %Y, %H:%M')
+        return pd.DataFrame(rows, columns=headers)
 
-        return df_renamed
-
-    except requests.exceptions.RequestException as e:
-        st.error(f"Gagal terhubung ke API NPCT1: {e}")
-        return pd.DataFrame()
     except Exception as e:
-        st.error(f"Terjadi kesalahan saat memproses data: {e}")
+        st.error(f"Terjadi kesalahan saat proses scraping dengan Selenium: {e}")
         return pd.DataFrame()
+    finally:
+        # Pastikan browser ditutup untuk membebaskan sumber daya
+        if driver:
+            driver.quit()
+        st.info("Proses scraping selesai. Browser virtual telah ditutup.")
+
 
 # --- Konfigurasi Tampilan Aplikasi Streamlit ---
 
 st.set_page_config(page_title="Jadwal Kapal NPCT1", layout="wide")
 
-st.title("🚢 Scraper Jadwal Kapal NPCT1")
-st.markdown("Menampilkan data langsung dari API NPCT1.")
+st.title("🚢 Scraper Jadwal Kapal NPCT1 (Metode Selenium)")
+st.markdown("Menggunakan otomasi browser untuk mengambil data dari situs yang dilindungi.")
 
-if st.button("🔄 Segarkan Data"):
+if st.button("🔄 Ambil Data Terbaru"):
     st.cache_data.clear()
-    st.toast("Data sedang diperbarui dari API...")
+    st.toast("Memulai proses scraping baru...")
 
 # Memanggil fungsi untuk mendapatkan data
-schedule_df = get_vessel_schedule()
+schedule_df = get_schedule_with_selenium()
 
 # Menampilkan data jika berhasil di-scrape
 if schedule_df is not None and not schedule_df.empty:
-    st.success("Data jadwal kapal berhasil dimuat.")
+    st.success("Data jadwal kapal berhasil dimuat!")
     st.dataframe(schedule_df, use_container_width=True, hide_index=True)
 else:
-    st.info("Tidak ada data untuk ditampilkan atau terjadi kesalahan saat mengambil data.")
+    st.warning("Tidak ada data untuk ditampilkan atau terjadi kesalahan selama proses.")
 
 st.markdown("---")
-st.write("Dibuat dengan Streamlit dan Python.")
-
+st.write("Dibuat dengan Streamlit, Selenium, dan Python.")
