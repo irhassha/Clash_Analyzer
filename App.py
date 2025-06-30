@@ -148,30 +148,40 @@ with tab2:
                 st.warning("Column 'Container' or 'Unit' not found.")
                 st.stop()
             
-            # 3. Agregasi Area (EXE) untuk setiap Pos (Vessel)
-            pos_to_area_map = area_info.groupby('Pos (Vessel)')['Area (EXE)'].unique().apply(lambda x: ', '.join(sorted(x))).to_dict()
+            # 3. Buat Peta dari Pos (Vessel) ke Area (EXE)
+            # Agregasi semua Area unik untuk setiap Pos
+            pos_to_area_map = area_info.groupby('Pos (Vessel)')['Area (EXE)'].unique().apply(lambda x: sorted(list(x))).to_dict()
 
             # 4. Proses Crane Sheet 2
             df_crane_s2.rename(columns={'Main Bay': 'Bay', 'Sequence': 'Seq.', 'QC': 'Crane'}, inplace=True)
-            # --- PERBAIKAN DI SINI ---
-            # Pastikan kolom-kolom kunci ada sebelum menghapus NaN
-            required_cols_s2 = ['Bay', 'Seq.', 'Crane']
-            if not all(col in df_crane_s2.columns for col in required_cols_s2):
-                st.error(f"Sheet2 of Crane file must contain columns: {', '.join(required_cols_s2)}")
-                st.stop()
-            df_crane_s2 = df_crane_s2.dropna(subset=required_cols_s2)
+            df_crane_s2 = df_crane_s2.dropna(subset=['Bay', 'Seq.', 'Crane'])
+            df_crane_s2['Bay_formatted'] = df_crane_s2['Bay'].apply(format_bay)
             
-            # 5. Buat kolom display gabungan menggunakan map yang sudah dibuat
+            # 5. Buat kolom display gabungan
             def get_display_text(row):
                 crane = row['Crane']
-                # Gunakan 'Bay' sebagai kunci untuk mencocokkan dengan 'Pos (Vessel)'
-                # Kita perlu memastikan tipe datanya cocok untuk lookup
-                pos_key = int(row['Bay'])
-                areas = pos_to_area_map.get(pos_key, 'N/A')
-                return f"{crane}\n({areas})"
+                bay_range = row['Bay_formatted']
+                
+                # Urai rentang bay (misal: "1-3" menjadi [1, 2, 3])
+                bays_in_range = []
+                if '-' in bay_range:
+                    start, end = map(int, bay_range.split('-'))
+                    bays_in_range = list(range(start, end + 1))
+                else:
+                    bays_in_range = [int(bay_range)]
+                
+                # Kumpulkan semua area dari semua Pos dalam rentang
+                all_areas = []
+                for pos in bays_in_range:
+                    if pos in pos_to_area_map:
+                        all_areas.extend(pos_to_area_map[pos])
+                
+                # Buat daftar Area yang unik dan terurut
+                unique_areas_str = ", ".join(sorted(list(set(all_areas))))
+                
+                return f"{crane}\n({unique_areas_str})"
 
             df_crane_s2['Display'] = df_crane_s2.apply(get_display_text, axis=1)
-            df_crane_s2['Bay_formatted'] = df_crane_s2['Bay'].apply(format_bay)
             
             # 6. Buat Pivot Table final
             pivot_crane = df_crane_s2.pivot_table(
