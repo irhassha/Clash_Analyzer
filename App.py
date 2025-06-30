@@ -158,7 +158,8 @@ with tab2:
             area_info['seq_in_bay'] = area_info.groupby('Bay_temp').cumcount() + 1
             
             # 4. Proses Crane Sheet 2
-            df_crane_s2.rename(columns={'Sequence': 'Seq.', 'QC': 'Crane'}, inplace=True)
+            # --- PERBAIKAN DI SINI ---
+            df_crane_s2.rename(columns={'Main Bay': 'Bay', 'Sequence': 'Seq.', 'QC': 'Crane'}, inplace=True)
             df_crane_s2['Bay_temp'] = df_crane_s2['Bay'].astype(str) # Gunakan Bay sebagai string sementara
             
             # 5. Gabungkan semua informasi
@@ -175,8 +176,6 @@ with tab2:
                 lambda row: f"{row['Crane']}\n({row['Area (EXE)']})" if pd.notna(row['Crane']) else '', axis=1
             )
             
-            # --- PERBAIKAN DI SINI ---
-            # Menggunakan kolom 'Bay' yang asli dari df_crane_s2, bukan 'Bay_x'
             final_crane_data['Bay_formatted'] = final_crane_data['Bay'].apply(format_bay)
 
             # 7. Buat Pivot Table final
