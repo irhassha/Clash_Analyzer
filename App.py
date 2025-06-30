@@ -61,7 +61,6 @@ with tab1:
             with st.spinner('Loading and processing data...'):
                 try:
                     # (Logika proses untuk Tab 1 tidak berubah)
-                    # 1. Loading & Cleaning
                     if schedule_file.name.lower().endswith(('.xls', '.xlsx')): df_schedule = pd.read_excel(schedule_file)
                     else: df_schedule = pd.read_csv(schedule_file)
                     df_schedule.columns = df_schedule.columns.str.strip()
@@ -149,7 +148,9 @@ with tab2:
                 st.stop()
             
             # 3. Buat Peta dari Pos (Vessel) ke Area (EXE)
-            # Agregasi semua Area unik untuk setiap Pos
+            # --- PERBAIKAN TIPE DATA DI SINI ---
+            # Pastikan 'Pos (Vessel)' adalah integer untuk pencocokan yang akurat
+            area_info['Pos (Vessel)'] = pd.to_numeric(area_info['Pos (Vessel)'], errors='coerce').dropna().astype(int)
             pos_to_area_map = area_info.groupby('Pos (Vessel)')['Area (EXE)'].unique().apply(lambda x: sorted(list(x))).to_dict()
 
             # 4. Proses Crane Sheet 2
