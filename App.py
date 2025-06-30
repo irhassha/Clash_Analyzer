@@ -28,7 +28,7 @@ def load_vessel_codes_from_repo(possible_names=['vessel codes.xlsx', 'vessel_cod
     st.error(f"Vessel code file not found."); return None
 
 # --- STRUKTUR TAB BARU ---
-tab1, tab2 = st.tabs(["Clash Monitoring", "Crane Seq."])
+tab1, tab2 = st.tabs(["Clash Monitoring", "Crane Sequence"])
 
 # --- KONTEN TAB 1: CLASH MONITORING ---
 with tab1:
@@ -118,6 +118,7 @@ with tab1:
         df_for_grid['ETA_Date'] = pd.to_datetime(df_for_grid['ETA']).dt.strftime('%Y-%m-%d')
         
         unique_dates = df_for_grid['ETA_Date'].unique()
+        # --- PERUBAHAN WARNA ZEBRA PATTERN DI SINI ---
         zebra_colors = ['#F8F0E5', '#DAC0A3'] 
         date_color_map = {date: zebra_colors[i % 2] for i, date in enumerate(unique_dates)}
 
@@ -258,20 +259,23 @@ with tab1:
         )
 
 
-# --- KONTEN TAB 2: CRANE Seq. ---
+# --- KONTEN TAB 2: CRANE SEQUENCE ---
 with tab2:
-    st.header("🏗️ Crane Seq. Visualizer")
+    st.header("🏗️ Crane Sequence Visualizer")
     
-    crane_file = st.file_uploader("Upload Crane Seq. File", type=['xlsx', 'csv'])
+    crane_file = st.file_uploader("Upload Crane Sequence File", type=['xlsx', 'csv'], key="crane_uploader")
     
     if crane_file:
         try:
             # Baca sheet kedua (index 1) dari file excel
             df_crane = pd.read_excel(crane_file, sheet_name=1)
             
+            # --- PERUBAHAN NAMA KOLOM DI SINI ---
+            df_crane.rename(columns={'Main Bay': 'Main bay', 'Sequence': 'Seq.', 'QC': 'Crane'}, inplace=True)
+            
             # Pra-proses data
-            df_crane = df_crane.dropna(subset=['Main bay']) # Hapus baris tanpa Main bay
-            df_crane['Main bay'] = df_crane['Main bay'].astype(int).astype(str) # Pastikan Main bay adalah string
+            df_crane = df_crane.dropna(subset=['Main bay']) # Hapus baris tanpa Main Bay
+            df_crane['Main bay'] = df_crane['Main bay'].astype(int).astype(str) # Pastikan Main Bay adalah string
             
             # Pivot tabel
             pivot_crane = df_crane.pivot(index='Seq.', columns='Main bay', values='Crane')
@@ -289,8 +293,8 @@ with tab2:
                 return ''
             
             # Tampilkan tabel dengan style
-            st.subheader("Crane Seq. Table")
+            st.subheader("Crane Sequence Table")
             st.dataframe(pivot_crane.style.applymap(color_crane_cells), use_container_width=True)
 
         except Exception as e:
-            st.error(f"Failed to process Crane Seq. file: {e}")
+            st.error(f"Failed to process Crane Sequence file: {e}")
