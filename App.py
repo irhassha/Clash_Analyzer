@@ -105,7 +105,7 @@ if process_button:
 if st.session_state.processed_df is not None:
     display_df = st.session_state.processed_df
     
-    st.header("✅ Analysis Result")
+    st.header("🧮 Analysis Result")
 
     # --- Persiapan untuk Styling AG Grid dan Summary ---
     
