@@ -143,45 +143,34 @@ with tab2:
                     left_on='Container',
                     right_on='Unit',
                     how='left'
-                ).fillna({'Area (EXE)': 'N/A'}) # Isi area kosong dengan N/A
+                ).fillna({'Area (EXE)': 'N/A'})
             else:
                 st.warning("Column 'Container' or 'Unit' not found.")
                 st.stop()
-                
-            # 3. Buat 'Bay' dari 'Pos (Vessel)' dan buat 'Seq' asumsi
-            def extract_bay_from_pos(pos):
-                if pd.isna(pos): return None
-                pos_str = str(int(pos))
-                return pos_str[:2] if len(pos_str) == 6 else pos_str[0]
             
-            area_info['Bay_temp'] = area_info['Pos (Vessel)'].apply(extract_bay_from_pos)
-            area_info['seq_in_bay'] = area_info.groupby('Bay_temp').cumcount() + 1
-            
-            # 4. Proses Crane Sheet 2
-            # --- PERBAIKAN DI SINI ---
+            # 3. Proses Crane Sheet 2
             df_crane_s2.rename(columns={'Main Bay': 'Bay', 'Sequence': 'Seq.', 'QC': 'Crane'}, inplace=True)
-            df_crane_s2['Bay_temp'] = df_crane_s2['Bay'].astype(str) # Gunakan Bay sebagai string sementara
+            df_crane_s2 = df_crane_s2.dropna(subset=['Bay', 'Seq.', 'Crane', 'Pos (Vessel)'])
             
-            # 5. Gabungkan semua informasi
-            final_crane_data = pd.merge(
+            # 4. Gabungkan informasi Crane dan Area berdasarkan 'Pos (Vessel)'
+            # Ini adalah kunci untuk menghindari asumsi urutan
+            final_data = pd.merge(
                 df_crane_s2,
-                area_info,
-                left_on=['Bay_temp', 'Seq.'],
-                right_on=['Bay_temp', 'seq_in_bay'],
+                area_info.drop_duplicates(subset=['Pos (Vessel)']), # Ambil info area unik per posisi
+                on='Pos (Vessel)',
                 how='left'
-            )
-            
-            # 6. Buat kolom display gabungan
-            final_crane_data['Display'] = final_crane_data.apply(
-                lambda row: f"{row['Crane']}\n({row['Area (EXE)']})" if pd.notna(row['Crane']) else '', axis=1
-            )
-            
-            final_crane_data['Bay_formatted'] = final_crane_data['Bay'].apply(format_bay)
+            ).fillna({'Area (EXE)': 'N/A'})
 
-            # 7. Buat Pivot Table final
-            pivot_crane = final_crane_data.pivot_table(
+            # 5. Buat kolom display gabungan
+            final_data['Display'] = final_data.apply(
+                lambda row: f"{row['Crane']}\n({row['Area (EXE)']})", axis=1
+            )
+            final_data['Bay_formatted'] = final_data['Bay'].apply(format_bay)
+
+            # 6. Buat Pivot Table final
+            pivot_crane = final_data.pivot_table(
                 index='Seq.', 
-                columns='Bay_formatted', # Gunakan kolom 'Bay' yang sudah diformat
+                columns='Bay_formatted',
                 values='Display', 
                 aggfunc='first'
             ).fillna('')
@@ -199,7 +188,7 @@ with tab2:
 
         except Exception as e:
             st.error(f"Failed to process Crane Sequence Visualizer: {e}")
-            st.error("Please ensure the 'Crane Sequence' file has 'Sheet1' (with Container, Pos (Vessel)) and 'Sheet2' (with Sequence, Bay, QC), and the 'Unit List' file has 'Unit' and 'Area (EXE)'.")
+            st.error("Please ensure the 'Crane Sequence' file has 'Sheet1' (with Container, Pos (Vessel)) and 'Sheet2' (with Sequence, Bay, Pos (Vessel), QC), and the 'Unit List' file has 'Unit' and 'Area (EXE)'.")
 
     elif crane_file_tab2:
         st.info("Please also upload the 'Unit List' file to generate the combined view.")
