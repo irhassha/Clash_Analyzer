@@ -3,6 +3,7 @@ import pandas as pd
 import os
 from datetime import datetime, timedelta
 import json
+import io
 
 # Import pustaka baru
 from st_aggrid import AgGrid, GridOptionsBuilder, JsCode
@@ -34,6 +35,9 @@ process_button = st.sidebar.button("🚀 Process Data", type="primary")
 
 if 'processed_df' not in st.session_state:
     st.session_state.processed_df = None
+if 'clash_summary_df' not in st.session_state:
+    st.session_state.clash_summary_df = None
+
 
 df_vessel_codes = load_vessel_codes_from_repo()
 
@@ -84,7 +88,6 @@ if process_button:
                 final_display_cols = cols_awal + sorted(final_cluster_cols)
                 pivot_df = pivot_df[final_display_cols]
                 
-                # Format ETA untuk display
                 pivot_df['ETA'] = pd.to_datetime(pivot_df['ETA']).dt.strftime('%Y-%m-%d %H:%M')
                 
                 pivot_df = pivot_df.sort_values(by='ETA', ascending=True).reset_index(drop=True)
@@ -104,17 +107,15 @@ if st.session_state.processed_df is not None:
     
     st.header("✅ Analysis Result")
 
-    # --- Persiapan untuk Styling AG Grid ---
+    # --- Persiapan untuk Styling AG Grid dan Summary ---
     
     df_for_grid = display_df.copy()
     df_for_grid['ETA_Date'] = pd.to_datetime(df_for_grid['ETA']).dt.strftime('%Y-%m-%d')
     
-    # Buat Peta Warna untuk Zebra Pattern
     unique_dates = df_for_grid['ETA_Date'].unique()
     zebra_colors = ['#F8F0E5', '#DAC0A3'] 
     date_color_map = {date: zebra_colors[i % 2] for i, date in enumerate(unique_dates)}
 
-    # Tentukan sel mana saja yang bentrok
     clash_map = {}
     cluster_cols = [col for col in df_for_grid.columns if col not in ['VESSEL', 'CODE', 'VOY_OUT', 'ETA', 'TTL BOX', 'TTL CLSTR', 'ETA_Date']]
     for date, group in df_for_grid.groupby('ETA_Date'):
@@ -125,59 +126,63 @@ if st.session_state.processed_df is not None:
         if clash_areas_for_date:
             clash_map[date] = clash_areas_for_date
 
-    # --- FITUR BARU: RINGKASAN CLASH DENGAN TAMPILAN KARTU ---
+    # --- TAMPILAN RINGKASAN CLASH ---
+    summary_data = [] # List untuk menyimpan data summary untuk di-download
     if clash_map:
+        # Daftar Block yang akan dikecualikan dari summary
+        summary_exclude_blocks = ['BR9', 'RC9', 'C01', 'D01', 'OOG']
+
         with st.expander("Show Clash Summary", expanded=True):
-            # Ringkasan utama di atas
             total_clash_days = len(clash_map)
             total_conflicting_blocks = sum(len(areas) for areas in clash_map.values())
             st.markdown(f"**🔥 Found {total_clash_days} clash day(s) with a total of {total_conflicting_blocks} conflicting blocks.**")
             st.markdown("---")
             
-            # Buat kolom untuk tampilan kartu
-            cols = st.columns(len(clash_map))
-            for i, (date, areas) in enumerate(sorted(clash_map.items())):
-                with cols[i]:
-                    # Bangun string HTML untuk setiap kartu
-                    summary_html = f"""
-                    <div style="background-color: #F8F9FA; border-radius: 10px; padding: 15px; height: 100%;">
-                        <strong style='font-size: 1.2em;'>Clash on: {date}</strong>
-                        <hr style='margin: 10px 0;'>
-                        <div style='line-height: 1.6;'>
-                    """
-                    for area in sorted(areas):
-                        clashing_rows = df_for_grid[
-                            (df_for_grid['ETA_Date'] == date) & (df_for_grid[area] > 0)
-                        ]
-                        clashing_vessels = clashing_rows['VESSEL'].tolist()
-                        total_clash_boxes = clashing_rows[area].sum()
-                        vessel_list_str = ", ".join(clashing_vessels)
-                        
-                        summary_html += f"<b>Block {area}</b> (<span style='color:#E67E22; font-weight:bold;'>{total_clash_boxes} boxes</span>):<br><small>{vessel_list_str}</small><br>"
+            summary_html = "<div style='line-height: 1.4;'>"
+            for date, areas in sorted(clash_map.items()):
+                # Filter area sebelum ditampilkan
+                filtered_areas = [area for area in areas if area not in summary_exclude_blocks]
+                if not filtered_areas:
+                    continue
+
+                summary_html += f"<strong style='font-size: 1.1em;'>Clash on: {date}</strong><br>"
+                for area in sorted(filtered_areas):
+                    clashing_rows = df_for_grid[(df_for_grid['ETA_Date'] == date) & (df_for_grid[area] > 0)]
+                    clashing_vessels = clashing_rows['VESSEL'].tolist()
+                    total_clash_boxes = clashing_rows[area].sum()
+                    vessel_list_str = ", ".join(clashing_vessels)
                     
-                    summary_html += "</div></div>"
-                    st.markdown(summary_html, unsafe_allow_html=True)
+                    summary_html += f"&nbsp;&nbsp;&nbsp;• <b>Block {area}</b> ({total_clash_boxes} boxes): {vessel_list_str}<br>"
+                    
+                    # Tambahkan data ke list untuk di-download
+                    summary_data.append({
+                        "Clash Date": date,
+                        "Block": area,
+                        "Total Boxes": total_clash_boxes,
+                        "Vessels": vessel_list_str
+                    })
+                summary_html += "<br>"
+            summary_html += "</div>"
+            st.markdown(summary_html, unsafe_allow_html=True)
+        
+        # Buat DataFrame dari data summary untuk di-download
+        st.session_state.clash_summary_df = pd.DataFrame(summary_data)
 
-    st.markdown("---") # Garis pemisah tetap di luar expander
+    st.markdown("---")
 
 
-    # --- PENGGUNAAN AG-GRID DENGAN SEMUA FITUR ---
-    
+    # --- PENGGUNAAN AG-GRID ---
     hide_zero_jscode = JsCode("""function(params) { if (params.value == 0 || params.value === null) { return ''; } return params.value; }""")
-    
     clash_cell_style_jscode = JsCode(f"""
         function(params) {{
             const clashMap = {json.dumps(clash_map)};
             const date = params.data.ETA_Date;
             const colId = params.colDef.field;
             const isClash = clashMap[date] ? clashMap[date].includes(colId) : false;
-            if (isClash) {{
-                return {{'backgroundColor': '#FFAA33', 'color': 'black'}};
-            }}
+            if (isClash) {{ return {{'backgroundColor': '#FFAA33', 'color': 'black'}}; }}
             return null;
         }}
     """)
-    
     zebra_row_style_jscode = JsCode(f"""
         function(params) {{
             const dateColorMap = {json.dumps(date_color_map)};
@@ -187,62 +192,41 @@ if st.session_state.processed_df is not None:
         }}
     """)
 
-    # --- KONFIGURASI GRID SECARA MANUAL (LEBIH STABIL) ---
-    
-    default_col_def = {
-        "suppressMenu": True,
-        "sortable": True,
-        "resizable": True,
-        "editable": False,
-        "minWidth": 40,
-    }
-    
+    default_col_def = {"suppressMenu": True, "sortable": True, "resizable": True, "editable": False, "minWidth": 40}
     column_defs = []
-    
-    # Kolom yang di-freeze
     pinned_cols = ['VESSEL', 'CODE', 'VOY_OUT', 'ETA', 'TTL BOX', 'TTL CLSTR']
     for col in pinned_cols:
         width = 110 if col == 'VESSEL' else 80
-        if col == 'ETA':
-            width = 120 
-        
-        col_def = {
-            "field": col,
-            "headerName": col,
-            "pinned": "left",
-            "width": width,
-        }
-        if col in ["TTL BOX", "TTL CLSTR"]:
-            col_def["cellRenderer"] = hide_zero_jscode
+        if col == 'ETA': width = 120 
+        col_def = {"field": col, "headerName": col, "pinned": "left", "width": width}
+        if col in ["TTL BOX", "TTL CLSTR"]: col_def["cellRenderer"] = hide_zero_jscode
         column_defs.append(col_def)
-
-    # Kolom Cluster
     for col in cluster_cols:
-        column_defs.append({
-            "field": col,
-            "headerName": col,
-            "width": 60,
-            "cellRenderer": hide_zero_jscode,
-            "cellStyle": clash_cell_style_jscode,
-        })
-    
+        column_defs.append({"field": col, "headerName": col, "width": 60, "cellRenderer": hide_zero_jscode, "cellStyle": clash_cell_style_jscode})
     column_defs.append({"field": "ETA_Date", "hide": True})
+    gridOptions = {"defaultColDef": default_col_def, "columnDefs": column_defs, "getRowStyle": zebra_row_style_jscode}
 
-    gridOptions = {
-        "defaultColDef": default_col_def,
-        "columnDefs": column_defs,
-        "getRowStyle": zebra_row_style_jscode,
-    }
-
-    # Tampilkan tabel
-    AgGrid(
-        df_for_grid,
-        gridOptions=gridOptions,
-        height=600,
-        width='100%',
-        theme='streamlit',
-        allow_unsafe_jscode=True,
-    )
+    AgGrid(df_for_grid, gridOptions=gridOptions, height=600, width='100%', theme='streamlit', allow_unsafe_jscode=True)
     
-    csv_export = display_df.to_csv(index=False).encode('utf-8')
-    st.download_button(label="📥 Download Result as CSV", data=csv_export, file_name='analysis_result.csv', mime='text/csv')
+    # --- LOGIKA TOMBOL DOWNLOAD EXCEL ---
+    output = io.BytesIO()
+    with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
+        display_df.to_excel(writer, index=False, sheet_name='Analysis Result')
+        
+        # Jika ada summary, tulis ke sheet kedua
+        if 'clash_summary_df' in st.session_state and st.session_state.clash_summary_df is not None:
+            st.session_state.clash_summary_df.to_excel(writer, index=False, sheet_name='Clash Summary')
+            
+            # Auto-adjust column widths for summary sheet
+            summary_sheet = writer.sheets['Clash Summary']
+            for idx, col in enumerate(st.session_state.clash_summary_df):
+                series = st.session_state.clash_summary_df[col]
+                max_len = max((series.astype(str).map(len).max(), len(str(series.name)))) + 2
+                summary_sheet.set_column(idx, idx, max_len)
+
+    st.download_button(
+        label="📥 Download Excel Report",
+        data=output.getvalue(),
+        file_name="analysis_report.xlsx",
+        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    )
