@@ -284,8 +284,10 @@ if st.session_state.processed_df is not None:
                 pdf = PDF('L', 'mm', 'A4')
                 pdf.create_clash_report(st.session_state.clash_summary_df.to_dict('records'))
 
-                raw_pdf = pdf.output(dest='S')
-                pdf_data = raw_pdf.encode('latin-1') if isinstance(raw_pdf, str) else raw_pdf
+                # ✅ Simpan ke buffer (bytes), bukan string
+                buffer = io.BytesIO()
+                pdf.output(buffer)
+                pdf_data = buffer.getvalue()
 
                 st.download_button(
                     label="📄 Download PDF Summary",
