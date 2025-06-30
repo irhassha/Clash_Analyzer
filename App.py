@@ -174,12 +174,15 @@ with tab2:
             final_crane_data['Display'] = final_crane_data.apply(
                 lambda row: f"{row['Crane']}\n({row['Area (EXE)']})" if pd.notna(row['Crane']) else '', axis=1
             )
-            final_crane_data['Bay'] = final_crane_data['Bay_x'].apply(format_bay)
+            
+            # --- PERBAIKAN DI SINI ---
+            # Menggunakan kolom 'Bay' yang asli dari df_crane_s2, bukan 'Bay_x'
+            final_crane_data['Bay_formatted'] = final_crane_data['Bay'].apply(format_bay)
 
             # 7. Buat Pivot Table final
             pivot_crane = final_crane_data.pivot_table(
                 index='Seq.', 
-                columns='Bay', 
+                columns='Bay_formatted', # Gunakan kolom 'Bay' yang sudah diformat
                 values='Display', 
                 aggfunc='first'
             ).fillna('')
