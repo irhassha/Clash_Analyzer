@@ -61,9 +61,11 @@ class PDF(FPDF):
             # Simpan posisi y awal
             y_start = self.get_y()
             
+            # Encode text to latin-1 to handle special characters
+            vessel_text = item.get('Vessels', '').encode('latin-1', 'replace').decode('latin-1')
+
             # Hitung ketinggian multi-cell untuk kolom Vessels
             self.set_font('Arial', '', 8) # Font lebih kecil untuk daftar kapal
-            vessel_text = item.get('Vessels', '')
             vessel_height = self.get_string_width(vessel_text)
             num_lines = (vessel_height // (col_widths['vessels'] - 2)) + 1
             row_height = max(12, 6 * num_lines)
@@ -283,12 +285,11 @@ if st.session_state.processed_df is not None:
                 pdf = PDF('L', 'mm', 'A4') # Gunakan mode Landscape
                 pdf.create_clash_report(st.session_state.clash_summary_df.to_dict('records'))
                 
-                # --- PERBAIKAN FINAL DI SINI ---
-                # pdf.output() dengan dest='S' menghasilkan string, yang harus di-encode ke bytes
-                # latin-1 adalah encoding yang aman untuk data biner seperti PDF
+                # --- PERBAIKAN DI SINI ---
+                # Gunakan pdf.output() tanpa parameter untuk mendapatkan bytes langsung
                 st.download_button(
                     label="📄 Download PDF Summary",
-                    data=pdf.output(dest='S').encode('latin-1'),
+                    data=pdf.output(),
                     file_name="clash_summary_report.pdf",
                     mime="application/pdf"
                 )
