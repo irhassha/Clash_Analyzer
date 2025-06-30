@@ -201,7 +201,13 @@ with tab2:
                 df_unit_list = pd.read_csv(unit_list_file)
             df_unit_list.columns = df_unit_list.columns.str.strip()
             
+            # --- PERBAIKAN DI SINI ---
+            # Pastikan kolom ada sebelum melakukan pembersihan spasi
             if 'Container' in df_crane_sheet1.columns and 'Unit' in df_unit_list.columns:
+                # Ubah ke tipe string dan hapus spasi di awal/akhir
+                df_crane_sheet1['Container'] = df_crane_sheet1['Container'].astype(str).str.strip()
+                df_unit_list['Unit'] = df_unit_list['Unit'].astype(str).str.strip()
+
                 merged_df = pd.merge(
                     df_crane_sheet1[['Container']], # Hanya butuh kolom container
                     df_unit_list,
