@@ -168,7 +168,7 @@ with tab2:
                 df_unit_list = pd.read_csv(unit_list_file)
             df_unit_list.columns = df_unit_list.columns.str.strip()
             
-            # Pastikan kolom-kolom yang dibutuhkan ada
+            # --- PERBAIKAN LOGIKA PENGECEKAN KOLOM ---
             required_cols_s1 = ['Container', 'Pos (Vessel)']
             required_cols_s2 = ['Bay', 'Crane', 'Direction'] 
             required_cols_unit = ['Unit', 'Area (EXE)']
@@ -205,7 +205,11 @@ with tab2:
                     return pos_str[0] if len(pos_str) == 5 else pos_str[:2] if len(pos_str) == 6 else ''
                 
                 df_crane_s1['Pos'] = df_crane_s1['Pos (Vessel)'].apply(extract_pos)
-                df_crane_s1['Crane'] = df_crane_s1['Pos (Vessel)'].map(pos_to_crane_map).fillna('N/A')
+                
+                # --- PERBAIKAN FINAL DI SINI ---
+                # Gunakan kolom 'Pos' yang sudah diproses untuk mencocokkan
+                # Ubah 'Pos' ke numerik untuk lookup yang benar
+                df_crane_s1['Crane'] = pd.to_numeric(df_crane_s1['Pos'], errors='coerce').map(pos_to_crane_map).fillna('N/A')
                 
                 # 3. Gabungkan dengan Unit List untuk mendapatkan Area
                 df_crane_s1['Container'] = df_crane_s1['Container'].astype(str).str.strip()
