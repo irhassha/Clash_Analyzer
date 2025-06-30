@@ -159,7 +159,7 @@ with tab2:
 
             df_crane_s2 = pd.read_excel(crane_file_tab2, sheet_name=1)
             df_crane_s2.columns = df_crane_s2.columns.str.strip()
-            df_crane_s2.rename(columns={'Main Bay': 'Bay', 'QC': 'Crane'}, inplace=True)
+            df_crane_s2.rename(columns={'Main Bay': 'Bay', 'QC': 'Crane', 'Sequence': 'Seq.'}, inplace=True)
 
 
             if unit_list_file.name.lower().endswith(('.xls', '.xlsx')):
@@ -168,34 +168,38 @@ with tab2:
                 df_unit_list = pd.read_csv(unit_list_file)
             df_unit_list.columns = df_unit_list.columns.str.strip()
             
-            # --- PERBAIKAN LOGIKA PENGECEKAN KOLOM ---
+            # Pastikan kolom-kolom yang dibutuhkan ada
             required_cols_s1 = ['Container', 'Pos (Vessel)']
-            required_cols_s2 = ['Bay', 'Crane', 'Direction'] 
+            required_cols_s2 = ['Bay', 'Crane', 'Direction', 'Seq.'] 
             required_cols_unit = ['Unit', 'Area (EXE)']
             
             if all(col in df_crane_s1.columns for col in required_cols_s1) and \
                all(col in df_crane_s2.columns for col in required_cols_s2) and \
                all(col in df_unit_list.columns for col in required_cols_unit):
                 
-                # --- LOGIKA BARU UNTUK MENCARI CRANE ---
+                # --- LOGIKA BARU UNTUK MENCARI CRANE & SEQ ---
                 
-                # 1. Buat peta dari Pos ke Crane, HANYA untuk 'Loading'
+                # 1. Buat peta dari Pos ke Crane dan Seq, HANYA untuk 'Loading'
                 pos_to_crane_map = {}
+                pos_to_seq_map = {}
                 df_crane_s2_loading = df_crane_s2[df_crane_s2['Direction'] == 'Loading'].copy()
-                df_crane_s2_cleaned = df_crane_s2_loading.dropna(subset=['Bay', 'Crane'])
+                df_crane_s2_cleaned = df_crane_s2_loading.dropna(subset=['Bay', 'Crane', 'Seq.'])
                 
                 for _, row in df_crane_s2_cleaned.iterrows():
                     bay_range_str = format_bay(row['Bay'])
                     crane = row['Crane']
+                    seq = row['Seq.']
                     if bay_range_str:
                         if '-' in bay_range_str:
                             start, end = map(int, bay_range_str.split('-'))
                             for pos in range(start, end + 1):
                                 pos_to_crane_map[pos] = crane
+                                pos_to_seq_map[pos] = seq
                         else:
                             pos_to_crane_map[int(bay_range_str)] = crane
+                            pos_to_seq_map[int(bay_range_str)] = seq
                 
-                # 2. Proses Sheet1 dan tambahkan kolom Crane dan Pos
+                # 2. Proses Sheet1 dan tambahkan kolom-kolom baru
                 df_crane_s1['Pos (Vessel)'] = pd.to_numeric(df_crane_s1['Pos (Vessel)'], errors='coerce')
                 df_crane_s1.dropna(subset=['Pos (Vessel)'], inplace=True)
                 df_crane_s1['Pos (Vessel)'] = df_crane_s1['Pos (Vessel)'].astype(int)
@@ -205,18 +209,15 @@ with tab2:
                     return pos_str[0] if len(pos_str) == 5 else pos_str[:2] if len(pos_str) == 6 else ''
                 
                 df_crane_s1['Pos'] = df_crane_s1['Pos (Vessel)'].apply(extract_pos)
-                
-                # --- PERBAIKAN FINAL DI SINI ---
-                # Gunakan kolom 'Pos' yang sudah diproses untuk mencocokkan
-                # Ubah 'Pos' ke numerik untuk lookup yang benar
-                df_crane_s1['Crane'] = pd.to_numeric(df_crane_s1['Pos'], errors='coerce').map(pos_to_crane_map).fillna('N/A')
+                df_crane_s1['Crane'] = df_crane_s1['Pos (Vessel)'].map(pos_to_crane_map).fillna('N/A')
+                df_crane_s1['Seq.'] = df_crane_s1['Pos (Vessel)'].map(pos_to_seq_map).fillna('N/A')
                 
                 # 3. Gabungkan dengan Unit List untuk mendapatkan Area
                 df_crane_s1['Container'] = df_crane_s1['Container'].astype(str).str.strip()
                 df_unit_list['Unit'] = df_unit_list['Unit'].astype(str).str.strip()
                 
                 merged_df = pd.merge(
-                    df_crane_s1[['Container', 'Pos', 'Crane']],
+                    df_crane_s1[['Container', 'Pos', 'Crane', 'Seq.']],
                     df_unit_list[['Unit', 'Area (EXE)']],
                     left_on='Container',
                     right_on='Unit',
@@ -225,7 +226,7 @@ with tab2:
                 
                 if not merged_df.empty:
                     # 4. Tampilkan hasil
-                    result_df = merged_df[['Container', 'Pos', 'Crane', 'Area (EXE)']].drop_duplicates()
+                    result_df = merged_df[['Container', 'Pos', 'Crane', 'Seq.', 'Area (EXE)']].drop_duplicates()
                     st.write(f"Found area information for {len(result_df)} matching containers.")
                     st.dataframe(result_df, use_container_width=True)
                 else:
