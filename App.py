@@ -112,7 +112,7 @@ if st.session_state.processed_df is not None:
     
     # Buat Peta Warna untuk Zebra Pattern
     unique_dates = df_for_grid['ETA_Date'].unique()
-    zebra_colors = ['#F8F0E5', '#DAC0A3'] 
+    zebra_colors = ['#FFFFFF', '#F0F2F6'] 
     date_color_map = {date: zebra_colors[i % 2] for i, date in enumerate(unique_dates)}
 
     # Tentukan sel mana saja yang bentrok
@@ -125,6 +125,21 @@ if st.session_state.processed_df is not None:
                 clash_areas_for_date.append(col)
         if clash_areas_for_date:
             clash_map[date] = clash_areas_for_date
+
+    # --- FITUR BARU: RINGKASAN CLASH ---
+    if clash_map:
+        with st.expander("Show Clash Summary", expanded=True):
+            for date, areas in sorted(clash_map.items()):
+                st.subheader(f"Clash on: {date}")
+                for area in sorted(areas):
+                    # Cari kapal yang bentrok di area spesifik pada tanggal spesifik
+                    clashing_vessels = df_for_grid[
+                        (df_for_grid['ETA_Date'] == date) & (df_for_grid[area] > 0)
+                    ]['VESSEL'].tolist()
+                    vessel_list_str = ", ".join(clashing_vessels)
+                    st.markdown(f"- **Area {area}:** `{vessel_list_str}`")
+            st.markdown("---")
+
 
     # --- PENGGUNAAN AG-GRID DENGAN SEMUA FITUR ---
     
@@ -200,7 +215,7 @@ if st.session_state.processed_df is not None:
     }
 
     # Tampilkan tabel
-    st.markdown("---")
+    st.dataframe(gridOptions) # Ini harusnya AgGrid
     AgGrid(
         df_for_grid,
         gridOptions=gridOptions,
