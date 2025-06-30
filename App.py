@@ -159,7 +159,6 @@ with tab2:
 
             df_crane_s2 = pd.read_excel(crane_file_tab2, sheet_name=1)
             df_crane_s2.columns = df_crane_s2.columns.str.strip()
-            # --- PERBAIKAN DI SINI: Ganti nama kolom SEBELUM pengecekan ---
             df_crane_s2.rename(columns={'Main Bay': 'Bay', 'QC': 'Crane'}, inplace=True)
 
 
@@ -171,7 +170,7 @@ with tab2:
             
             # Pastikan kolom-kolom yang dibutuhkan ada
             required_cols_s1 = ['Container', 'Pos (Vessel)']
-            required_cols_s2 = ['Bay', 'Crane'] # Cek nama kolom yang sudah diganti
+            required_cols_s2 = ['Bay', 'Crane'] 
             required_cols_unit = ['Unit', 'Area (EXE)']
             
             if all(col in df_crane_s1.columns for col in required_cols_s1) and \
@@ -195,6 +194,7 @@ with tab2:
                             pos_to_crane_map[int(bay_range_str)] = crane
                 
                 # 2. Proses Sheet1 dan tambahkan kolom Crane dan Pos
+                # --- PERBAIKAN TIPE DATA DI SINI ---
                 df_crane_s1['Pos (Vessel)'] = pd.to_numeric(df_crane_s1['Pos (Vessel)'], errors='coerce')
                 df_crane_s1.dropna(subset=['Pos (Vessel)'], inplace=True)
                 df_crane_s1['Pos (Vessel)'] = df_crane_s1['Pos (Vessel)'].astype(int)
@@ -204,7 +204,7 @@ with tab2:
                     return pos_str[0] if len(pos_str) == 5 else pos_str[:2] if len(pos_str) == 6 else ''
                 
                 df_crane_s1['Pos'] = df_crane_s1['Pos (Vessel)'].apply(extract_pos)
-                df_crane_s1['Crane'] = df_crane_s1['Pos (Vessel)'].map(pos_to_crane_map)
+                df_crane_s1['Crane'] = df_crane_s1['Pos (Vessel)'].map(pos_to_crane_map).fillna('N/A')
                 
                 # 3. Gabungkan dengan Unit List untuk mendapatkan Area
                 df_crane_s1['Container'] = df_crane_s1['Container'].astype(str).str.strip()
