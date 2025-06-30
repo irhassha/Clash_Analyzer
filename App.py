@@ -67,7 +67,6 @@ if process_button:
                 grouping_cols = ['VESSEL', 'CODE', 'VOY_OUT', 'ETA']
                 pivot_df = filtered_data.pivot_table(index=grouping_cols, columns='Area (EXE)', aggfunc='size', fill_value=0)
                 
-                # --- PERUBAHAN NAMA KOLOM DI SINI ---
                 cluster_cols_for_calc = pivot_df.columns.tolist()
                 pivot_df['TTL BOX'] = pivot_df[cluster_cols_for_calc].sum(axis=1)
                 pivot_df['TTL CLSTR'] = (pivot_df[cluster_cols_for_calc] > 0).sum(axis=1)
@@ -214,8 +213,9 @@ if st.session_state.processed_df is not None:
         "getRowStyle": zebra_row_style_jscode,
     }
 
-    # Tampilkan tabel
-    st.dataframe(gridOptions) # Ini harusnya AgGrid
+    # --- PERBAIKAN: Hapus baris yang salah ---
+    # st.dataframe(gridOptions) # Baris ini menyebabkan error dan sudah dihapus.
+    
     AgGrid(
         df_for_grid,
         gridOptions=gridOptions,
