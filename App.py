@@ -113,7 +113,7 @@ if st.session_state.processed_df is not None:
     df_for_grid['ETA_Date'] = pd.to_datetime(df_for_grid['ETA']).dt.strftime('%Y-%m-%d')
     
     unique_dates = df_for_grid['ETA_Date'].unique()
-    zebra_colors = ['#FFFFFF', '#F0F2F6'] 
+    zebra_colors = ['#F8F0E5', '#DAC0A3'] 
     date_color_map = {date: zebra_colors[i % 2] for i, date in enumerate(unique_dates)}
 
     clash_map = {}
