@@ -270,11 +270,11 @@ with tab2:
             df_crane = pd.read_excel(crane_file, sheet_name=1)
             
             # Pra-proses data
-            df_crane = df_crane.dropna(subset=['Main Bay']) # Hapus baris tanpa Main Bay
-            df_crane['Main Bay'] = df_crane['Main Bay'].astype(int).astype(str) # Pastikan Main Bay adalah string
+            df_crane = df_crane.dropna(subset=['Main bay']) # Hapus baris tanpa Main bay
+            df_crane['Main bay'] = df_crane['Main bay'].astype(int).astype(str) # Pastikan Main bay adalah string
             
             # Pivot tabel
-            pivot_crane = df_crane.pivot(index='Sequence', columns='Main Bay', values='QC')
+            pivot_crane = df_crane.pivot(index='Sequence', columns='Main bay', values='QC')
             pivot_crane = pivot_crane.fillna('') # Ganti NaN dengan string kosong
             
             # Buat palet warna untuk setiap crane
