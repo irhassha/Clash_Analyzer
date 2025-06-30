@@ -129,8 +129,7 @@ with tab2:
         try:
             df_crane_sheet2 = pd.read_excel(crane_file_tab2, sheet_name=1)
             
-            # --- PERUBAHAN LOGIKA DI SINI ---
-            # 1. Ganti nama kolom dan bersihkan kolom 'Bay'
+            # Ganti nama kolom dan bersihkan kolom 'Bay'
             df_crane_sheet2.rename(columns={'Sequence': 'Seq.', 'QC': 'Crane'}, inplace=True)
             df_crane_sheet2 = df_crane_sheet2.dropna(subset=['Bay'])
 
@@ -145,14 +144,11 @@ with tab2:
 
             df_crane_sheet2['Bay'] = df_crane_sheet2['Bay'].apply(format_bay)
             
-            # 2. Pivot tabel menggunakan kolom 'Bay' yang sudah bersih
             pivot_crane = df_crane_sheet2.pivot(index='Seq.', columns='Bay', values='Crane').fillna('')
 
-            # 3. Urutkan kolom 'Bay' secara numerik
             sorted_bays = sorted(pivot_crane.columns, key=lambda x: int(x.split('-')[0]))
             pivot_crane = pivot_crane[sorted_bays]
             
-            # 4. Buat palet warna dan tampilkan
             unique_cranes = df_crane_sheet2['Crane'].unique()
             crane_colors = ['#8dd3c7','#ffffb3','#bebada','#fb8072','#80b1d3','#fdb462','#b3de69','#fccde5','#d9d9d9','#bc80bd']
             color_map = {crane: crane_colors[i % len(crane_colors)] for i, crane in enumerate(unique_cranes)}
@@ -182,12 +178,32 @@ with tab2:
                 df_unit_list = pd.read_csv(unit_list_file)
             df_unit_list.columns = df_unit_list.columns.str.strip()
             
-            if 'Container' in df_crane_sheet1.columns and 'Unit' in df_unit_list.columns:
+            if 'Container' in df_crane_sheet1.columns and 'Unit' in df_unit_list.columns and 'Pos (Vessel)' in df_crane_sheet1.columns:
+                
+                # --- PERUBAHAN LOGIKA DI SINI ---
+                
+                # 1. Buat fungsi untuk memproses 'Pos (Vessel)'
+                def extract_pos(pos):
+                    if pd.isna(pos):
+                        return ''
+                    pos_str = str(int(pos)) # Konversi ke string tanpa desimal
+                    if len(pos_str) == 5:
+                        return pos_str[0]
+                    elif len(pos_str) == 6:
+                        return pos_str[:2]
+                    else:
+                        return '' # Atau nilai default lain jika tidak 5 atau 6 digit
+
+                # 2. Tambahkan kolom baru 'Pos' yang sudah diproses
+                df_crane_sheet1['Pos'] = df_crane_sheet1['Pos (Vessel)'].apply(extract_pos)
+                
+                # 3. Bersihkan kolom untuk matching
                 df_crane_sheet1['Container'] = df_crane_sheet1['Container'].astype(str).str.strip()
                 df_unit_list['Unit'] = df_unit_list['Unit'].astype(str).str.strip()
 
+                # 4. Gabungkan data
                 merged_df = pd.merge(
-                    df_crane_sheet1[['Container']],
+                    df_crane_sheet1[['Container', 'Pos']], # Ambil kolom baru
                     df_unit_list,
                     left_on='Container',
                     right_on='Unit',
@@ -195,13 +211,14 @@ with tab2:
                 )
                 
                 if not merged_df.empty:
-                    result_df = merged_df[['Container', 'Area (EXE)']].drop_duplicates()
+                    # 5. Tampilkan hasil dengan kolom 'Pos'
+                    result_df = merged_df[['Container', 'Pos', 'Area (EXE)']].drop_duplicates()
                     st.write(f"Found area information for {len(result_df)} matching containers.")
                     st.dataframe(result_df, use_container_width=True)
                 else:
                     st.info("No matching containers found between the two files.")
             else:
-                st.warning("Required columns ('Container' in Crane file, 'Unit' in Unit List) not found.")
+                st.warning("Required columns ('Container', 'Pos (Vessel)' in Crane file, 'Unit' in Unit List) not found.")
         except Exception as e:
             st.error(f"Failed to process Container Area Lookup: {e}")
     else:
