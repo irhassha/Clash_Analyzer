@@ -126,10 +126,9 @@ if st.session_state.processed_df is not None:
         if clash_areas_for_date:
             clash_map[date] = clash_areas_for_date
 
-    # --- TAMPILAN RINGKASAN CLASH ---
-    summary_data = [] # List untuk menyimpan data summary untuk di-download
+    # --- TAMPILAN RINGKASAN CLASH DENGAN KARTU ---
+    summary_data = []
     if clash_map:
-        # Daftar Block yang akan dikecualikan dari summary
         summary_exclude_blocks = ['BR9', 'RC9', 'C01', 'D01', 'OOG']
 
         with st.expander("Show Clash Summary", expanded=True):
@@ -138,34 +137,41 @@ if st.session_state.processed_df is not None:
             st.markdown(f"**🔥 Found {total_clash_days} clash day(s) with a total of {total_conflicting_blocks} conflicting blocks.**")
             st.markdown("---")
             
-            summary_html = "<div style='line-height: 1.4;'>"
-            for date, areas in sorted(clash_map.items()):
-                # Filter area sebelum ditampilkan
-                filtered_areas = [area for area in areas if area not in summary_exclude_blocks]
-                if not filtered_areas:
-                    continue
+            # Buat kolom untuk setiap tanggal yang bentrok
+            clash_dates = sorted(clash_map.keys())
+            cols = st.columns(len(clash_dates))
 
-                summary_html += f"<strong style='font-size: 1.1em;'>Clash on: {date}</strong><br>"
-                for area in sorted(filtered_areas):
-                    clashing_rows = df_for_grid[(df_for_grid['ETA_Date'] == date) & (df_for_grid[area] > 0)]
-                    clashing_vessels = clashing_rows['VESSEL'].tolist()
-                    total_clash_boxes = clashing_rows[area].sum()
-                    vessel_list_str = ", ".join(clashing_vessels)
+            for i, date in enumerate(clash_dates):
+                with cols[i]:
+                    areas = clash_map[date]
+                    filtered_areas = [area for area in areas if area not in summary_exclude_blocks]
+                    if not filtered_areas:
+                        continue
                     
-                    summary_html += f"&nbsp;&nbsp;&nbsp;• <b>Block {area}</b> ({total_clash_boxes} boxes): {vessel_list_str}<br>"
-                    
-                    # Tambahkan data ke list untuk di-download
-                    summary_data.append({
-                        "Clash Date": date,
-                        "Block": area,
-                        "Total Boxes": total_clash_boxes,
-                        "Vessels": vessel_list_str
-                    })
-                summary_html += "<br>"
-            summary_html += "</div>"
-            st.markdown(summary_html, unsafe_allow_html=True)
+                    # Bangun konten HTML untuk kartu
+                    summary_html = f"""
+                    <div style="background-color: #F8F9FA; border: 1px solid #E9ECEF; border-radius: 10px; padding: 15px; height: 100%;">
+                        <strong style='font-size: 1.2em;'>Clash on: {date}</strong>
+                        <hr style='margin: 10px 0;'>
+                        <div style='line-height: 1.7;'>
+                    """
+                    for area in sorted(filtered_areas):
+                        clashing_rows = df_for_grid[(df_for_grid['ETA_Date'] == date) & (df_for_grid[area] > 0)]
+                        clashing_vessels = clashing_rows['VESSEL'].tolist()
+                        total_clash_boxes = clashing_rows[area].sum()
+                        vessel_list_str = ", ".join(clashing_vessels)
+                        
+                        summary_html += f"<b>Block {area}</b> (<span style='color:#E67E22; font-weight:bold;'>{total_clash_boxes} boxes</span>):<br><small>{vessel_list_str}</small><br>"
+                        
+                        summary_data.append({
+                            "Clash Date": date,
+                            "Block": area,
+                            "Total Boxes": total_clash_boxes,
+                            "Vessels": vessel_list_str
+                        })
+                    summary_html += "</div></div>"
+                    st.markdown(summary_html, unsafe_allow_html=True)
         
-        # Buat DataFrame dari data summary untuk di-download
         st.session_state.clash_summary_df = pd.DataFrame(summary_data)
 
     st.markdown("---")
@@ -213,11 +219,9 @@ if st.session_state.processed_df is not None:
     with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
         display_df.to_excel(writer, index=False, sheet_name='Analysis Result')
         
-        # Jika ada summary, tulis ke sheet kedua
         if 'clash_summary_df' in st.session_state and st.session_state.clash_summary_df is not None:
             st.session_state.clash_summary_df.to_excel(writer, index=False, sheet_name='Clash Summary')
             
-            # Auto-adjust column widths for summary sheet
             summary_sheet = writer.sheets['Clash Summary']
             for idx, col in enumerate(st.session_state.clash_summary_df):
                 series = st.session_state.clash_summary_df[col]
