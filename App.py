@@ -153,13 +153,21 @@ with tab2:
 
             # 4. Proses Crane Sheet 2
             df_crane_s2.rename(columns={'Main Bay': 'Bay', 'Sequence': 'Seq.', 'QC': 'Crane'}, inplace=True)
-            df_crane_s2 = df_crane_s2.dropna(subset=['Bay', 'Seq.', 'Crane', 'Pos (Vessel)'])
+            # --- PERBAIKAN DI SINI ---
+            # Pastikan kolom-kolom kunci ada sebelum menghapus NaN
+            required_cols_s2 = ['Bay', 'Seq.', 'Crane']
+            if not all(col in df_crane_s2.columns for col in required_cols_s2):
+                st.error(f"Sheet2 of Crane file must contain columns: {', '.join(required_cols_s2)}")
+                st.stop()
+            df_crane_s2 = df_crane_s2.dropna(subset=required_cols_s2)
             
             # 5. Buat kolom display gabungan menggunakan map yang sudah dibuat
             def get_display_text(row):
                 crane = row['Crane']
-                pos = row['Pos (Vessel)']
-                areas = pos_to_area_map.get(pos, 'N/A')
+                # Gunakan 'Bay' sebagai kunci untuk mencocokkan dengan 'Pos (Vessel)'
+                # Kita perlu memastikan tipe datanya cocok untuk lookup
+                pos_key = int(row['Bay'])
+                areas = pos_to_area_map.get(pos_key, 'N/A')
                 return f"{crane}\n({areas})"
 
             df_crane_s2['Display'] = df_crane_s2.apply(get_display_text, axis=1)
@@ -186,7 +194,7 @@ with tab2:
 
         except Exception as e:
             st.error(f"Failed to process Crane Sequence Visualizer: {e}")
-            st.error("Please ensure the 'Crane Sequence' file has 'Sheet1' (with Container, Pos (Vessel)) and 'Sheet2' (with Sequence, Bay, Pos (Vessel), QC), and the 'Unit List' file has 'Unit' and 'Area (EXE)'.")
+            st.error("Please ensure the 'Crane Sequence' file has 'Sheet1' (with Container, Pos (Vessel)) and 'Sheet2' (with Sequence, Bay, QC), and the 'Unit List' file has 'Unit' and 'Area (EXE)'.")
 
     elif crane_file_tab2:
         st.info("Please also upload the 'Unit List' file to generate the combined view.")
