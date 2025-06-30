@@ -279,19 +279,18 @@ if st.session_state.processed_df is not None:
         )
         
     with col2:
-        if 'clash_summary_df' in st.session_state and st.session_state.clash_summary_df is not None:
-            # Pastikan ada data untuk dibuat PDF
-            if not st.session_state.clash_summary_df.empty:
-                pdf = PDF('L', 'mm', 'A4') # Gunakan mode Landscape
-                pdf.create_clash_report(st.session_state.clash_summary_df.to_dict('records'))
-                
-                # --- PERBAIKAN FINAL DI SINI ---
-                # Menggunakan pdf.output() dengan dest='S' untuk mendapatkan string, lalu di-encode
-                pdf_data = pdf.output(dest='S').encode('latin-1')
-                
-                st.download_button(
-                    label="📄 Download PDF Summary",
-                    data=pdf_data,
-                    file_name="clash_summary_report.pdf",
-                    mime="application/pdf"
-                )
+    if 'clash_summary_df' in st.session_state and st.session_state.clash_summary_df is not None:
+        if not st.session_state.clash_summary_df.empty:
+            pdf = PDF('L', 'mm', 'A4')
+            pdf.create_clash_report(st.session_state.clash_summary_df.to_dict('records'))
+            
+            # FIXED: no need to encode again
+            pdf_data = pdf.output(dest='S')  # already bytes
+            
+            st.download_button(
+                label="📄 Download PDF Summary",
+                data=pdf_data,
+                file_name="clash_summary_report.pdf",
+                mime="application/pdf"
+            )
+
