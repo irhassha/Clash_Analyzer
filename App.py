@@ -158,7 +158,7 @@ if st.session_state.processed_df is not None:
     df_for_grid['ETA_Date'] = pd.to_datetime(df_for_grid['ETA']).dt.strftime('%Y-%m-%d')
     
     unique_dates = df_for_grid['ETA_Date'].unique()
-    zebra_colors = ['#FFFFFF', '#F0F2F6'] 
+    zebra_colors = ['#F8F0E5', '#DAC0A3'] 
     date_color_map = {date: zebra_colors[i % 2] for i, date in enumerate(unique_dates)}
 
     clash_map = {}
@@ -285,11 +285,13 @@ if st.session_state.processed_df is not None:
                 pdf = PDF('L', 'mm', 'A4') # Gunakan mode Landscape
                 pdf.create_clash_report(st.session_state.clash_summary_df.to_dict('records'))
                 
-                # --- PERBAIKAN DI SINI ---
-                # Gunakan pdf.output() tanpa parameter untuk mendapatkan bytes langsung
+                # --- PERBAIKAN FINAL DI SINI ---
+                # Menggunakan pdf.output() tanpa parameter untuk mendapatkan bytes langsung
+                pdf_data = pdf.output()
+                
                 st.download_button(
                     label="📄 Download PDF Summary",
-                    data=pdf.output(),
+                    data=pdf_data,
                     file_name="clash_summary_report.pdf",
                     mime="application/pdf"
                 )
