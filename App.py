@@ -280,6 +280,14 @@ with tab2:
             # Pivot tabel
             pivot_crane = df_crane.pivot(index='Seq.', columns='Main bay', values='Crane')
             pivot_crane = pivot_crane.fillna('') # Ganti NaN dengan string kosong
+
+            # --- PERUBAHAN BARU: Urutkan kolom 'Main bay' secara numerik ---
+            # Ambil semua nama kolom (Main bay) dan ubah ke integer untuk diurutkan
+            sorted_bays = sorted([int(bay) for bay in pivot_crane.columns])
+            # Ubah kembali ke string untuk digunakan sebagai nama kolom
+            sorted_bays_str = [str(bay) for bay in sorted_bays]
+            # Atur ulang urutan kolom pada pivot table
+            pivot_crane = pivot_crane[sorted_bays_str]
             
             # Buat palet warna untuk setiap crane
             unique_cranes = df_crane['Crane'].unique()
