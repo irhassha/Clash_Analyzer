@@ -113,7 +113,7 @@ if st.session_state.processed_df is not None:
     df_for_grid['ETA_Date'] = pd.to_datetime(df_for_grid['ETA']).dt.strftime('%Y-%m-%d')
     
     unique_dates = df_for_grid['ETA_Date'].unique()
-    zebra_colors = ['#F8F0E5', '#DAC0A3'] 
+    zebra_colors = ['#FFFFFF', '#F0F2F6'] 
     date_color_map = {date: zebra_colors[i % 2] for i, date in enumerate(unique_dates)}
 
     clash_map = {}
@@ -222,36 +222,33 @@ if st.session_state.processed_df is not None:
         if 'clash_summary_df' in st.session_state and st.session_state.clash_summary_df is not None:
             summary_df_for_export = st.session_state.clash_summary_df
             
-            # --- LOGIKA BARU UNTUK FORMATTING EXCEL ---
-            workbook = writer.book
-            summary_sheet = writer.sheets['Clash Summary']
-            
-            # Buat format rata tengah
-            center_format = workbook.add_format({'align': 'center', 'valign': 'vcenter'})
-
-            # Sisipkan baris kosong antar tanggal
+            # --- LOGIKA EXCEL DENGAN PERBAIKAN ---
+            # Buat DataFrame baru dengan baris kosong
+            final_summary_export = []
             last_date = None
-            row_to_write = 0
             for index, row in summary_df_for_export.iterrows():
                 current_date = row['Clash Date']
                 if last_date is not None and current_date != last_date:
-                    # Tulis baris kosong sebagai pemisah
-                    writer.sheets['Clash Summary'].write_string(row_to_write, 0, '')
-                    row_to_write += 1
-                
-                # Tulis data asli
-                row.to_frame().T.to_excel(writer, sheet_name='Clash Summary', startrow=row_to_write, header=False, index=False)
+                    # Tambahkan baris kosong sebagai dictionary kosong
+                    final_summary_export.append({}) 
+                final_summary_export.append(row.to_dict())
                 last_date = current_date
-                row_to_write += 1
             
-            # Tulis header di awal
-            summary_df_for_export.iloc[0:0].to_excel(writer, sheet_name='Clash Summary', index=False)
+            final_summary_df = pd.DataFrame(final_summary_export)
+
+            # Tulis DataFrame yang sudah diformat ke Excel
+            final_summary_df.to_excel(writer, sheet_name='Clash Summary', index=False)
             
-            # Terapkan format rata tengah dan auto-fit ke semua kolom di sheet summary
-            for idx, col in enumerate(summary_df_for_export):
-                series = summary_df_for_export[col]
-                max_len = max((series.astype(str).map(len).max(), len(str(series.name)))) + 4
+            workbook = writer.book
+            summary_sheet = writer.sheets['Clash Summary']
+            center_format = workbook.add_format({'align': 'center', 'valign': 'vcenter'})
+
+            # Terapkan format rata tengah dan auto-fit
+            for idx, col in enumerate(final_summary_df.columns):
+                series = final_summary_df[col].dropna() # Abaikan NaN dari baris kosong
+                max_len = max([len(str(s)) for s in series] + [len(col)]) + 4
                 summary_sheet.set_column(idx, idx, max_len, center_format)
+
 
     st.download_button(
         label="📥 Download Excel Report",
