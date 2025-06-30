@@ -159,7 +159,6 @@ with tab2:
 
             df_crane_s2 = pd.read_excel(crane_file_tab2, sheet_name=1)
             df_crane_s2.columns = df_crane_s2.columns.str.strip()
-            # --- PERBAIKAN DI SINI: Ganti nama kolom SEBELUM pengecekan ---
             df_crane_s2.rename(columns={'Main Bay': 'Bay', 'QC': 'Crane'}, inplace=True)
 
 
@@ -169,9 +168,9 @@ with tab2:
                 df_unit_list = pd.read_csv(unit_list_file)
             df_unit_list.columns = df_unit_list.columns.str.strip()
             
-            # Pastikan kolom-kolom yang dibutuhkan ada
-            required_cols_s1 = ['Container', 'Pos (Vessel)', 'Direction']
-            required_cols_s2 = ['Bay', 'Crane'] # Cek nama kolom yang sudah diganti
+            # --- PERBAIKAN LOGIKA PENGECEKAN KOLOM ---
+            required_cols_s1 = ['Container', 'Pos (Vessel)']
+            required_cols_s2 = ['Bay', 'Crane', 'Direction'] # Cek nama kolom yang sudah diganti
             required_cols_unit = ['Unit', 'Area (EXE)']
             
             if all(col in df_crane_s1.columns for col in required_cols_s1) and \
@@ -182,7 +181,6 @@ with tab2:
                 
                 # 1. Buat peta dari Pos ke Crane, HANYA untuk 'Loading'
                 pos_to_crane_map = {}
-                # Filter Sheet2 untuk 'Loading' terlebih dahulu
                 df_crane_s2_loading = df_crane_s2[df_crane_s2['Direction'] == 'Loading'].copy()
                 df_crane_s2_cleaned = df_crane_s2_loading.dropna(subset=['Bay', 'Crane'])
                 
