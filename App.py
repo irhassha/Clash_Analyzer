@@ -28,7 +28,7 @@ def load_vessel_codes_from_repo(possible_names=['vessel codes.xlsx', 'vessel_cod
     st.error(f"Vessel code file not found."); return None
 
 # --- STRUKTUR TAB BARU ---
-tab1, tab2 = st.tabs(["Clash Monitoring", "Crane Sequence"])
+tab1, tab2 = st.tabs(["Clash Monitoring", "Crane Seq."])
 
 # --- KONTEN TAB 1: CLASH MONITORING ---
 with tab1:
@@ -258,11 +258,11 @@ with tab1:
         )
 
 
-# --- KONTEN TAB 2: CRANE SEQUENCE ---
+# --- KONTEN TAB 2: CRANE Seq. ---
 with tab2:
-    st.header("🏗️ Crane Sequence Visualizer")
+    st.header("🏗️ Crane Seq. Visualizer")
     
-    crane_file = st.file_uploader("Upload Crane Sequence File", type=['xlsx', 'csv'])
+    crane_file = st.file_uploader("Upload Crane Seq. File", type=['xlsx', 'csv'])
     
     if crane_file:
         try:
@@ -274,7 +274,7 @@ with tab2:
             df_crane['Main bay'] = df_crane['Main bay'].astype(int).astype(str) # Pastikan Main bay adalah string
             
             # Pivot tabel
-            pivot_crane = df_crane.pivot(index='Sequence', columns='Main bay', values='QC')
+            pivot_crane = df_crane.pivot(index='Seq.', columns='Main bay', values='QC')
             pivot_crane = pivot_crane.fillna('') # Ganti NaN dengan string kosong
             
             # Buat palet warna untuk setiap crane
@@ -289,8 +289,8 @@ with tab2:
                 return ''
             
             # Tampilkan tabel dengan style
-            st.subheader("Crane Sequence Table")
+            st.subheader("Crane Seq. Table")
             st.dataframe(pivot_crane.style.applymap(color_crane_cells), use_container_width=True)
 
         except Exception as e:
-            st.error(f"Failed to process Crane Sequence file: {e}")
+            st.error(f"Failed to process Crane Seq. file: {e}")
