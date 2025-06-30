@@ -279,18 +279,18 @@ if st.session_state.processed_df is not None:
         )
         
     with col2:
-    if 'clash_summary_df' in st.session_state and st.session_state.clash_summary_df is not None:
-        if not st.session_state.clash_summary_df.empty:
-            pdf = PDF('L', 'mm', 'A4')
-            pdf.create_clash_report(st.session_state.clash_summary_df.to_dict('records'))
+        if 'clash_summary_df' in st.session_state and st.session_state.clash_summary_df is not None:
+            if not st.session_state.clash_summary_df.empty:
+                pdf = PDF('L', 'mm', 'A4')
+                pdf.create_clash_report(st.session_state.clash_summary_df.to_dict('records'))
             
-            # FIXED: no need to encode again
-            pdf_data = pdf.output(dest='S')  # already bytes
+                # FIXED: no need to encode again
+                pdf_data = pdf.output(dest='S')  # already bytes
             
-            st.download_button(
-                label="📄 Download PDF Summary",
-                data=pdf_data,
-                file_name="clash_summary_report.pdf",
-                mime="application/pdf"
-            )
+                st.download_button(
+                    label="📄 Download PDF Summary",
+                    data=pdf_data,
+                    file_name="clash_summary_report.pdf",
+                    mime="application/pdf"
+                )
 
