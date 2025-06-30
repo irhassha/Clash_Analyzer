@@ -216,23 +216,23 @@ if st.session_state.processed_df is not None:
     # --- LOGIKA TOMBOL DOWNLOAD EXCEL ---
     output = io.BytesIO()
     with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
-        display_df.to_excel(writer, index=False, sheet_name='Analysis Result')
+        # Hapus penulisan sheet detail
+        # display_df.to_excel(writer, index=False, sheet_name='Analysis Result')
         
-        # Jika ada summary, format dan tulis ke sheet kedua
+        # Hanya tulis sheet summary jika ada datanya
         if 'clash_summary_df' in st.session_state and st.session_state.clash_summary_df is not None:
             summary_df_for_export = st.session_state.clash_summary_df
             
             # --- LOGIKA EXCEL DENGAN PERBAIKAN ---
-            # Buat DataFrame baru dengan baris kosong
             final_summary_export = []
             last_date = None
-            for index, row in summary_df_for_export.iterrows():
-                current_date = row['Clash Date']
-                if last_date is not None and current_date != last_date:
-                    # Tambahkan baris kosong sebagai dictionary kosong
-                    final_summary_export.append({}) 
-                final_summary_export.append(row.to_dict())
-                last_date = current_date
+            if not summary_df_for_export.empty:
+                for index, row in summary_df_for_export.iterrows():
+                    current_date = row['Clash Date']
+                    if last_date is not None and current_date != last_date:
+                        final_summary_export.append({}) 
+                    final_summary_export.append(row.to_dict())
+                    last_date = current_date
             
             final_summary_df = pd.DataFrame(final_summary_export)
 
@@ -245,15 +245,18 @@ if st.session_state.processed_df is not None:
 
             # Terapkan format rata tengah dan auto-fit
             for idx, col in enumerate(final_summary_df.columns):
-                series = final_summary_df[col].dropna() # Abaikan NaN dari baris kosong
-                max_len = max([len(str(s)) for s in series] + [len(col)]) + 4
-                summary_sheet.set_column(idx, idx, max_len, center_format)
-
+                series = final_summary_df[col].dropna()
+                # Penyesuaian agar tidak error jika series kosong
+                if not series.empty:
+                    max_len = max([len(str(s)) for s in series] + [len(col)]) + 4
+                    summary_sheet.set_column(idx, idx, max_len, center_format)
+                else:
+                    summary_sheet.set_column(idx, idx, len(col) + 4, center_format)
 
     st.download_button(
-        label="📥 Download Excel Report",
+        label="📥 Download Clash Summary (Excel)",
         data=output.getvalue(),
-        file_name="analysis_report.xlsx",
+        file_name="clash_summary_report.xlsx",
         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
     )
 
