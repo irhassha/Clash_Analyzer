@@ -131,12 +131,18 @@ if st.session_state.processed_df is not None:
             for date, areas in sorted(clash_map.items()):
                 st.subheader(f"Clash on: {date}")
                 for area in sorted(areas):
-                    # Cari kapal yang bentrok di area spesifik pada tanggal spesifik
-                    clashing_vessels = df_for_grid[
+                    # Filter untuk mendapatkan baris yang bentrok
+                    clashing_rows = df_for_grid[
                         (df_for_grid['ETA_Date'] == date) & (df_for_grid[area] > 0)
-                    ]['VESSEL'].tolist()
+                    ]
+                    # Ambil daftar kapalnya
+                    clashing_vessels = clashing_rows['VESSEL'].tolist()
+                    # Hitung total box yang bentrok
+                    total_clash_boxes = clashing_rows[area].sum()
+
                     vessel_list_str = ", ".join(clashing_vessels)
-                    st.markdown(f"- **Area {area}:** `{vessel_list_str}`")
+                    # Tampilkan ringkasan dengan total box
+                    st.markdown(f"- **Area {area} ({total_clash_boxes} boxes):** `{vessel_list_str}`")
             st.markdown("---")
 
 
@@ -213,9 +219,7 @@ if st.session_state.processed_df is not None:
         "getRowStyle": zebra_row_style_jscode,
     }
 
-    # --- PERBAIKAN: Hapus baris yang salah ---
-    # st.dataframe(gridOptions) # Baris ini menyebabkan error dan sudah dihapus.
-    
+    # Tampilkan tabel
     AgGrid(
         df_for_grid,
         gridOptions=gridOptions,
