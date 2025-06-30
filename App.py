@@ -120,20 +120,21 @@ with tab2:
     st.subheader("Crane Sequence Visualizer")
     if crane_file_tab2:
         try:
-            df_crane_sheet2 = pd.read_excel(crane_file_tab2, sheet_name=1)
+            df_crane_sheet2_viz = pd.read_excel(crane_file_tab2, sheet_name=1)
+            df_crane_sheet2_viz.columns = df_crane_sheet2_viz.columns.str.strip()
             
             # Ganti nama kolom dan bersihkan kolom 'Bay'
-            df_crane_sheet2.rename(columns={'Main Bay': 'Bay', 'Sequence': 'Seq.', 'QC': 'Crane'}, inplace=True)
-            df_crane_sheet2 = df_crane_sheet2.dropna(subset=['Bay'])
+            df_crane_sheet2_viz.rename(columns={'Main Bay': 'Bay', 'Sequence': 'Seq.', 'QC': 'Crane'}, inplace=True)
+            df_crane_sheet2_viz = df_crane_sheet2_viz.dropna(subset=['Bay'])
 
-            df_crane_sheet2['Bay'] = df_crane_sheet2['Bay'].apply(format_bay)
+            df_crane_sheet2_viz['Bay'] = df_crane_sheet2_viz['Bay'].apply(format_bay)
             
-            pivot_crane = df_crane_sheet2.pivot(index='Seq.', columns='Bay', values='Crane').fillna('')
+            pivot_crane = df_crane_sheet2_viz.pivot(index='Seq.', columns='Bay', values='Crane').fillna('')
 
             sorted_bays = sorted(pivot_crane.columns, key=lambda x: int(x.split('-')[0]))
             pivot_crane = pivot_crane[sorted_bays]
             
-            unique_cranes = df_crane_sheet2['Crane'].unique()
+            unique_cranes = df_crane_sheet2_viz['Crane'].unique()
             crane_colors = ['#8dd3c7','#ffffb3','#bebada','#fb8072','#80b1d3','#fdb462','#b3de69','#fccde5','#d9d9d9','#bc80bd']
             color_map = {crane: crane_colors[i % len(crane_colors)] for i, crane in enumerate(unique_cranes)}
             
@@ -158,6 +159,9 @@ with tab2:
 
             df_crane_s2 = pd.read_excel(crane_file_tab2, sheet_name=1)
             df_crane_s2.columns = df_crane_s2.columns.str.strip()
+            # --- PERBAIKAN DI SINI: Ganti nama kolom SEBELUM pengecekan ---
+            df_crane_s2.rename(columns={'Main Bay': 'Bay', 'QC': 'Crane'}, inplace=True)
+
 
             if unit_list_file.name.lower().endswith(('.xls', '.xlsx')):
                 df_unit_list = pd.read_excel(unit_list_file)
@@ -167,7 +171,7 @@ with tab2:
             
             # Pastikan kolom-kolom yang dibutuhkan ada
             required_cols_s1 = ['Container', 'Pos (Vessel)']
-            required_cols_s2 = ['Bay', 'QC']
+            required_cols_s2 = ['Bay', 'Crane'] # Cek nama kolom yang sudah diganti
             required_cols_unit = ['Unit', 'Area (EXE)']
             
             if all(col in df_crane_s1.columns for col in required_cols_s1) and \
@@ -178,10 +182,10 @@ with tab2:
                 
                 # 1. Buat peta dari Pos ke Crane
                 pos_to_crane_map = {}
-                df_crane_s2_cleaned = df_crane_s2.dropna(subset=['Bay', 'QC'])
+                df_crane_s2_cleaned = df_crane_s2.dropna(subset=['Bay', 'Crane'])
                 for _, row in df_crane_s2_cleaned.iterrows():
                     bay_range_str = format_bay(row['Bay'])
-                    crane = row['QC']
+                    crane = row['Crane']
                     if bay_range_str:
                         if '-' in bay_range_str:
                             start, end = map(int, bay_range_str.split('-'))
