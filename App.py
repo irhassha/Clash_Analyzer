@@ -111,7 +111,7 @@ if st.session_state.processed_df is not None:
     
     # Buat Peta Warna untuk Zebra Pattern
     unique_dates = df_for_grid['ETA_Date'].unique()
-    zebra_colors = ['#FFFFFF', '#F0F2F6'] 
+    zebra_colors = ['#F8F0E5', '#DAC0A3'] 
     date_color_map = {date: zebra_colors[i % 2] for i, date in enumerate(unique_dates)}
 
     # Tentukan sel mana saja yang bentrok
@@ -125,25 +125,26 @@ if st.session_state.processed_df is not None:
         if clash_areas_for_date:
             clash_map[date] = clash_areas_for_date
 
-    # --- FITUR BARU: RINGKASAN CLASH ---
+    # --- FITUR BARU: RINGKASAN CLASH YANG LEBIH RINGKAS ---
     if clash_map:
         with st.expander("Show Clash Summary", expanded=True):
+            summary_html = "<div style='line-height: 1.4;'>" # Kontrol jarak antar baris
             for date, areas in sorted(clash_map.items()):
-                st.subheader(f"Clash on: {date}")
+                summary_html += f"<strong style='font-size: 1.1em;'>Clash on: {date}</strong><br>"
                 for area in sorted(areas):
-                    # Filter untuk mendapatkan baris yang bentrok
                     clashing_rows = df_for_grid[
                         (df_for_grid['ETA_Date'] == date) & (df_for_grid[area] > 0)
                     ]
-                    # Ambil daftar kapalnya
                     clashing_vessels = clashing_rows['VESSEL'].tolist()
-                    # Hitung total box yang bentrok
                     total_clash_boxes = clashing_rows[area].sum()
-
                     vessel_list_str = ", ".join(clashing_vessels)
-                    # Tampilkan ringkasan dengan total box
-                    st.markdown(f"- **Area {area} ({total_clash_boxes} boxes):** `{vessel_list_str}`")
-            st.markdown("---")
+                    
+                    # Mengganti "Area" menjadi "Block"
+                    summary_html += f"&nbsp;&nbsp;&nbsp;• <b>Block {area} ({total_clash_boxes} boxes):</b> {vessel_list_str}<br>"
+                summary_html += "<br>" # Beri spasi antar grup tanggal
+            summary_html += "</div>"
+            st.markdown(summary_html, unsafe_allow_html=True)
+    st.markdown("---") # Garis pemisah tetap di luar expander
 
 
     # --- PENGGUNAAN AG-GRID DENGAN SEMUA FITUR ---
