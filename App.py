@@ -274,11 +274,11 @@ with tab2:
             df_crane['Main bay'] = df_crane['Main bay'].astype(int).astype(str) # Pastikan Main bay adalah string
             
             # Pivot tabel
-            pivot_crane = df_crane.pivot(index='Seq.', columns='Main bay', values='QC')
+            pivot_crane = df_crane.pivot(index='Seq.', columns='Main bay', values='Crane')
             pivot_crane = pivot_crane.fillna('') # Ganti NaN dengan string kosong
             
             # Buat palet warna untuk setiap crane
-            unique_cranes = df_crane['QC'].unique()
+            unique_cranes = df_crane['Crane'].unique()
             crane_colors = ['#8dd3c7','#ffffb3','#bebada','#fb8072','#80b1d3','#fdb462','#b3de69','#fccde5','#d9d9d9','#bc80bd']
             color_map = {crane: crane_colors[i % len(crane_colors)] for i, crane in enumerate(unique_cranes)}
             
