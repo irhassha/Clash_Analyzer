@@ -109,7 +109,7 @@ with tab1:
 
 # --- KONTEN TAB 2: CRANE SEQUENCE ---
 with tab2:
-    st.header("🏗️ Crane Sequence & Area Visualizer")
+    st.header("🏗️ Crane Tools")
     
     # Letakkan uploader di dalam tabnya
     crane_file_tab2 = st.file_uploader("Upload Crane Sequence File", type=['xlsx', 'csv'], key="crane_uploader_tab2")
@@ -148,8 +148,6 @@ with tab2:
                 st.stop()
             
             # 3. Buat Peta dari Pos (Vessel) ke Area (EXE)
-            # --- PERBAIKAN TIPE DATA DI SINI ---
-            # Pastikan 'Pos (Vessel)' adalah integer untuk pencocokan yang akurat
             area_info['Pos (Vessel)'] = pd.to_numeric(area_info['Pos (Vessel)'], errors='coerce').dropna().astype(int)
             pos_to_area_map = area_info.groupby('Pos (Vessel)')['Area (EXE)'].unique().apply(lambda x: sorted(list(x))).to_dict()
 
@@ -161,24 +159,24 @@ with tab2:
             # 5. Buat kolom display gabungan
             def get_display_text(row):
                 crane = row['Crane']
-                bay_range = row['Bay_formatted']
+                bay_range_str = row['Bay_formatted']
                 
-                # Urai rentang bay (misal: "1-3" menjadi [1, 2, 3])
                 bays_in_range = []
-                if '-' in bay_range:
-                    start, end = map(int, bay_range.split('-'))
+                if '-' in bay_range_str:
+                    start, end = map(int, bay_range_str.split('-'))
                     bays_in_range = list(range(start, end + 1))
                 else:
-                    bays_in_range = [int(bay_range)]
+                    bays_in_range = [int(bay_range_str)]
                 
-                # Kumpulkan semua area dari semua Pos dalam rentang
                 all_areas = []
                 for pos in bays_in_range:
                     if pos in pos_to_area_map:
                         all_areas.extend(pos_to_area_map[pos])
                 
-                # Buat daftar Area yang unik dan terurut
-                unique_areas_str = ", ".join(sorted(list(set(all_areas))))
+                if not all_areas:
+                    unique_areas_str = "Area N/A"
+                else:
+                    unique_areas_str = ", ".join(sorted(list(set(all_areas))))
                 
                 return f"{crane}\n({unique_areas_str})"
 
@@ -192,16 +190,22 @@ with tab2:
                 aggfunc='first'
             ).fillna('')
             
-            # Urutkan kolom Bay secara numerik
             sorted_bays = sorted(pivot_crane.columns, key=lambda x: int(x.split('-')[0]))
             pivot_crane = pivot_crane[sorted_bays]
 
-            # Tampilkan dengan style untuk teks multi-baris
+            # Tampilkan Visualizer
             st.subheader("Crane Sequence with Area")
             st.dataframe(
                 pivot_crane.style.set_properties(**{'text-align': 'center', 'white-space': 'pre-wrap'}),
                 use_container_width=True
             )
+            st.markdown("---")
+
+            # Tampilkan kembali Container Area Lookup untuk debugging
+            st.subheader("Container Area Lookup")
+            lookup_df = area_info[['Container', 'Pos (Vessel)', 'Area (EXE)']].drop_duplicates().sort_values(by='Pos (Vessel)')
+            st.dataframe(lookup_df, use_container_width=True)
+
 
         except Exception as e:
             st.error(f"Failed to process Crane Sequence Visualizer: {e}")
