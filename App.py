@@ -70,13 +70,13 @@ with tab1:
                     # 3. Filtering
                     merged_df = merged_df[merged_df['VESSEL'].isin(original_vessels_list)]
                     excluded_areas = [str(i) for i in range(801, 809)]
-                    merged_df['Area (EXE)'] = merged_df['Area (EXE)'].astype(str)
-                    filtered_data = merged_df[~merged_df['Area (EXE)'].isin(excluded_areas)]
+                    merged_df['Row/bay (EXE)'] = merged_df['Row/bay (EXE)'].astype(str)
+                    filtered_data = merged_df[~merged_df['Row/bay (EXE)'].isin(excluded_areas)]
                     if filtered_data.empty: st.warning("No data remaining after filtering."); st.session_state.processed_df = None; st.stop()
 
                     # 4. Pivoting
                     grouping_cols = ['VESSEL', 'CODE', 'VOY_OUT', 'ETA']
-                    pivot_df = filtered_data.pivot_table(index=grouping_cols, columns='Area (EXE)', aggfunc='size', fill_value=0)
+                    pivot_df = filtered_data.pivot_table(index=grouping_cols, columns='Row/bay (EXE)', aggfunc='size', fill_value=0)
                     
                     cluster_cols_for_calc = pivot_df.columns.tolist()
                     pivot_df['TTL BOX'] = pivot_df[cluster_cols_for_calc].sum(axis=1)
@@ -217,7 +217,7 @@ with tab2:
                 )
                 
                 if not merged_df.empty:
-                    result_df = merged_df[['Container', 'Area (EXE)']].drop_duplicates()
+                    result_df = merged_df[['Container', 'Row/bay (EXE)']].drop_duplicates()
                     st.write(f"Found area information for {len(result_df)} matching containers.")
                     st.dataframe(result_df, use_container_width=True)
                 else:
