@@ -23,7 +23,7 @@ st.title("Yard Operations Analyzer")
 # --- FUNGSI-FUNGSI UNTUK FORECASTING (BARU) ---
 
 @st.cache_data
-def load_history_data(filename="History Loading.xlsx - Sheet1.csv"):
+def load_history_data(filename="History Loading.xlsx - Sheet1"):
     """Mencari dan memuat file data historis untuk forecasting."""
     if os.path.exists(filename):
         try:
