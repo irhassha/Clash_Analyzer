@@ -229,7 +229,31 @@ with tab2:
                     val = pivot_crane_display.loc[row_idx, col]
                     pivot_crane_display.loc[row_idx, col] = get_display_value(val, row_idx)
 
-            st.dataframe(pivot_crane_display, use_container_width=True, height=600)
+            from st_aggrid import GridOptionsBuilder
+
+            gb = GridOptionsBuilder.from_dataframe(pivot_crane_display)
+            gb.configure_default_column(wrapText=True, autoHeight=True)
+
+            st.markdown(
+                """
+                <style>
+                .ag-cell {
+                    white-space: pre-wrap !important;
+                    line-height: 1.2 !important;
+                }
+                </style>
+                """,
+                unsafe_allow_html=True
+            )
+
+            AgGrid(
+                pivot_crane_display,
+                gridOptions=gb.build(),
+                height=600,
+                fit_columns_on_grid_load=True,
+                allow_unsafe_jscode=True
+            )
+
 
         except Exception as e:
             st.error(f"Failed to process Crane Sequence Visualizer: {e}")
