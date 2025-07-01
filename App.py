@@ -249,7 +249,12 @@ def render_clash_tab():
                     
                     cluster_cols_for_calc = pivot_df.columns.tolist()
                     pivot_df['TTL BOX'] = pivot_df[cluster_cols_for_calc].sum(axis=1)
-                    pivot_df['TTL CLSTR'] = (pivot_df[cluster_cols_for_calc] > 0).sum(axis=1)
+                    
+                    # --- PERUBAHAN: Kalkulasi TTL CLSTR dengan pengecualian ---
+                    exclude_for_clstr = ['D01', 'C01', 'C02', 'OOG', 'UNKNOWN', 'BR9', 'RC9']
+                    clstr_calculation_cols = [col for col in cluster_cols_for_calc if col not in exclude_for_clstr]
+                    pivot_df['TTL CLSTR'] = (pivot_df[clstr_calculation_cols] > 0).sum(axis=1)
+                    
                     pivot_df = pivot_df.reset_index()
                     
                     # 5. Conditional Filtering
@@ -290,17 +295,14 @@ def render_clash_tab():
             today = pd.to_datetime(datetime.now().date())
             four_days_later = today + timedelta(days=4)
             
-            # Filter kapal yang akan datang
             upcoming_vessels_df = display_df[
                 (display_df['ETA'] >= today) & 
                 (display_df['ETA'] < four_days_later)
             ].copy()
 
             if not upcoming_vessels_df.empty:
-                # Siapkan data forecast untuk di-lookup
                 forecast_lookup = forecast_df[['Service', 'Prediksi Loading Berikutnya']].copy()
                 
-                # Gabungkan data kapal datang dengan forecast
                 summary_df = pd.merge(
                     upcoming_vessels_df,
                     forecast_lookup,
@@ -310,8 +312,15 @@ def render_clash_tab():
                 )
                 summary_df['Prediksi Loading Berikutnya'] = summary_df['Prediksi Loading Berikutnya'].fillna(0).round(2)
                 
-                # Pilih dan tampilkan kolom yang relevan
-                summary_display = summary_df[['VESSEL', 'SERVICE', 'ETA_str', 'TTL BOX', 'TTL CLSTR', 'Prediksi Loading Berikutnya']]
+                # --- PERUBAHAN: Tambahkan kolom selisih ---
+                summary_df['Selisih'] = summary_df['TTL BOX'] - summary_df['Prediksi Loading Berikutnya']
+                
+                # --- PERUBAHAN: Urutan kolom baru ---
+                summary_display_cols = [
+                    'VESSEL', 'SERVICE', 'ETA_str', 'TTL BOX', 
+                    'Prediksi Loading Berikutnya', 'Selisih', 'TTL CLSTR'
+                ]
+                summary_display = summary_df[summary_display_cols]
                 summary_display = summary_display.rename(columns={'ETA_str': 'ETA'})
                 
                 st.dataframe(summary_display, use_container_width=True, hide_index=True)
@@ -325,7 +334,6 @@ def render_clash_tab():
         # --- Persiapan untuk Styling AG Grid dan Summary ---
         df_for_grid = display_df.copy()
         df_for_grid['ETA_Date'] = pd.to_datetime(df_for_grid['ETA']).dt.strftime('%Y-%m-%d')
-        # Gunakan ETA_str untuk tampilan di grid
         df_for_grid['ETA'] = df_for_grid['ETA_str']
         
         unique_dates = df_for_grid['ETA_Date'].unique()
@@ -350,7 +358,7 @@ def render_clash_tab():
             with st.expander("Tampilkan Ringkasan Clash", expanded=True):
                 total_clash_days = len(clash_map)
                 total_conflicting_blocks = sum(len(areas) for areas in clash_map.values())
-                st.markdown(f"**🔥 Ditemukan {total_clash_days} hari clash dengan total {total_conflicting_blocks} blok yang berkonflik.**")
+                st.markdown(f"**� Ditemukan {total_clash_days} hari clash dengan total {total_conflicting_blocks} blok yang berkonflik.**")
                 st.markdown("---")
                 
                 clash_dates = sorted(clash_map.keys())
@@ -476,3 +484,4 @@ with tab1:
 
 with tab2:
     render_forecast_tab()
+�
