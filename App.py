@@ -204,51 +204,38 @@ with tab2:
             sorted_bays = sorted(pivot_crane.columns, key=lambda x: int(x.split('-')[0]))
             pivot_crane = pivot_crane[sorted_bays]
 
+            # --- LOGIKA PEWARNAAN DI SINI ---
             area_dict = {}
             if result_df is not None:
+                # Buat peta dari Crane dan Seq ke daftar Area
                 area_summary = (
-                    result_df.groupby(['Crane', 'Seq.', 'Area (EXE)']).size().reset_index(name='Count')
+                    result_df.groupby(['Crane', 'Seq.'])['Area (EXE)']
+                    .apply(lambda x: '\n'.join(sorted(x.unique())))
+                    .reset_index()
                 )
-                area_summary['Label'] = area_summary['Area (EXE)'] + ' (' + area_summary['Count'].astype(str) + ')'
-                area_labels = area_summary.groupby(['Crane', 'Seq.'])['Label'].apply(lambda x: '\n'.join(sorted(x))).reset_index()
-                area_dict = {(row['Crane'], row['Seq.']): row['Label'] for _, row in area_labels.iterrows()}
+                area_dict = {(row['Crane'], row['Seq.']): row['Area (EXE)'] for _, row in area_summary.iterrows()}
 
+            # Fungsi untuk membuat teks tampilan gabungan
             def get_display_value(crane_val, seq_idx):
                 try:
-                    if crane_val == '':
-                        return ''
+                    if crane_val == '': return ''
                     crane = float(crane_val)
                     area_info = area_dict.get((crane, seq_idx), '')
-                    return f"{crane:.0f}\n{area_info}" if area_info else f"{crane:.0f}"
+                    return f"{crane:.0f}\n({area_info})" if area_info else f"{crane:.0f}"
                 except:
                     return crane_val
-
+            
+            # Buat DataFrame baru untuk ditampilkan
             pivot_crane_display = pivot_crane.copy()
             for row_idx in pivot_crane_display.index:
                 for col in pivot_crane_display.columns:
                     val = pivot_crane_display.loc[row_idx, col]
                     pivot_crane_display.loc[row_idx, col] = get_display_value(val, row_idx)
 
-            st.markdown(
-                """
-                <style>
-                .element-container .ag-cell {
-                    white-space: pre-wrap !important;
-                    line-height: 1.2 !important;
-                }
-                </style>
-                """,
-                unsafe_allow_html=True
-            )
-
-            gb = GridOptionsBuilder.from_dataframe(pivot_crane_display)
-            gb.configure_default_column(wrapText=True, autoHeight=True)
-            AgGrid(
-                pivot_crane_display,
-                gridOptions=gb.build(),
-                height=600,
-                fit_columns_on_grid_load=True,
-                allow_unsafe_jscode=True
+            # Terapkan style untuk teks multi-baris
+            st.dataframe(
+                pivot_crane_display.style.set_properties(**{'text-align': 'center', 'white-space': 'pre-wrap'}),
+                use_container_width=True
             )
 
         except Exception as e:
