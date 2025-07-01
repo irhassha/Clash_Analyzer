@@ -351,38 +351,33 @@ def render_clash_tab():
                 if priority_vessels and adjusted_clstr_req > 0:
                     summary_df.loc[summary_df['VESSEL'].isin(priority_vessels), 'CLSTR REQ'] = adjusted_clstr_req
                 
-                # --- PERBAIKAN LOGIKA STYLING DAN HIDE ---
-                summary_df['ETA_Date_Only'] = pd.to_datetime(summary_df['ETA']).dt.strftime('%Y-%m-%d')
-                
-                # Definisikan kolom yang akan ditampilkan berdasarkan pilihan pengguna
+                # --- PERUBAHAN BARU: LOGIKA STYLING ---
+                def style_summary_table(df_to_style):
+                    # Buat DataFrame kosong dengan style default
+                    styler = pd.DataFrame('', index=df_to_style.index, columns=df_to_style.columns)
+                    
+                    # Terapkan highlight hijau untuk TTL CLSTR
+                    green_condition = df_to_style['TTL CLSTR'] >= df_to_style['CLSTR REQ']
+                    styler.loc[green_condition, 'TTL CLSTR'] = 'background-color: #D4EDDA; color: #155724'
+                    
+                    # Terapkan highlight kuning untuk kapal prioritas (menimpa style lain)
+                    for idx, row in df_to_style.iterrows():
+                        if row['VESSEL'] in priority_vessels:
+                            styler.loc[idx, :] = 'background-color: #FFF3CD'
+                    
+                    return styler
+
                 summary_display_cols = [
                     'VESSEL', 'SERVICE', 'ETA_str', 'TTL BOX', 
                     'Prediksi Loading Berikutnya', 'Selisih', 'TTL CLSTR', 'CLSTR REQ'
                 ]
+                
                 visible_cols = [col for col in summary_display_cols if col not in cols_to_hide]
                 
-                # Buat DataFrame untuk ditampilkan dengan kolom yang terlihat
                 summary_to_display = summary_df.rename(columns={'ETA_str': 'ETA'})[visible_cols]
-
-                # Fungsi styling
-                def style_summary_rows(row):
-                    style = [''] * len(row)
-                    # Styling prioritas
-                    if row['VESSEL'] in priority_vessels:
-                        style = ['background-color: #FFF3CD'] * len(row)
-                    # Styling zebra
-                    else:
-                        eta_date = pd.to_datetime(row['ETA']).strftime('%Y-%m-%d')
-                        summary_unique_dates = summary_df['ETA_Date_Only'].unique()
-                        summary_zebra_colors = ['#FFFFFF', '#F0F2F6']
-                        summary_date_color_map = {date: summary_zebra_colors[i % 2] for i, date in enumerate(summary_unique_dates)}
-                        color = summary_date_color_map.get(eta_date, '')
-                        if color:
-                            style = [f'background-color: {color}'] * len(row)
-                    return style
-
+                
                 st.dataframe(
-                    summary_to_display.style.apply(style_summary_rows, axis=1),
+                    summary_to_display.style.apply(style_summary_table, axis=None),
                     use_container_width=True,
                     hide_index=True
                 )
