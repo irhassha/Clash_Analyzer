@@ -306,17 +306,20 @@ def render_clash_tab():
                 
                 all_summary_cols = ['VESSEL', 'SERVICE', 'ETA', 'TTL BOX', 'Prediksi Loading Berikutnya', 'Selisih', 'TTL CLSTR', 'CLSTR REQ']
                 
+                # Opsi untuk menyembunyikan kolom
                 cols_to_hide = st.sidebar.multiselect(
                     "Sembunyikan kolom dari ringkasan:",
                     options=all_summary_cols,
                     default=[]
                 )
                 
+                # Opsi untuk kapal prioritas
                 priority_vessels = st.sidebar.multiselect(
                     "Pilih kapal prioritas untuk di-highlight:",
                     options=upcoming_vessels_df['VESSEL'].unique()
                 )
                 
+                # Opsi untuk menyesuaikan CLSTR REQ
                 adjusted_clstr_req = st.sidebar.number_input(
                     "Sesuaikan CLSTR REQ untuk kapal prioritas:",
                     min_value=0,
@@ -348,37 +351,29 @@ def render_clash_tab():
                 
                 summary_df['CLSTR REQ'] = summary_df['base_for_req'].apply(get_clstr_requirement)
                 
+                # Terapkan penyesuaian CLSTR REQ untuk kapal prioritas
                 if priority_vessels and adjusted_clstr_req > 0:
                     summary_df.loc[summary_df['VESSEL'].isin(priority_vessels), 'CLSTR REQ'] = adjusted_clstr_req
                 
-                summary_df = summary_df.rename(columns={'ETA_str': 'ETA'})
+                summary_display_cols = [
+                    'VESSEL', 'SERVICE', 'ETA_str', 'TTL BOX', 
+                    'Prediksi Loading Berikutnya', 'Selisih', 'TTL CLSTR', 'CLSTR REQ'
+                ]
                 
-                # --- PERBAIKAN LOGIKA STYLING ---
-                def style_summary_table(df_to_style):
-                    # Buat DataFrame kosong dengan style default
-                    styler = pd.DataFrame('', index=df_to_style.index, columns=df_to_style.columns)
-                    
-                    # Terapkan highlight hijau untuk TTL CLSTR jika kolomnya ada
-                    if 'TTL CLSTR' in df_to_style.columns and 'CLSTR REQ' in df_to_style.columns:
-                        green_condition = df_to_style['TTL CLSTR'] >= df_to_style['CLSTR REQ']
-                        styler.loc[green_condition, 'TTL CLSTR'] = 'background-color: #D4EDDA; color: #155724'
-                    
-                    # Terapkan highlight kuning untuk kapal prioritas (menimpa style lain)
-                    if 'VESSEL' in df_to_style.columns:
-                        priority_condition = df_to_style['VESSEL'].isin(priority_vessels)
-                        for col in styler.columns:
-                            styler.loc[priority_condition, col] = 'background-color: #FFF3CD'
-                            
-                    return styler
+                # Filter kolom berdasarkan pilihan pengguna
+                visible_cols = [col for col in summary_display_cols if col not in cols_to_hide]
+                
+                summary_display = summary_df[visible_cols]
+                summary_display = summary_display.rename(columns={'ETA_str': 'ETA'})
+                
+                # Fungsi untuk styling baris prioritas
+                def highlight_priority(row):
+                    if row.VESSEL in priority_vessels:
+                        return ['background-color: #FFF3CD'] * len(row)
+                    return [''] * len(row)
 
-                visible_cols = [col for col in all_summary_cols if col not in cols_to_hide]
-                
-                # Buat DataFrame untuk ditampilkan dengan kolom yang terlihat
-                summary_to_display = summary_df[visible_cols]
-                
-                # Terapkan styling ke DataFrame yang sudah difilter
                 st.dataframe(
-                    summary_to_display.style.apply(style_summary_table, axis=None),
+                    summary_display.style.apply(highlight_priority, axis=1),
                     use_container_width=True,
                     hide_index=True
                 )
