@@ -102,39 +102,51 @@ with tab1:
 
 # --- KONTEN TAB 2 ---
 with tab2:
-    ...  # sebelumnya tidak berubah
+    st.info("Upload the files and run container lookup before visualizer.")
 
-    # Tambahkan warna berdasarkan crane
-    def get_crane_color(crane):
-        try:
-            crane = int(float(crane))
-            color_map = {
-                801: "#ffcccc",
-                802: "#ccffcc",
-                803: "#ccccff",
-                804: "#fff0b3"
+    if 'crane_lookup_df' in st.session_state:
+        df = st.session_state['crane_lookup_df']
+        df['Crane'] = df['Crane'].astype(str)
+        df['Seq.'] = df['Seq.'].astype(str)
+
+        area_summary = df.groupby(['Seq.', 'Crane', 'Area (EXE)']).size().reset_index(name='Count')
+        area_summary['AreaStr'] = area_summary['Area (EXE)'] + ' (' + area_summary['Count'].astype(str) + ')'
+
+        combined_area = area_summary.groupby(['Seq.', 'Crane'])['AreaStr'].apply(lambda x: "\n".join(x)).reset_index()
+        combined_area['Gabungan'] = combined_area['Crane'] + "\n" + combined_area['AreaStr']
+
+        pivot_crane_display = combined_area.pivot(index='Seq.', columns='Crane', values='Gabungan').fillna("")
+
+        def get_crane_color(crane):
+            try:
+                crane = int(float(crane))
+                color_map = {
+                    801: "#ffcccc",
+                    802: "#ccffcc",
+                    803: "#ccccff",
+                    804: "#fff0b3"
+                }
+                return f"background-color: {color_map.get(crane, '#f0f0f0')}"
+            except:
+                return ""
+
+        cell_style_jscode = JsCode("""
+            function(params) {
+                let crane = params.value.split('\n')[0];
+                if (crane === '801') return {style: {backgroundColor: '#ffcccc'}};
+                if (crane === '802') return {style: {backgroundColor: '#ccffcc'}};
+                if (crane === '803') return {style: {backgroundColor: '#ccccff'}};
+                if (crane === '804') return {style: {backgroundColor: '#fff0b3'}};
+                return {};
             }
-            return f"background-color: {color_map.get(crane, '#f0f0f0')}"
-        except:
-            return ""
+        """)
 
-    cell_style_jscode = JsCode("""
-        function(params) {
-            let crane = params.value.split('\n')[0];
-            if (crane === '801') return {style: {backgroundColor: '#ffcccc'}};
-            if (crane === '802') return {style: {backgroundColor: '#ccffcc'}};
-            if (crane === '803') return {style: {backgroundColor: '#ccccff'}};
-            if (crane === '804') return {style: {backgroundColor: '#fff0b3'}};
-            return {};
-        }
-    """)
-
-    gb = GridOptionsBuilder.from_dataframe(pivot_crane_display)
-    gb.configure_default_column(wrapText=True, autoHeight=True, cellStyle=cell_style_jscode)
-    AgGrid(
-        pivot_crane_display,
-        gridOptions=gb.build(),
-        height=600,
-        fit_columns_on_grid_load=True,
-        allow_unsafe_jscode=True
-    )
+        gb = GridOptionsBuilder.from_dataframe(pivot_crane_display)
+        gb.configure_default_column(wrapText=True, autoHeight=True, cellStyle=cell_style_jscode)
+        AgGrid(
+            pivot_crane_display,
+            gridOptions=gb.build(),
+            height=600,
+            fit_columns_on_grid_load=True,
+            allow_unsafe_jscode=True
+        )
