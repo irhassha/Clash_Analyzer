@@ -27,7 +27,7 @@ st.title("Yard Operations Analyzer")
 
 @st.cache_data
 def load_history_data(filename="History Loading.xlsx"):
-    """Mencari dan memuat file data historis untuk forecasting."""
+    """Search for and load the historical data file for forecasting."""
     if os.path.exists(filename):
         try:
             if filename.lower().endswith('.csv'):
@@ -41,13 +41,13 @@ def load_history_data(filename="History Loading.xlsx"):
             df = df[df['loading'] >= 0]
             return df
         except Exception as e:
-            st.error(f"Gagal memuat file histori '{filename}': {e}")
+            st.error(f"Failed to load history file '{filename}': {e}")
             return None
-    st.warning(f"File histori '{filename}' tidak ditemukan di repository.")
+    st.warning(f"History file '{filename}' not found in the repository.")
     return None
 
 def create_time_features(df):
-    """Membuat fitur berbasis waktu dari kolom 'ata'."""
+    """Create time-based features from the 'ata' column."""
     df_copy = df.copy()
     df_copy['hour'] = df_copy['ata'].dt.hour
     df_copy['day_of_week'] = df_copy['ata'].dt.dayofweek
@@ -58,16 +58,17 @@ def create_time_features(df):
     df_copy['year'] = df_copy['ata'].dt.year
     return df_copy
 
+@st.cache_data
 def run_per_service_rf_forecast(df_history):
-    """Menjalankan proses outlier cleaning dan forecasting untuk setiap service."""
+    """Run the outlier cleaning and forecasting process for each service."""
     all_results = []
     unique_services = df_history['service'].unique()
 
-    progress_bar = st.progress(0, text="Menganalisis services...")
+    progress_bar = st.progress(0, text="Analyzing services...")
     total_services = len(unique_services)
 
     for i, service in enumerate(unique_services):
-        progress_text = f"Menganalisis service: {service} ({i+1}/{total_services})"
+        progress_text = f"Analyzing service: {service} ({i+1}/{total_services})"
         progress_bar.progress((i + 1) / total_services, text=progress_text)
 
         service_df = df_history[df_history['service'] == service].copy()
@@ -75,7 +76,7 @@ def run_per_service_rf_forecast(df_history):
         if service_df.empty or service_df['loading'].isnull().all():
             continue
 
-        # --- 1. Pembersihan Outlier ---
+        # --- 1. Outlier Cleaning ---
         Q1 = service_df['loading'].quantile(0.25)
         Q3 = service_df['loading'].quantile(0.75)
         IQR = Q3 - Q1
@@ -84,13 +85,13 @@ def run_per_service_rf_forecast(df_history):
         num_outliers = ((service_df['loading'] < lower_bound) | (service_df['loading'] > upper_bound)).sum()
         service_df['loading_cleaned'] = service_df['loading'].clip(lower=lower_bound, upper=upper_bound)
 
-        # --- 2. Pilih Model & Forecast ---
+        # --- 2. Select Model & Forecast ---
         forecast_val, moe_val, mape_val, method = (0, 0, 0, "")
         
-        # Gunakan RF jika data cukup (misal > 10), jika tidak gunakan rata-rata
+        # Use RF if data is sufficient (e.g., > 10), otherwise use historical average
         if len(service_df) >= 10:
             try:
-                # Buat fitur waktu
+                # Create time features
                 df_features = create_time_features(service_df)
                 features_to_use = ['hour', 'day_of_week', 'day_of_month', 'day_of_year', 'week_of_year', 'month', 'year']
                 target = 'loading_cleaned'
@@ -98,85 +99,84 @@ def run_per_service_rf_forecast(df_history):
                 X = df_features[features_to_use]
                 y = df_features[target]
 
-                # Split data untuk evaluasi
+                # Split data for evaluation
                 X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42, shuffle=False)
                 
-                if len(X_train) == 0: # Jika data terlalu sedikit setelah split
+                if len(X_train) == 0: # If data is too sparse after split
                     raise ValueError("Not enough data to train model.")
 
                 model = RandomForestRegressor(n_estimators=50, random_state=42, n_jobs=-1, min_samples_leaf=2)
                 model.fit(X_train, y_train)
                 
-                # Evaluasi model
+                # Evaluate model
                 predictions = model.predict(X_test)
                 mape_val = mean_absolute_percentage_error(y_test, predictions) * 100 if len(y_test) > 0 else 0
                 moe_val = 1.96 * np.std(y_test - predictions) if len(y_test) > 0 else 0
                 
-                # Buat prediksi untuk masa depan (misal besok jam 12 siang)
+                # Create a forecast for the future (e.g., tomorrow at 12 PM)
                 future_eta = datetime.now().replace(hour=12, minute=0, second=0, microsecond=0) + timedelta(days=1)
                 future_df = create_time_features(pd.DataFrame([{'ata': future_eta}]))
                 forecast_val = model.predict(future_df[features_to_use])[0]
                 
-                method = f"Random Forest ({num_outliers} outlier dibersihkan)"
+                method = f"Random Forest ({num_outliers} outliers cleaned)"
             except Exception:
-                # Fallback ke rata-rata jika RF gagal
+                # Fallback to average if RF fails
                 forecast_val = service_df['loading_cleaned'].mean()
                 moe_val = 1.96 * service_df['loading_cleaned'].std()
                 actuals = service_df['loading_cleaned']
                 mape_val = np.mean(np.abs((actuals - forecast_val) / actuals)) * 100 if not actuals.empty else 0
-                method = f"Rata-rata Historis (RF Gagal, {num_outliers} outlier dibersihkan)"
+                method = f"Historical Average (RF Failed, {num_outliers} outliers cleaned)"
         else:
             forecast_val = service_df['loading_cleaned'].mean()
             moe_val = 1.96 * service_df['loading_cleaned'].std()
             actuals = service_df['loading_cleaned']
             mape_val = np.mean(np.abs((actuals - forecast_val) / actuals)) * 100 if not actuals.empty else 0
-            method = f"Rata-rata Historis ({num_outliers} outlier dibersihkan)"
+            method = f"Historical Average ({num_outliers} outliers cleaned)"
 
         all_results.append({
             "Service": service,
-            "Prediksi Loading Berikutnya": max(0, forecast_val), # Pastikan tidak ada prediksi negatif
+            "Next Loading Forecast": max(0, forecast_val), # Ensure no negative predictions
             "Margin of Error (± box)": moe_val,
             "MAPE (%)": mape_val,
-            "Keterangan": method
+            "Method": method
         })
         
     progress_bar.empty()
     return pd.DataFrame(all_results)
 
 def render_forecast_tab():
-    """Fungsi untuk menampilkan seluruh konten tab forecasting."""
-    st.header("📈 Prediksi Loading dengan Machine Learning")
+    """Function to display the entire forecasting tab content."""
+    st.header("📈 Loading Forecast with Machine Learning")
     st.write("""
-    Fitur ini menggunakan model **Random Forest** terpisah untuk setiap service. 
-    Model belajar dari pola waktu historis untuk memberikan prediksi yang lebih akurat, lengkap dengan pembersihan data anomali.
+    This feature uses a separate **Random Forest** model for each service. 
+    The model learns from historical time patterns to provide more accurate predictions, complete with outlier cleaning.
     """)
     
-    st.info("Pastikan file `History Loading.xlsx` ada di dalam repository GitHub Anda.", icon="ℹ️")
+    st.info("Ensure the `History Loading.xlsx` file is in your GitHub repository.", icon="ℹ️")
 
-    if st.button("🚀 Buat Prediksi Loading per Service", type="primary"):
+    # Automatically run forecast on load if not already in session state
+    if 'forecast_df' not in st.session_state:
         df_history = load_history_data()
-        
         if df_history is not None:
-            with st.spinner("Memproses data dan melatih model untuk setiap service..."):
+            with st.spinner("Processing data and training models for each service..."):
                 forecast_df = run_per_service_rf_forecast(df_history)
                 st.session_state.forecast_df = forecast_df
-            
-            st.success("Prediksi berhasil dibuat!")
         else:
-            st.error("Data historis tidak dapat dimuat. Proses dibatalkan.")
-
+            st.error("Could not load historical data. Process cancelled.")
+    
+    # Display results if they exist in session state
     if 'forecast_df' in st.session_state:
         results_df = st.session_state.forecast_df
         
-        # Memformat hasil untuk tampilan yang lebih baik
-        results_df['Prediksi Loading Berikutnya'] = results_df['Prediksi Loading Berikutnya'].round(2)
+        # Format results for better display
+        results_df['Next Loading Forecast'] = results_df['Next Loading Forecast'].round(2)
         results_df['Margin of Error (± box)'] = results_df['Margin of Error (± box)'].fillna(0).round(2)
         results_df['MAPE (%)'] = results_df['MAPE (%)'].replace([np.inf, -np.inf], 0).fillna(0).round(2)
 
         st.markdown("---")
-        st.subheader("📊 Hasil Prediksi per Service")
+        st.subheader("📊 Per-Service Forecast Results")
         st.dataframe(
-            results_df.sort_values(by="Prediksi Loading Berikutnya", ascending=False).reset_index(drop=True),
+            results_df.sort_values(by="Next Loading Forecast", ascending=False).reset_index(drop=True),
             use_container_width=True,
             hide_index=True,
             column_config={
@@ -185,18 +185,18 @@ def render_forecast_tab():
         )
         
         st.markdown("---")
-        st.subheader("💡 Apa Arti Hasil Di Atas?")
+        st.subheader("💡 How to Read These Results")
         st.markdown("""
-        - **Prediksi Loading Berikutnya**: Estimasi jumlah box untuk kedatangan kapal selanjutnya dari service tersebut.
-        - **Margin of Error (± box)**: Tingkat ketidakpastian prediksi ke depan. Prediksi **300** dengan MoE **±50** berarti nilai aktual kemungkinan besar berada di antara **250** dan **350**.
-        - **MAPE (%)**: Rata-rata persentase kesalahan model saat diuji pada data historisnya. **Semakin kecil nilainya, semakin akurat modelnya di masa lalu.**
-        - **Keterangan**: Metode yang digunakan dan jumlah *outlier* yang telah ditangani.
+        - **Next Loading Forecast**: The estimated number of boxes for the next vessel arrival for that service.
+        - **Margin of Error (± box)**: The uncertainty of the forecast. A prediction of **300** with a MoE of **±50** means the actual value is likely between **250** and **350**.
+        - **MAPE (%)**: The model's average percentage error when tested on its historical data. **The smaller, the more accurate the model was in the past.**
+        - **Method**: The technique used for the forecast and the number of outliers handled.
         """)
 
-# --- FUNGSI-FUNGSI INTI UNTUK CLASH MONITORING (TETAP SAMA) ---
+# --- CORE FUNCTIONS FOR CLASH MONITORING (UNCHANGED) ---
 @st.cache_data
 def load_vessel_codes_from_repo(possible_names=['vessel codes.xlsx', 'vessel_codes.xls', 'vessel_codes.csv']):
-    """Mencari dan memuat file kode kapal."""
+    """Search for and load the vessel codes file."""
     for filename in possible_names:
         if os.path.exists(filename):
             try:
@@ -208,10 +208,10 @@ def load_vessel_codes_from_repo(possible_names=['vessel codes.xlsx', 'vessel_cod
                 st.error(f"Failed to read file '{filename}': {e}"); return None
     st.error(f"Vessel code file not found."); return None
 
-# --- STRUKTUR UTAMA DENGAN TABS ---
+# --- MAIN STRUCTURE WITH TABS ---
 tab1, tab2 = st.tabs(["🚨 Clash Monitoring", "📈 Loading Forecast"])
 
-# --- KONTEN TAB 1: CLASH MONITORING (KODE LAMA ANDA) ---
+# --- TAB 1 CONTENT: CLASH MONITORING (YOUR ORIGINAL CODE) ---
 with tab1:
     st.sidebar.header("⚙️ Your File Uploads")
     schedule_file = st.sidebar.file_uploader("1. Upload Vessel Schedule", type=['xlsx', 'csv'])
@@ -229,7 +229,7 @@ with tab1:
         if schedule_file and unit_list_file and (df_vessel_codes is not None and not df_vessel_codes.empty):
             with st.spinner('Loading and processing data...'):
                 try:
-                    # ( ... Kode proses clash monitoring Anda tetap sama persis di sini ... )
+                    # ( ... Your clash monitoring processing code remains exactly the same here ... )
                     # 1. Loading & Cleaning
                     if schedule_file.name.lower().endswith(('.xls', '.xlsx')): df_schedule = pd.read_excel(schedule_file)
                     else: df_schedule = pd.read_csv(schedule_file)
@@ -286,14 +286,14 @@ with tab1:
         else:
             st.warning("Please upload both files.")
 
-    # --- Area Tampilan ---
+    # --- Display Area ---
     if st.session_state.processed_df is not None:
-        # ( ... Kode tampilan AG-Grid dan download Anda tetap sama persis di sini ... )
+        # ( ... Your AG-Grid display and download logic remains exactly the same here ... )
         display_df = st.session_state.processed_df
         
         st.header("📋 Analysis Result")
 
-        # --- Persiapan untuk Styling AG Grid dan Summary ---
+        # --- Prep for AG Grid Styling and Summary ---
         df_for_grid = display_df.copy()
         df_for_grid['ETA_Date'] = pd.to_datetime(df_for_grid['ETA']).dt.strftime('%Y-%m-%d')
         
@@ -311,7 +311,7 @@ with tab1:
             if clash_areas_for_date:
                 clash_map[date] = clash_areas_for_date
 
-        # --- TAMPILAN RINGKASAN CLASH DENGAN KARTU ---
+        # --- CLASH SUMMARY CARD DISPLAY ---
         summary_data = []
         if clash_map:
             summary_exclude_blocks = ['BR9', 'RC9', 'C01', 'D01', 'OOG']
@@ -360,7 +360,7 @@ with tab1:
 
         st.markdown("---")
 
-        # --- PENGGUNAAN AG-GRID ---
+        # --- AG-GRID USAGE ---
         hide_zero_jscode = JsCode("""function(params) { if (params.value == 0 || params.value === null) { return ''; } return params.value; }""")
         clash_cell_style_jscode = JsCode(f"""
             function(params) {{
@@ -397,7 +397,7 @@ with tab1:
 
         AgGrid(df_for_grid, gridOptions=gridOptions, height=600, width='100%', theme='streamlit', allow_unsafe_jscode=True)
         
-        # --- LOGIKA TOMBOL DOWNLOAD EXCEL ---
+        # --- EXCEL DOWNLOAD BUTTON LOGIC ---
         output = io.BytesIO()
         with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
             if 'clash_summary_df' in st.session_state and st.session_state.clash_summary_df is not None:
@@ -435,6 +435,6 @@ with tab1:
             file_name="clash_summary_report.xlsx",
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
         )
-# --- KONTEN TAB 2: FORECASTING (KODE BARU) ---
+# --- TAB 2 CONTENT: FORECASTING (NEW CODE) ---
 with tab2:
     render_forecast_tab()
