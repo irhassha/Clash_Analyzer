@@ -106,58 +106,10 @@ with tab2:
     crane_file_tab2 = st.file_uploader("Upload Crane Sequence File", type=['xlsx', 'csv'], key="crane_uploader_tab2")
     st.markdown("---")
 
-    # --- Fitur 1: Crane Sequence Visualizer ---
-    st.subheader("Crane Sequence Visualizer")
-    if crane_file_tab2:
-        try:
-            df_crane_sheet2_viz = pd.read_excel(crane_file_tab2, sheet_name=1)
-            df_crane_sheet2_viz.columns = df_crane_sheet2_viz.columns.str.strip()
-            df_crane_sheet2_viz.rename(columns={'Main Bay': 'Bay', 'Sequence': 'Seq.', 'QC': 'Crane'}, inplace=True)
-            df_crane_sheet2_viz = df_crane_sheet2_viz.dropna(subset=['Bay'])
-            df_crane_sheet2_viz['Bay'] = df_crane_sheet2_viz['Bay'].apply(format_bay)
-            pivot_crane = df_crane_sheet2_viz.pivot(index='Seq.', columns='Bay', values='Crane').fillna('')
-            sorted_bays = sorted(pivot_crane.columns, key=lambda x: int(x.split('-')[0]))
-            pivot_crane = pivot_crane[sorted_bays]
-
-            # --- Tambahkan Area dari Container Area Lookup jika tersedia ---
-            area_dict = {}
-            if 'result_df' in locals():
-                area_summary = (
-                    result_df
-                    .groupby(['Crane', 'Seq.'])['Area (EXE)']
-                    .agg(lambda x: ', '.join(sorted(set(x))))
-                    .reset_index()
-                    .rename(columns={'Area (EXE)': 'AreaSummary'})
-                )
-                area_dict = {(row['Crane'], row['Seq.']): row['AreaSummary'] for _, row in area_summary.iterrows()}
-
-            def get_display_value(crane_val, seq_idx):
-                try:
-                    if crane_val == '':
-                        return ''
-                    crane = float(crane_val)
-                    area_info = area_dict.get((crane, seq_idx), '')
-                    return f"{crane:.0f}\n{area_info}" if area_info else f"{crane:.0f}"
-                except:
-                    return crane_val
-
-            pivot_crane_display = pivot_crane.copy()
-            for row_idx in pivot_crane_display.index:
-                for col in pivot_crane_display.columns:
-                    val = pivot_crane_display.loc[row_idx, col]
-                    pivot_crane_display.loc[row_idx, col] = get_display_value(val, row_idx)
-
-            st.dataframe(pivot_crane_display, use_container_width=True)
-
-        except Exception as e:
-            st.error(f"Failed to process Crane Sequence Visualizer: {e}")
-    else:
-        st.info("Upload the 'Crane Sequence File' to use this feature.")
-
-    st.markdown("---")
-
-    # --- Fitur 2: Container Area Lookup ---
+    # --- Fitur 1: Container Area Lookup ---
     st.subheader("Container Area Lookup")
+
+    result_df = None
     if crane_file_tab2 and unit_list_file:
         try:
             df_crane_s1 = pd.read_excel(crane_file_tab2, sheet_name=0)
@@ -236,3 +188,52 @@ with tab2:
             st.error(f"Failed to process Container Area Lookup: {e}")
     else:
         st.info("Upload both 'Crane Sequence File' and 'Unit List' to use this feature.")
+
+    st.markdown("---")
+
+    # --- Fitur 2: Crane Sequence Visualizer ---
+    st.subheader("Crane Sequence Visualizer")
+    if crane_file_tab2:
+        try:
+            df_crane_sheet2_viz = pd.read_excel(crane_file_tab2, sheet_name=1)
+            df_crane_sheet2_viz.columns = df_crane_sheet2_viz.columns.str.strip()
+            df_crane_sheet2_viz.rename(columns={'Main Bay': 'Bay', 'Sequence': 'Seq.', 'QC': 'Crane'}, inplace=True)
+            df_crane_sheet2_viz = df_crane_sheet2_viz.dropna(subset=['Bay'])
+            df_crane_sheet2_viz['Bay'] = df_crane_sheet2_viz['Bay'].apply(format_bay)
+            pivot_crane = df_crane_sheet2_viz.pivot(index='Seq.', columns='Bay', values='Crane').fillna('')
+            sorted_bays = sorted(pivot_crane.columns, key=lambda x: int(x.split('-')[0]))
+            pivot_crane = pivot_crane[sorted_bays]
+
+            area_dict = {}
+            if result_df is not None:
+                area_summary = (
+                    result_df
+                    .groupby(['Crane', 'Seq.'])['Area (EXE)']
+                    .agg(lambda x: ', '.join(sorted(set(x))))
+                    .reset_index()
+                    .rename(columns={'Area (EXE)': 'AreaSummary'})
+                )
+                area_dict = {(row['Crane'], row['Seq.']): row['AreaSummary'] for _, row in area_summary.iterrows()}
+
+            def get_display_value(crane_val, seq_idx):
+                try:
+                    if crane_val == '':
+                        return ''
+                    crane = float(crane_val)
+                    area_info = area_dict.get((crane, seq_idx), '')
+                    return f"{crane:.0f}\n{area_info}" if area_info else f"{crane:.0f}"
+                except:
+                    return crane_val
+
+            pivot_crane_display = pivot_crane.copy()
+            for row_idx in pivot_crane_display.index:
+                for col in pivot_crane_display.columns:
+                    val = pivot_crane_display.loc[row_idx, col]
+                    pivot_crane_display.loc[row_idx, col] = get_display_value(val, row_idx)
+
+            st.dataframe(pivot_crane_display, use_container_width=True)
+
+        except Exception as e:
+            st.error(f"Failed to process Crane Sequence Visualizer: {e}")
+    else:
+        st.info("Upload the 'Crane Sequence File' to use this feature.")
