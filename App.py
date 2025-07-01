@@ -300,6 +300,34 @@ def render_clash_tab():
             ].copy()
 
             if not upcoming_vessels_df.empty:
+                # --- OPSI SIDEBAR BARU ---
+                st.sidebar.markdown("---")
+                st.sidebar.header("🛠️ Opsi Ringkasan Kapal Datang")
+                
+                all_summary_cols = ['VESSEL', 'SERVICE', 'ETA', 'TTL BOX', 'Prediksi Loading Berikutnya', 'Selisih', 'TTL CLSTR', 'CLSTR REQ']
+                
+                # Opsi untuk menyembunyikan kolom
+                cols_to_hide = st.sidebar.multiselect(
+                    "Sembunyikan kolom dari ringkasan:",
+                    options=all_summary_cols,
+                    default=[]
+                )
+                
+                # Opsi untuk kapal prioritas
+                priority_vessels = st.sidebar.multiselect(
+                    "Pilih kapal prioritas untuk di-highlight:",
+                    options=upcoming_vessels_df['VESSEL'].unique()
+                )
+                
+                # Opsi untuk menyesuaikan CLSTR REQ
+                adjusted_clstr_req = st.sidebar.number_input(
+                    "Sesuaikan CLSTR REQ untuk kapal prioritas:",
+                    min_value=0,
+                    value=0,
+                    step=1,
+                    help="Masukkan nilai baru untuk CLSTR REQ. Biarkan 0 untuk tidak mengubah."
+                )
+
                 forecast_lookup = forecast_df[['Service', 'Prediksi Loading Berikutnya']].copy()
                 
                 summary_df = pd.merge(
@@ -313,26 +341,42 @@ def render_clash_tab():
                 
                 summary_df['Selisih'] = summary_df['TTL BOX'] - summary_df['Prediksi Loading Berikutnya']
                 
-                # --- PERUBAHAN BARU: Kalkulasi CLSTR REQ ---
                 summary_df['base_for_req'] = summary_df[['TTL BOX', 'Prediksi Loading Berikutnya']].max(axis=1)
                 
                 def get_clstr_requirement(value):
                     if value <= 450: return 4
                     elif 451 <= value <= 600: return 5
                     elif 601 <= value <= 800: return 6
-                    else: return 8 # > 800
+                    else: return 8
                 
                 summary_df['CLSTR REQ'] = summary_df['base_for_req'].apply(get_clstr_requirement)
                 
-                # --- PERUBAHAN: Urutan kolom baru ---
+                # Terapkan penyesuaian CLSTR REQ untuk kapal prioritas
+                if priority_vessels and adjusted_clstr_req > 0:
+                    summary_df.loc[summary_df['VESSEL'].isin(priority_vessels), 'CLSTR REQ'] = adjusted_clstr_req
+                
                 summary_display_cols = [
                     'VESSEL', 'SERVICE', 'ETA_str', 'TTL BOX', 
                     'Prediksi Loading Berikutnya', 'Selisih', 'TTL CLSTR', 'CLSTR REQ'
                 ]
-                summary_display = summary_df[summary_display_cols]
+                
+                # Filter kolom berdasarkan pilihan pengguna
+                visible_cols = [col for col in summary_display_cols if col not in cols_to_hide]
+                
+                summary_display = summary_df[visible_cols]
                 summary_display = summary_display.rename(columns={'ETA_str': 'ETA'})
                 
-                st.dataframe(summary_display, use_container_width=True, hide_index=True)
+                # Fungsi untuk styling baris prioritas
+                def highlight_priority(row):
+                    if row.VESSEL in priority_vessels:
+                        return ['background-color: #FFF3CD'] * len(row)
+                    return [''] * len(row)
+
+                st.dataframe(
+                    summary_display.style.apply(highlight_priority, axis=1),
+                    use_container_width=True,
+                    hide_index=True
+                )
             else:
                 st.info("Tidak ada kapal yang dijadwalkan datang dalam 4 hari ke depan.")
         else:
