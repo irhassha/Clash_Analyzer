@@ -23,7 +23,7 @@ warnings.filterwarnings("ignore", category=UserWarning)
 st.set_page_config(page_title="Ops Analyzer", layout="wide")
 st.title("Yard Operations Analyzer")
 
-# --- FUNGSI-FUNGSI UNTUK FORECASTING (MODEL RANDOM FOREST) ---
+# --- FUNGSI-FUNGSI UNTUK FORECASTING (MODEL BARU: PER-SERVICE RF) ---
 
 @st.cache_data
 def load_history_data(filename="History Loading.xlsx"):
@@ -38,7 +38,7 @@ def load_history_data(filename="History Loading.xlsx"):
             df.columns = [col.strip().lower() for col in df.columns]
             df['ata'] = pd.to_datetime(df['ata'], dayfirst=True, errors='coerce')
             df.dropna(subset=['ata', 'loading', 'service'], inplace=True)
-            df = df[df['loading'] >= 0] # Pastikan tidak ada loading negatif
+            df = df[df['loading'] >= 0]
             return df
         except Exception as e:
             st.error(f"Gagal memuat file histori '{filename}': {e}")
@@ -46,140 +46,152 @@ def load_history_data(filename="History Loading.xlsx"):
     st.warning(f"File histori '{filename}' tidak ditemukan di repository.")
     return None
 
-def create_features(df):
-    """Membuat fitur dari data mentah untuk model Machine Learning."""
-    df['hour'] = df['ata'].dt.hour
-    df['day_of_week'] = df['ata'].dt.dayofweek # Senin=0, Minggu=6
-    df['day_of_month'] = df['ata'].dt.day
-    df['day_of_year'] = df['ata'].dt.dayofyear
-    df['week_of_year'] = df['ata'].dt.isocalendar().week.astype(int)
-    df['month'] = df['ata'].dt.month
-    df['year'] = df['ata'].dt.year
-    
-    # One-Hot Encode untuk kolom 'service'
-    df_with_dummies = pd.get_dummies(df, columns=['service'], prefix='service')
-    return df_with_dummies
+def create_time_features(df):
+    """Membuat fitur berbasis waktu dari kolom 'ata'."""
+    df_copy = df.copy()
+    df_copy['hour'] = df_copy['ata'].dt.hour
+    df_copy['day_of_week'] = df_copy['ata'].dt.dayofweek
+    df_copy['day_of_month'] = df_copy['ata'].dt.day
+    df_copy['day_of_year'] = df_copy['ata'].dt.dayofyear
+    df_copy['week_of_year'] = df_copy['ata'].dt.isocalendar().week.astype(int)
+    df_copy['month'] = df_copy['ata'].dt.month
+    df_copy['year'] = df_copy['ata'].dt.year
+    return df_copy
 
-def train_evaluate_model(df_features):
-    """Melatih model Random Forest dan mengevaluasi kinerjanya."""
-    # Definisikan target dan fitur
-    target = 'loading'
-    features = [col for col in df_features.columns if col not in ['ata', 'loading']]
-    
-    X = df_features[features]
-    y = df_features[target]
-    
-    # Split data: 80% untuk latihan, 20% untuk pengujian
-    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42, shuffle=False)
-    
-    # Inisialisasi dan latih model
-    model = RandomForestRegressor(n_estimators=100, random_state=42, n_jobs=-1, min_samples_leaf=2)
-    model.fit(X_train, y_train)
-    
-    # Buat prediksi pada data uji
-    predictions = model.predict(X_test)
-    
-    # Hitung metrik evaluasi
-    mae = mean_absolute_error(y_test, predictions)
-    rmse = np.sqrt(mean_squared_error(y_test, predictions))
-    mape = mean_absolute_percentage_error(y_test, predictions) * 100
-    
-    # Simpan hasil untuk visualisasi
-    results = {
-        "model": model,
-        "features": features,
-        "X_test": X_test,
-        "y_test": y_test,
-        "predictions": predictions,
-        "mae": mae,
-        "rmse": rmse,
-        "mape": mape
-    }
-    return results
+def run_per_service_rf_forecast(df_history):
+    """Menjalankan proses outlier cleaning dan forecasting untuk setiap service."""
+    all_results = []
+    unique_services = df_history['service'].unique()
+
+    progress_bar = st.progress(0, text="Menganalisis services...")
+    total_services = len(unique_services)
+
+    for i, service in enumerate(unique_services):
+        progress_text = f"Menganalisis service: {service} ({i+1}/{total_services})"
+        progress_bar.progress((i + 1) / total_services, text=progress_text)
+
+        service_df = df_history[df_history['service'] == service].copy()
+        
+        if service_df.empty or service_df['loading'].isnull().all():
+            continue
+
+        # --- 1. Pembersihan Outlier ---
+        Q1 = service_df['loading'].quantile(0.25)
+        Q3 = service_df['loading'].quantile(0.75)
+        IQR = Q3 - Q1
+        upper_bound = Q3 + 1.5 * IQR
+        lower_bound = Q1 - 1.5 * IQR
+        num_outliers = ((service_df['loading'] < lower_bound) | (service_df['loading'] > upper_bound)).sum()
+        service_df['loading_cleaned'] = service_df['loading'].clip(lower=lower_bound, upper=upper_bound)
+
+        # --- 2. Pilih Model & Forecast ---
+        forecast_val, moe_val, mape_val, method = (0, 0, 0, "")
+        
+        # Gunakan RF jika data cukup (misal > 10), jika tidak gunakan rata-rata
+        if len(service_df) >= 10:
+            try:
+                # Buat fitur waktu
+                df_features = create_time_features(service_df)
+                features_to_use = ['hour', 'day_of_week', 'day_of_month', 'day_of_year', 'week_of_year', 'month', 'year']
+                target = 'loading_cleaned'
+
+                X = df_features[features_to_use]
+                y = df_features[target]
+
+                # Split data untuk evaluasi
+                X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42, shuffle=False)
+                
+                if len(X_train) == 0: # Jika data terlalu sedikit setelah split
+                    raise ValueError("Not enough data to train model.")
+
+                model = RandomForestRegressor(n_estimators=50, random_state=42, n_jobs=-1, min_samples_leaf=2)
+                model.fit(X_train, y_train)
+                
+                # Evaluasi model
+                predictions = model.predict(X_test)
+                mape_val = mean_absolute_percentage_error(y_test, predictions) * 100 if len(y_test) > 0 else 0
+                moe_val = 1.96 * np.std(y_test - predictions) if len(y_test) > 0 else 0
+                
+                # Buat prediksi untuk masa depan (misal besok jam 12 siang)
+                future_eta = datetime.now().replace(hour=12, minute=0, second=0, microsecond=0) + timedelta(days=1)
+                future_df = create_time_features(pd.DataFrame([{'ata': future_eta}]))
+                forecast_val = model.predict(future_df[features_to_use])[0]
+                
+                method = f"Random Forest ({num_outliers} outlier dibersihkan)"
+            except Exception:
+                # Fallback ke rata-rata jika RF gagal
+                forecast_val = service_df['loading_cleaned'].mean()
+                moe_val = 1.96 * service_df['loading_cleaned'].std()
+                actuals = service_df['loading_cleaned']
+                mape_val = np.mean(np.abs((actuals - forecast_val) / actuals)) * 100 if not actuals.empty else 0
+                method = f"Rata-rata Historis (RF Gagal, {num_outliers} outlier dibersihkan)"
+        else:
+            forecast_val = service_df['loading_cleaned'].mean()
+            moe_val = 1.96 * service_df['loading_cleaned'].std()
+            actuals = service_df['loading_cleaned']
+            mape_val = np.mean(np.abs((actuals - forecast_val) / actuals)) * 100 if not actuals.empty else 0
+            method = f"Rata-rata Historis ({num_outliers} outlier dibersihkan)"
+
+        all_results.append({
+            "Service": service,
+            "Prediksi Loading Berikutnya": max(0, forecast_val), # Pastikan tidak ada prediksi negatif
+            "Margin of Error (± box)": moe_val,
+            "MAPE (%)": mape_val,
+            "Keterangan": method
+        })
+        
+    progress_bar.empty()
+    return pd.DataFrame(all_results)
 
 def render_forecast_tab():
     """Fungsi untuk menampilkan seluruh konten tab forecasting."""
     st.header("📈 Prediksi Loading dengan Machine Learning")
     st.write("""
-    Fitur ini menggunakan model **Random Forest** untuk memprediksi jumlah muatan. 
-    Model ini belajar dari berbagai faktor seperti waktu (jam, hari, bulan) dan jenis service untuk memberikan prediksi yang lebih akurat.
+    Fitur ini menggunakan model **Random Forest** terpisah untuk setiap service. 
+    Model belajar dari pola waktu historis untuk memberikan prediksi yang lebih akurat, lengkap dengan pembersihan data anomali.
     """)
+    
     st.info("Pastikan file `History Loading.xlsx` ada di dalam repository GitHub Anda.", icon="ℹ️")
 
-    if st.button("🚀 Latih Model & Evaluasi Kinerja", type="primary"):
+    if st.button("🚀 Buat Prediksi Loading per Service", type="primary"):
         df_history = load_history_data()
         
         if df_history is not None:
-            with st.spinner("Membuat fitur dan melatih model..."):
-                df_features = create_features(df_history)
-                model_results = train_evaluate_model(df_features)
-                
-                # Simpan hasil ke session state untuk digunakan nanti
-                st.session_state.model_results = model_results
-                st.session_state.unique_services = df_history['service'].unique().tolist()
+            with st.spinner("Memproses data dan melatih model untuk setiap service..."):
+                forecast_df = run_per_service_rf_forecast(df_history)
+                st.session_state.forecast_df = forecast_df
             
-            st.success("Model berhasil dilatih dan dievaluasi!")
+            st.success("Prediksi berhasil dibuat!")
         else:
             st.error("Data historis tidak dapat dimuat. Proses dibatalkan.")
 
-    # Tampilkan hasil jika model sudah dilatih
-    if 'model_results' in st.session_state:
-        results = st.session_state.model_results
+    if 'forecast_df' in st.session_state:
+        results_df = st.session_state.forecast_df
+        
+        # Memformat hasil untuk tampilan yang lebih baik
+        results_df['Prediksi Loading Berikutnya'] = results_df['Prediksi Loading Berikutnya'].round(2)
+        results_df['Margin of Error (± box)'] = results_df['Margin of Error (± box)'].fillna(0).round(2)
+        results_df['MAPE (%)'] = results_df['MAPE (%)'].replace([np.inf, -np.inf], 0).fillna(0).round(2)
+
+        st.markdown("---")
+        st.subheader("📊 Hasil Prediksi per Service")
+        st.dataframe(
+            results_df.sort_values(by="Prediksi Loading Berikutnya", ascending=False).reset_index(drop=True),
+            use_container_width=True,
+            hide_index=True,
+            column_config={
+                "MAPE (%)": st.column_config.NumberColumn(format="%.2f%%")
+            }
+        )
         
         st.markdown("---")
-        st.subheader("📊 Kinerja Model pada Data Uji")
-        col1, col2, col3 = st.columns(3)
-        col1.metric("MAPE (Mean Absolute Percentage Error)", f"{results['mape']:.2f} %", help="Rata-rata persentase kesalahan. Semakin kecil, semakin baik.")
-        col2.metric("MAE (Mean Absolute Error)", f"{results['mae']:.2f} box", help="Rata-rata kesalahan absolut dalam satuan box.")
-        col3.metric("RMSE (Root Mean Squared Error)", f"{results['rmse']:.2f} box", help="Akar dari rata-rata kuadrat kesalahan. Memberi bobot lebih pada kesalahan besar.")
-
-        # Visualisasi Fitur Penting
-        st.subheader("🔍 Fitur Paling Berpengaruh")
-        feature_importance = pd.Series(results['model'].feature_importances_, index=results['features']).nlargest(10)
-        fig, ax = plt.subplots()
-        feature_importance.sort_values().plot(kind='barh', ax=ax)
-        ax.set_title("Top 10 Fitur Paling Penting")
-        st.pyplot(fig)
-
-        # Visualisasi Prediksi vs Aktual
-        st.subheader("📉 Prediksi Model vs. Nilai Aktual (pada Data Uji)")
-        plot_df = pd.DataFrame({'Aktual': results['y_test'], 'Prediksi': results['predictions']})
-        st.line_chart(plot_df)
-
-        # --- Bagian untuk membuat prediksi baru ---
-        st.markdown("---")
-        st.subheader("🔮 Buat Prediksi Baru")
-        
-        with st.form("prediction_form"):
-            col1, col2, col3 = st.columns(3)
-            with col1:
-                service_to_predict = st.selectbox("Pilih Service", options=st.session_state.unique_services)
-            with col2:
-                eta_date = st.date_input("Pilih Tanggal ETA")
-            with col3:
-                eta_time = st.time_input("Pilih Waktu ETA")
-            
-            submit_button = st.form_submit_button("Prediksi Loading")
-
-        if submit_button:
-            # Gabungkan tanggal dan waktu
-            eta_full = datetime.combine(eta_date, eta_time)
-            
-            # Buat DataFrame untuk data baru
-            new_data = pd.DataFrame([{'ata': eta_full, 'service': service_to_predict}])
-            new_data_features = create_features(new_data)
-            
-            # Pastikan semua kolom fitur ada
-            model_features = results['features']
-            new_data_aligned = pd.DataFrame(columns=model_features)
-            new_data_aligned = pd.concat([new_data_aligned, new_data_features], axis=0, ignore_index=True).fillna(0)
-            new_data_aligned = new_data_aligned[model_features] # Jaga urutan kolom
-            
-            # Lakukan prediksi
-            prediction = results['model'].predict(new_data_aligned)[0]
-            
-            st.success(f"**Prediksi jumlah loading untuk service `{service_to_predict}` pada `{eta_full.strftime('%d-%m-%Y %H:%M')}` adalah: `{prediction:.2f} box`**")
-
+        st.subheader("💡 Apa Arti Hasil Di Atas?")
+        st.markdown("""
+        - **Prediksi Loading Berikutnya**: Estimasi jumlah box untuk kedatangan kapal selanjutnya dari service tersebut.
+        - **Margin of Error (± box)**: Tingkat ketidakpastian prediksi ke depan. Prediksi **300** dengan MoE **±50** berarti nilai aktual kemungkinan besar berada di antara **250** dan **350**.
+        - **MAPE (%)**: Rata-rata persentase kesalahan model saat diuji pada data historisnya. **Semakin kecil nilainya, semakin akurat modelnya di masa lalu.**
+        - **Keterangan**: Metode yang digunakan dan jumlah *outlier* yang telah ditangani.
+        """)
 
 # --- FUNGSI-FUNGSI INTI UNTUK CLASH MONITORING (TETAP SAMA) ---
 @st.cache_data
