@@ -250,7 +250,6 @@ def render_clash_tab():
                     cluster_cols_for_calc = pivot_df.columns.tolist()
                     pivot_df['TTL BOX'] = pivot_df[cluster_cols_for_calc].sum(axis=1)
                     
-                    # --- PERUBAHAN: Kalkulasi TTL CLSTR dengan pengecualian ---
                     exclude_for_clstr = ['D01', 'C01', 'C02', 'OOG', 'UNKNOWN', 'BR9', 'RC9']
                     clstr_calculation_cols = [col for col in cluster_cols_for_calc if col not in exclude_for_clstr]
                     pivot_df['TTL CLSTR'] = (pivot_df[clstr_calculation_cols] > 0).sum(axis=1)
@@ -312,13 +311,23 @@ def render_clash_tab():
                 )
                 summary_df['Prediksi Loading Berikutnya'] = summary_df['Prediksi Loading Berikutnya'].fillna(0).round(2)
                 
-                # --- PERUBAHAN: Tambahkan kolom selisih ---
                 summary_df['Selisih'] = summary_df['TTL BOX'] - summary_df['Prediksi Loading Berikutnya']
+                
+                # --- PERUBAHAN BARU: Kalkulasi CLSTR REQ ---
+                summary_df['base_for_req'] = summary_df[['TTL BOX', 'Prediksi Loading Berikutnya']].max(axis=1)
+                
+                def get_clstr_requirement(value):
+                    if value <= 450: return 4
+                    elif 451 <= value <= 600: return 5
+                    elif 601 <= value <= 800: return 6
+                    else: return 8 # > 800
+                
+                summary_df['CLSTR REQ'] = summary_df['base_for_req'].apply(get_clstr_requirement)
                 
                 # --- PERUBAHAN: Urutan kolom baru ---
                 summary_display_cols = [
                     'VESSEL', 'SERVICE', 'ETA_str', 'TTL BOX', 
-                    'Prediksi Loading Berikutnya', 'Selisih', 'TTL CLSTR'
+                    'Prediksi Loading Berikutnya', 'Selisih', 'TTL CLSTR', 'CLSTR REQ'
                 ]
                 summary_display = summary_df[summary_display_cols]
                 summary_display = summary_display.rename(columns={'ETA_str': 'ETA'})
