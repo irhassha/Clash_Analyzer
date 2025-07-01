@@ -129,7 +129,7 @@ def run_per_service_rf_forecast(df_history):
 
         all_results.append({
             "Service": service,
-            "Loading Forecast": max(0, forecast_val), # MODIFIED
+            "Loading Forecast": max(0, forecast_val),
             "Margin of Error (± box)": moe_val,
             "MAPE (%)": mape_val,
             "Method": method
@@ -162,14 +162,14 @@ def render_forecast_tab():
         results_df = st.session_state.forecast_df
         
         if not results_df.empty:
-            results_df['Loading Forecast'] = results_df['Loading Forecast'].round(2) # MODIFIED
+            results_df['Loading Forecast'] = results_df['Loading Forecast'].round(2)
             results_df['Margin of Error (± box)'] = results_df['Margin of Error (± box)'].fillna(0).round(2)
             results_df['MAPE (%)'] = results_df['MAPE (%)'].replace([np.inf, -np.inf], 0).fillna(0).round(2)
 
             st.markdown("---")
             st.subheader("📊 Forecast Results per Service")
             st.dataframe(
-                results_df.sort_values(by="Loading Forecast", ascending=False).reset_index(drop=True), # MODIFIED
+                results_df.sort_values(by="Loading Forecast", ascending=False).reset_index(drop=True),
                 use_container_width=True,
                 hide_index=True,
                 column_config={
@@ -184,7 +184,7 @@ def render_forecast_tab():
             - **Margin of Error (± box)**: The level of uncertainty in the prediction. A prediction of **300** with a MoE of **±50** means the actual value is likely between **250** and **350**.
             - **MAPE (%)**: The average percentage error of the model when tested on its historical data. **The smaller the value, the more accurate the model has been in the past.**
             - **Method**: The technique used for the forecast and the number of outliers handled.
-            """) # MODIFIED
+            """)
         else:
             st.warning("No forecast data could be generated. The history file might be empty or contain no valid service data.")
 
@@ -304,22 +304,19 @@ def render_clash_tab():
                 st.sidebar.markdown("---")
                 st.sidebar.header("🛠️ Upcoming Vessel Options")
                 
-                all_summary_cols = ['VESSEL', 'SERVICE', 'ETA', 'TOTAL BOX', 'Loading Forecast', 'Difference', 'TOTAL CLSTR', 'CLSTR REQ'] # MODIFIED
+                all_summary_cols = ['VESSEL', 'SERVICE', 'ETA', 'TOTAL BOX', 'Loading Forecast', 'Difference', 'TOTAL CLSTR', 'CLSTR REQ']
                 
-                # Option to hide columns
                 cols_to_hide = st.sidebar.multiselect(
                     "Hide columns from summary:",
                     options=all_summary_cols,
                     default=[]
                 )
                 
-                # Option for priority vessels
                 priority_vessels = st.sidebar.multiselect(
                     "Select priority vessels to highlight:",
                     options=upcoming_vessels_df['VESSEL'].unique()
                 )
                 
-                # Option to adjust CLSTR REQ
                 adjusted_clstr_req = st.sidebar.number_input(
                     "Adjust CLSTR REQ for priority vessels:",
                     min_value=0,
@@ -328,7 +325,7 @@ def render_clash_tab():
                     help="Enter a new value for CLSTR REQ. Leave as 0 to not change."
                 )
 
-                forecast_lookup = forecast_df[['Service', 'Loading Forecast']].copy() # MODIFIED
+                forecast_lookup = forecast_df[['Service', 'Loading Forecast']].copy()
                 
                 summary_df = pd.merge(
                     upcoming_vessels_df,
@@ -338,11 +335,9 @@ def render_clash_tab():
                     how='left'
                 )
                 
-                summary_df['Loading Forecast'] = summary_df['Loading Forecast'].fillna(0).round(0).astype(int) # MODIFIED
-                
+                summary_df['Loading Forecast'] = summary_df['Loading Forecast'].fillna(0).round(0).astype(int)
                 summary_df['Difference'] = summary_df['TOTAL BOX'] - summary_df['Loading Forecast']
-                
-                summary_df['base_for_req'] = summary_df[['TOTAL BOX', 'Loading Forecast']].max(axis=1) # MODIFIED
+                summary_df['base_for_req'] = summary_df[['TOTAL BOX', 'Loading Forecast']].max(axis=1)
                 
                 def get_clstr_requirement(value):
                     if value <= 450: return 4
@@ -352,69 +347,55 @@ def render_clash_tab():
                 
                 summary_df['CLSTR REQ'] = summary_df['base_for_req'].apply(get_clstr_requirement)
                 
-                # Apply CLSTR REQ adjustment for priority vessels
                 if priority_vessels and adjusted_clstr_req > 0:
                     summary_df.loc[summary_df['VESSEL'].isin(priority_vessels), 'CLSTR REQ'] = adjusted_clstr_req
                 
                 summary_display_cols = [
                     'VESSEL', 'SERVICE', 'ETA_str', 'TOTAL BOX', 
                     'Loading Forecast', 'Difference', 'TOTAL CLSTR', 'CLSTR REQ'
-                ] # MODIFIED
+                ]
                 
-                # Filter columns based on user selection
                 visible_cols = [col for col in summary_display_cols if col not in cols_to_hide]
+                summary_display = summary_df[visible_cols].rename(columns={'ETA_str': 'ETA'})
                 
-                summary_display = summary_df[visible_cols]
-                summary_display = summary_display.rename(columns={'ETA_str': 'ETA'})
-                
-                # Function to style priority rows
-                def highlight_priority(row):
+                # --- START: STYLING LOGIC ---
+                def style_difference(v):
+                    color = '#4CAF50' if v > 0 else '#F44336' if v < 0 else '#757575' # Green, Red, Gray
+                    return f'color: {color}; font-weight: bold;'
+
+                def highlight_rows(row):
+                    # Priority 1: Cluster issue (light red)
+                    if row['TOTAL CLSTR'] < row['CLSTR REQ']:
+                        return ['background-color: #FFCDD2'] * len(row)
+                    # Priority 2: User-selected priority vessel (light yellow)
                     if row.VESSEL in priority_vessels:
                         return ['background-color: #FFF3CD'] * len(row)
+                    # Default: No highlight
                     return [''] * len(row)
 
-                from st_aggrid import GridOptionsBuilder, AgGrid, JsCode
+                # Apply styles
+                styled_df = summary_display.style \
+                    .apply(highlight_rows, axis=1) \
+                    .map(style_difference, subset=['Difference'])
 
-                # Menambahkan kolom ETA_Date untuk zebra style (tidak wajib jika tidak dipakai)
-                summary_display['ETA_Date'] = pd.to_datetime(summary_df['ETA']).dt.strftime('%Y-%m-%d')
-
-                # Format warna hijau bila TOTAL CLSTR >= CLSTR REQ
-                clstr_highlight_jscode = JsCode("""
-                function(params) {
-                    if (params.colDef.field === 'TOTAL CLSTR') {
-                        if (params.data['TOTAL CLSTR'] >= params.data['CLSTR REQ']) {
-                            return {'backgroundColor': '#d4edda', 'color': 'black', 'fontWeight': 'bold'};
-                        }
+                # Display the styled DataFrame
+                st.dataframe(
+                    styled_df,
+                    use_container_width=False,  # Set to False to make table compact
+                    hide_index=True,
+                    column_config={
+                        "TOTAL BOX": st.column_config.BarChartColumn(
+                            width="medium",
+                            y_max=summary_display["TOTAL BOX"].max() + 50, # Add buffer
+                        ),
+                        "Loading Forecast": st.column_config.BarChartColumn(
+                            width="medium",
+                            y_max=summary_display["Loading Forecast"].max() + 50, # Add buffer
+                        )
                     }
-                    return {};
-                }
-                """)
-
-                # Build Grid Option
-                gb = GridOptionsBuilder.from_dataframe(summary_display)
-                gb.configure_default_column(resizable=True, minWidth=60)
-                gb.configure_grid_options(domLayout='normal')
+                )
+                # --- END: STYLING LOGIC ---
                 
-                for col in summary_display.columns:
-                    gb.configure_column(col, width=100)
-                
-                # Apply style to TOTAL CLSTR
-                gb.configure_column("TOTAL CLSTR", cellStyle=clstr_highlight_jscode)
-                
-                # Zebra row style opsional
-                zebra_row_jscode = JsCode("""
-                function(params) {
-                    const color = params.node.rowIndex % 2 === 0 ? '#f9f9f9' : '#f1f1f1';
-                    return {'backgroundColor': color};
-                }
-                """)
-                
-                grid_options = gb.build()
-                grid_options["getRowStyle"] = zebra_row_jscode
-                
-                # Render AgGrid
-                AgGrid(summary_display, gridOptions=grid_options, theme="streamlit", height=300, fit_columns_on_grid_load=True)
-
             else:
                 st.info("No vessels scheduled to arrive in the next 4 days.")
         else:
