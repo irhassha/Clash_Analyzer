@@ -27,7 +27,7 @@ def load_history_data(filename="History Loading.xlsx"):
     """Mencari dan memuat file data historis untuk forecasting."""
     if os.path.exists(filename):
         try:
-            df = pd.read_csv(filename)
+            df = pd.read_excel(filename)
             df.columns = [col.strip().lower() for col in df.columns]
             # Konversi kolom tanggal, asumsi format DD/MM/YYYY
             df['ata'] = pd.to_datetime(df['ata'], dayfirst=True, errors='coerce')
