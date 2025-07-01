@@ -162,36 +162,44 @@ def render_forecast_tab():
                 forecast_df = run_per_service_rf_forecast(df_history)
                 st.session_state.forecast_df = forecast_df
         else:
+            # Set an empty dataframe in session state if history fails to load
+            st.session_state.forecast_df = pd.DataFrame()
             st.error("Could not load historical data. Process cancelled.")
     
     # Display results if they exist in session state
     if 'forecast_df' in st.session_state:
         results_df = st.session_state.forecast_df
         
-        # Format results for better display
-        results_df['Next Loading Forecast'] = results_df['Next Loading Forecast'].round(2)
-        results_df['Margin of Error (± box)'] = results_df['Margin of Error (± box)'].fillna(0).round(2)
-        results_df['MAPE (%)'] = results_df['MAPE (%)'].replace([np.inf, -np.inf], 0).fillna(0).round(2)
+        # --- FIX: Check if the DataFrame is not empty before processing ---
+        if not results_df.empty:
+            # Format results for better display
+            results_df['Next Loading Forecast'] = results_df['Next Loading Forecast'].round(2)
+            results_df['Margin of Error (± box)'] = results_df['Margin of Error (± box)'].fillna(0).round(2)
+            results_df['MAPE (%)'] = results_df['MAPE (%)'].replace([np.inf, -np.inf], 0).fillna(0).round(2)
 
-        st.markdown("---")
-        st.subheader("📊 Per-Service Forecast Results")
-        st.dataframe(
-            results_df.sort_values(by="Next Loading Forecast", ascending=False).reset_index(drop=True),
-            use_container_width=True,
-            hide_index=True,
-            column_config={
-                "MAPE (%)": st.column_config.NumberColumn(format="%.2f%%")
-            }
-        )
-        
-        st.markdown("---")
-        st.subheader("💡 How to Read These Results")
-        st.markdown("""
-        - **Next Loading Forecast**: The estimated number of boxes for the next vessel arrival for that service.
-        - **Margin of Error (± box)**: The uncertainty of the forecast. A prediction of **300** with a MoE of **±50** means the actual value is likely between **250** and **350**.
-        - **MAPE (%)**: The model's average percentage error when tested on its historical data. **The smaller, the more accurate the model was in the past.**
-        - **Method**: The technique used for the forecast and the number of outliers handled.
-        """)
+            st.markdown("---")
+            st.subheader("📊 Per-Service Forecast Results")
+            st.dataframe(
+                results_df.sort_values(by="Next Loading Forecast", ascending=False).reset_index(drop=True),
+                use_container_width=True,
+                hide_index=True,
+                column_config={
+                    "MAPE (%)": st.column_config.NumberColumn(format="%.2f%%")
+                }
+            )
+            
+            st.markdown("---")
+            st.subheader("💡 How to Read These Results")
+            st.markdown("""
+            - **Next Loading Forecast**: The estimated number of boxes for the next vessel arrival for that service.
+            - **Margin of Error (± box)**: The uncertainty of the forecast. A prediction of **300** with a MoE of **±50** means the actual value is likely between **250** and **350**.
+            - **MAPE (%)**: The model's average percentage error when tested on its historical data. **The smaller, the more accurate the model was in the past.**
+            - **Method**: The technique used for the forecast and the number of outliers handled.
+            """)
+        else:
+            # Show a warning if no forecast could be generated
+            st.warning("No forecast data could be generated. The history file might be empty or contain no valid service data.")
+
 
 # --- CORE FUNCTIONS FOR CLASH MONITORING (UNCHANGED) ---
 @st.cache_data
