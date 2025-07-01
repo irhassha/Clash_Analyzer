@@ -259,8 +259,8 @@ with tab1:
                     filtered_data = merged_df[~merged_df['Area (EXE)'].isin(excluded_areas)]
                     if filtered_data.empty: st.warning("Tidak ada data tersisa setelah filtering."); st.session_state.processed_df = None; st.stop()
 
-                    # 4. Pivoting (Tambahkan 'Service' ke grouping)
-                    grouping_cols = ['VESSEL', 'CODE', 'Service', 'VOY_OUT', 'ETA']
+                    # 4. Pivoting (Tambahkan 'SERVICE' ke grouping)
+                    grouping_cols = ['VESSEL', 'CODE', 'SERVICE', 'VOY_OUT', 'ETA']
                     pivot_df = filtered_data.pivot_table(index=grouping_cols, columns='Area (EXE)', aggfunc='size', fill_value=0)
                     
                     cluster_cols_for_calc = pivot_df.columns.tolist()
@@ -275,7 +275,7 @@ with tab1:
                     if pivot_df.empty: st.warning("Tidak ada data tersisa setelah filter ETA & Total."); st.session_state.processed_df = None; st.stop()
 
                     # 6. Sorting and Ordering (Tambahkan 'Service' ke kolom awal)
-                    cols_awal = ['VESSEL', 'CODE', 'Service', 'VOY_OUT', 'ETA', 'TTL BOX', 'TTL CLSTR']
+                    cols_awal = ['VESSEL', 'CODE', 'SERVICE', 'VOY_OUT', 'ETA', 'TTL BOX', 'TTL CLSTR']
                     final_cluster_cols = [col for col in pivot_df.columns if col not in cols_awal]
                     final_display_cols = cols_awal + sorted(final_cluster_cols)
                     pivot_df = pivot_df[final_display_cols]
@@ -389,11 +389,11 @@ with tab1:
 
         default_col_def = {"suppressMenu": True, "sortable": True, "resizable": True, "editable": False, "minWidth": 40}
         column_defs = []
-        pinned_cols = ['VESSEL', 'CODE', 'Service', 'VOY_OUT', 'ETA', 'TTL BOX', 'TTL CLSTR']
+        pinned_cols = ['VESSEL', 'CODE', 'SERVICE', 'VOY_OUT', 'ETA', 'TTL BOX', 'TTL CLSTR']
         for col in pinned_cols:
             width = 110 if col == 'VESSEL' else 80
             if col == 'ETA': width = 120 
-            if col == 'Service': width = 90
+            if col == 'SERVICE': width = 90
             col_def = {"field": col, "headerName": col, "pinned": "left", "width": width}
             if col in ["TTL BOX", "TTL CLSTR"]: col_def["cellRenderer"] = hide_zero_jscode
             column_defs.append(col_def)
