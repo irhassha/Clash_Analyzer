@@ -306,20 +306,17 @@ def render_clash_tab():
                 
                 all_summary_cols = ['VESSEL', 'SERVICE', 'ETA', 'TTL BOX', 'Prediksi Loading Berikutnya', 'Selisih', 'TTL CLSTR', 'CLSTR REQ']
                 
-                # Opsi untuk menyembunyikan kolom
                 cols_to_hide = st.sidebar.multiselect(
                     "Sembunyikan kolom dari ringkasan:",
                     options=all_summary_cols,
                     default=[]
                 )
                 
-                # Opsi untuk kapal prioritas
                 priority_vessels = st.sidebar.multiselect(
                     "Pilih kapal prioritas untuk di-highlight:",
                     options=upcoming_vessels_df['VESSEL'].unique()
                 )
                 
-                # Opsi untuk menyesuaikan CLSTR REQ
                 adjusted_clstr_req = st.sidebar.number_input(
                     "Sesuaikan CLSTR REQ untuk kapal prioritas:",
                     min_value=0,
@@ -351,29 +348,38 @@ def render_clash_tab():
                 
                 summary_df['CLSTR REQ'] = summary_df['base_for_req'].apply(get_clstr_requirement)
                 
-                # Terapkan penyesuaian CLSTR REQ untuk kapal prioritas
                 if priority_vessels and adjusted_clstr_req > 0:
                     summary_df.loc[summary_df['VESSEL'].isin(priority_vessels), 'CLSTR REQ'] = adjusted_clstr_req
                 
+                # --- PERUBAHAN BARU: Styling untuk Ringkasan ---
+                summary_df['ETA_Date_Only'] = pd.to_datetime(summary_df['ETA']).dt.strftime('%Y-%m-%d')
+                summary_unique_dates = summary_df['ETA_Date_Only'].unique()
+                summary_zebra_colors = ['#FFFFFF', '#F0F2F6'] 
+                summary_date_color_map = {date: summary_zebra_colors[i % 2] for i, date in enumerate(summary_unique_dates)}
+
+                def style_summary_rows(row):
+                    if row.VESSEL in priority_vessels:
+                        return ['background-color: #FFF3CD'] * len(row)
+                    
+                    eta_date = row.ETA_Date_Only
+                    color = summary_date_color_map.get(eta_date, '')
+                    if color:
+                        return [f'background-color: {color}'] * len(row)
+                        
+                    return [''] * len(row)
+
                 summary_display_cols = [
                     'VESSEL', 'SERVICE', 'ETA_str', 'TTL BOX', 
                     'Prediksi Loading Berikutnya', 'Selisih', 'TTL CLSTR', 'CLSTR REQ'
                 ]
                 
-                # Filter kolom berdasarkan pilihan pengguna
                 visible_cols = [col for col in summary_display_cols if col not in cols_to_hide]
                 
-                summary_display = summary_df[visible_cols]
+                summary_display = summary_df[visible_cols + ['VESSEL', 'ETA_Date_Only']] # Tambahkan kolom sementara untuk styling
                 summary_display = summary_display.rename(columns={'ETA_str': 'ETA'})
                 
-                # Fungsi untuk styling baris prioritas
-                def highlight_priority(row):
-                    if row.VESSEL in priority_vessels:
-                        return ['background-color: #FFF3CD'] * len(row)
-                    return [''] * len(row)
-
                 st.dataframe(
-                    summary_display.style.apply(highlight_priority, axis=1),
+                    summary_display.style.apply(style_summary_rows, axis=1).hide(columns=['VESSEL', 'ETA_Date_Only']),
                     use_container_width=True,
                     hide_index=True
                 )
