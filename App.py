@@ -129,7 +129,7 @@ def run_per_service_rf_forecast(df_history):
 
         all_results.append({
             "Service": service,
-            "Next Loading Prediction": max(0, forecast_val),
+            "Loading Forecast": max(0, forecast_val),
             "Margin of Error (± box)": moe_val,
             "MAPE (%)": mape_val,
             "Method": method
@@ -162,14 +162,14 @@ def render_forecast_tab():
         results_df = st.session_state.forecast_df
         
         if not results_df.empty:
-            results_df['Next Loading Prediction'] = results_df['Next Loading Prediction'].round(2)
+            results_df['Loading Forecast'] = results_df['Loading Forecast'].round(2)
             results_df['Margin of Error (± box)'] = results_df['Margin of Error (± box)'].fillna(0).round(2)
             results_df['MAPE (%)'] = results_df['MAPE (%)'].replace([np.inf, -np.inf], 0).fillna(0).round(2)
 
             st.markdown("---")
             st.subheader("📊 Forecast Results per Service")
             st.dataframe(
-                results_df.sort_values(by="Next Loading Prediction", ascending=False).reset_index(drop=True),
+                results_df.sort_values(by="Loading Forecast", ascending=False).reset_index(drop=True),
                 use_container_width=True,
                 hide_index=True,
                 column_config={
@@ -180,7 +180,7 @@ def render_forecast_tab():
             st.markdown("---")
             st.subheader("💡 How to Read These Results")
             st.markdown("""
-            - **Next Loading Prediction**: The estimated number of boxes for the next vessel arrival of that service.
+            - **Loading Forecast**: The estimated number of boxes for the next vessel arrival of that service.
             - **Margin of Error (± box)**: The level of uncertainty in the prediction. A prediction of **300** with a MoE of **±50** means the actual value is likely between **250** and **350**.
             - **MAPE (%)**: The average percentage error of the model when tested on its historical data. **The smaller the value, the more accurate the model has been in the past.**
             - **Method**: The technique used for the forecast and the number of outliers handled.
@@ -304,7 +304,7 @@ def render_clash_tab():
                 st.sidebar.markdown("---")
                 st.sidebar.header("🛠️ Upcoming Vessel Options")
                 
-                all_summary_cols = ['VESSEL', 'SERVICE', 'ETA', 'TOTAL BOX', 'Next Loading Prediction', 'Difference', 'TOTAL CLSTR', 'CLSTR REQ']
+                all_summary_cols = ['VESSEL', 'SERVICE', 'ETA', 'TOTAL BOX', 'Loading Forecast', 'Difference', 'TOTAL CLSTR', 'CLSTR REQ']
                 
                 # Option to hide columns
                 cols_to_hide = st.sidebar.multiselect(
@@ -328,7 +328,7 @@ def render_clash_tab():
                     help="Enter a new value for CLSTR REQ. Leave as 0 to not change."
                 )
 
-                forecast_lookup = forecast_df[['Service', 'Next Loading Prediction']].copy()
+                forecast_lookup = forecast_df[['Service', 'Loading Forecast']].copy()
                 
                 summary_df = pd.merge(
                     upcoming_vessels_df,
@@ -337,11 +337,11 @@ def render_clash_tab():
                     right_on='Service',
                     how='left'
                 )
-                summary_df['Next Loading Prediction'] = summary_df['Next Loading Prediction'].fillna(0).round(2)
+                summary_df['Loading Forecast'] = summary_df['Loading Forecast'].fillna(0).round(2)
                 
-                summary_df['Difference'] = summary_df['TOTAL BOX'] - summary_df['Next Loading Prediction']
+                summary_df['Difference'] = summary_df['TOTAL BOX'] - summary_df['Loading Forecast']
                 
-                summary_df['base_for_req'] = summary_df[['TOTAL BOX', 'Next Loading Prediction']].max(axis=1)
+                summary_df['base_for_req'] = summary_df[['TOTAL BOX', 'Loading Forecast']].max(axis=1)
                 
                 def get_clstr_requirement(value):
                     if value <= 450: return 4
@@ -357,7 +357,7 @@ def render_clash_tab():
                 
                 summary_display_cols = [
                     'VESSEL', 'SERVICE', 'ETA_str', 'TOTAL BOX', 
-                    'Next Loading Prediction', 'Difference', 'TOTAL CLSTR', 'CLSTR REQ'
+                    'Loading Forecast', 'Difference', 'TOTAL CLSTR', 'CLSTR REQ'
                 ]
                 
                 # Filter columns based on user selection
