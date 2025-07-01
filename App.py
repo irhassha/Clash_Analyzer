@@ -88,10 +88,8 @@ def run_per_service_rf_forecast(df_history):
         # --- 2. Pilih Model & Forecast ---
         forecast_val, moe_val, mape_val, method = (0, 0, 0, "")
         
-        # Gunakan RF jika data cukup (misal > 10), jika tidak gunakan rata-rata historis
         if len(service_df) >= 10:
             try:
-                # Buat fitur waktu
                 df_features = create_time_features(service_df)
                 features_to_use = ['hour', 'day_of_week', 'day_of_month', 'day_of_year', 'week_of_year', 'month', 'year']
                 target = 'loading_cleaned'
@@ -99,28 +97,24 @@ def run_per_service_rf_forecast(df_history):
                 X = df_features[features_to_use]
                 y = df_features[target]
 
-                # Split data untuk evaluasi
                 X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42, shuffle=False)
                 
-                if len(X_train) == 0: # Jika data terlalu sedikit setelah split
+                if len(X_train) == 0:
                     raise ValueError("Tidak cukup data untuk melatih model.")
 
                 model = RandomForestRegressor(n_estimators=50, random_state=42, n_jobs=-1, min_samples_leaf=2)
                 model.fit(X_train, y_train)
                 
-                # Evaluasi model
                 predictions = model.predict(X_test)
                 mape_val = mean_absolute_percentage_error(y_test, predictions) * 100 if len(y_test) > 0 else 0
                 moe_val = 1.96 * np.std(y_test - predictions) if len(y_test) > 0 else 0
                 
-                # Buat prediksi untuk masa depan (misal besok jam 12 siang)
                 future_eta = datetime.now().replace(hour=12, minute=0, second=0, microsecond=0) + timedelta(days=1)
                 future_df = create_time_features(pd.DataFrame([{'ata': future_eta}]))
                 forecast_val = model.predict(future_df[features_to_use])[0]
                 
                 method = f"Random Forest ({num_outliers} outlier dibersihkan)"
             except Exception:
-                # Fallback ke rata-rata jika RF gagal
                 forecast_val = service_df['loading_cleaned'].mean()
                 moe_val = 1.96 * service_df['loading_cleaned'].std()
                 actuals = service_df['loading_cleaned']
@@ -135,7 +129,7 @@ def run_per_service_rf_forecast(df_history):
 
         all_results.append({
             "Service": service,
-            "Prediksi Loading Berikutnya": max(0, forecast_val), # Pastikan tidak ada prediksi negatif
+            "Prediksi Loading Berikutnya": max(0, forecast_val),
             "Margin of Error (± box)": moe_val,
             "MAPE (%)": mape_val,
             "Metode": method
@@ -154,7 +148,6 @@ def render_forecast_tab():
     
     st.info("Pastikan file `History Loading.xlsx` ada di repositori GitHub Anda.", icon="ℹ️")
 
-    # Jalankan forecast secara otomatis saat tab dimuat jika belum ada di session state
     if 'forecast_df' not in st.session_state:
         df_history = load_history_data()
         if df_history is not None:
@@ -162,17 +155,13 @@ def render_forecast_tab():
                 forecast_df = run_per_service_rf_forecast(df_history)
                 st.session_state.forecast_df = forecast_df
         else:
-            # Atur dataframe kosong di session state jika histori gagal dimuat
             st.session_state.forecast_df = pd.DataFrame()
             st.error("Tidak dapat memuat data historis. Proses dibatalkan.")
     
-    # Tampilkan hasil jika ada di session state
     if 'forecast_df' in st.session_state:
         results_df = st.session_state.forecast_df
         
-        # --- FIX: Cek jika DataFrame tidak kosong sebelum diproses ---
         if not results_df.empty:
-            # Format hasil untuk tampilan yang lebih baik
             results_df['Prediksi Loading Berikutnya'] = results_df['Prediksi Loading Berikutnya'].round(2)
             results_df['Margin of Error (± box)'] = results_df['Margin of Error (± box)'].fillna(0).round(2)
             results_df['MAPE (%)'] = results_df['MAPE (%)'].replace([np.inf, -np.inf], 0).fillna(0).round(2)
@@ -197,11 +186,8 @@ def render_forecast_tab():
             - **Metode**: Teknik yang digunakan untuk forecast dan jumlah outlier yang ditangani.
             """)
         else:
-            # Tampilkan peringatan jika tidak ada forecast yang bisa dibuat
             st.warning("Tidak ada data forecast yang dapat dibuat. File histori mungkin kosong atau tidak berisi data service yang valid.")
 
-
-# --- FUNGSI-FUNGSI INTI UNTUK CLASH MONITORING (TETAP SAMA DENGAN PENAMBAHAN 'SERVICE') ---
 @st.cache_data
 def load_vessel_codes_from_repo(possible_names=['vessel codes.xlsx', 'vessel_codes.xls', 'vessel_codes.csv']):
     """Mencari dan memuat file kode kapal."""
@@ -216,11 +202,8 @@ def load_vessel_codes_from_repo(possible_names=['vessel codes.xlsx', 'vessel_cod
                 st.error(f"Gagal membaca file '{filename}': {e}"); return None
     st.error(f"File kode kapal tidak ditemukan."); return None
 
-# --- STRUKTUR UTAMA DENGAN TABS ---
-tab1, tab2 = st.tabs(["🚨 Analisis Clash", "📈 Forecast Loading"])
-
-# --- KONTEN TAB 1: ANALISIS CLASH (KODE LAMA ANDA DENGAN PENYESUAIAN) ---
-with tab1:
+def render_clash_tab():
+    """Fungsi untuk menampilkan seluruh konten tab Analisis Clash."""
     st.sidebar.header("⚙️ Unggah File Anda")
     schedule_file = st.sidebar.file_uploader("1. Unggah Jadwal Kapal", type=['xlsx', 'csv'])
     unit_list_file = st.sidebar.file_uploader("2. Unggah Daftar Unit", type=['xlsx', 'csv'])
@@ -240,10 +223,11 @@ with tab1:
                     # 1. Loading & Cleaning
                     if schedule_file.name.lower().endswith(('.xls', '.xlsx')): df_schedule = pd.read_excel(schedule_file)
                     else: df_schedule = pd.read_csv(schedule_file)
-                    df_schedule.columns = df_schedule.columns.str.strip()
+                    df_schedule.columns = [col.strip().upper() for col in df_schedule.columns] # Konsisten ke huruf besar
+                    
                     if unit_list_file.name.lower().endswith(('.xls', '.xlsx')): df_unit_list = pd.read_excel(unit_list_file)
                     else: df_unit_list = pd.read_csv(unit_list_file)
-                    df_unit_list.columns = df_unit_list.columns.str.strip()
+                    df_unit_list.columns = [col.strip() for col in df_unit_list.columns]
                     
                     # 2. Main Processing
                     original_vessels_list = df_schedule['VESSEL'].unique().tolist()
@@ -259,7 +243,7 @@ with tab1:
                     filtered_data = merged_df[~merged_df['Area (EXE)'].isin(excluded_areas)]
                     if filtered_data.empty: st.warning("Tidak ada data tersisa setelah filtering."); st.session_state.processed_df = None; st.stop()
 
-                    # 4. Pivoting (Tambahkan 'SERVICE' ke grouping)
+                    # 4. Pivoting
                     grouping_cols = ['VESSEL', 'CODE', 'SERVICE', 'VOY_OUT', 'ETA']
                     pivot_df = filtered_data.pivot_table(index=grouping_cols, columns='Area (EXE)', aggfunc='size', fill_value=0)
                     
@@ -274,13 +258,13 @@ with tab1:
                     pivot_df = pivot_df[~condition_to_hide]
                     if pivot_df.empty: st.warning("Tidak ada data tersisa setelah filter ETA & Total."); st.session_state.processed_df = None; st.stop()
 
-                    # 6. Sorting and Ordering (Tambahkan 'SERVICE' ke kolom awal)
+                    # 6. Sorting and Ordering
                     cols_awal = ['VESSEL', 'CODE', 'SERVICE', 'VOY_OUT', 'ETA', 'TTL BOX', 'TTL CLSTR']
                     final_cluster_cols = [col for col in pivot_df.columns if col not in cols_awal]
                     final_display_cols = cols_awal + sorted(final_cluster_cols)
                     pivot_df = pivot_df[final_display_cols]
                     
-                    pivot_df['ETA'] = pd.to_datetime(pivot_df['ETA']).dt.strftime('%Y-%m-%d %H:%M')
+                    pivot_df['ETA_str'] = pd.to_datetime(pivot_df['ETA']).dt.strftime('%Y-%m-%d %H:%M')
                     
                     pivot_df = pivot_df.sort_values(by='ETA', ascending=True).reset_index(drop=True)
                     
@@ -294,21 +278,62 @@ with tab1:
             st.warning("Mohon unggah kedua file.")
 
     # --- Area Tampilan ---
-    if st.session_state.processed_df is not None:
+    if st.session_state.get('processed_df') is not None:
         display_df = st.session_state.processed_df
         
-        st.header("📋 Hasil Analisis")
+        # --- RINGKASAN BARU: KAPAL DATANG & FORECAST ---
+        st.markdown("---")
+        st.subheader("🚢 Ringkasan Kapal Datang (Hari Ini + 3 Hari ke Depan)")
+        
+        forecast_df = st.session_state.get('forecast_df')
+        if forecast_df is not None and not forecast_df.empty:
+            today = pd.to_datetime(datetime.now().date())
+            four_days_later = today + timedelta(days=4)
+            
+            # Filter kapal yang akan datang
+            upcoming_vessels_df = display_df[
+                (display_df['ETA'] >= today) & 
+                (display_df['ETA'] < four_days_later)
+            ].copy()
+
+            if not upcoming_vessels_df.empty:
+                # Siapkan data forecast untuk di-lookup
+                forecast_lookup = forecast_df[['Service', 'Prediksi Loading Berikutnya']].copy()
+                
+                # Gabungkan data kapal datang dengan forecast
+                summary_df = pd.merge(
+                    upcoming_vessels_df,
+                    forecast_lookup,
+                    left_on='SERVICE',
+                    right_on='Service',
+                    how='left'
+                )
+                summary_df['Prediksi Loading Berikutnya'] = summary_df['Prediksi Loading Berikutnya'].fillna(0).round(2)
+                
+                # Pilih dan tampilkan kolom yang relevan
+                summary_display = summary_df[['VESSEL', 'SERVICE', 'ETA_str', 'TTL BOX', 'TTL CLSTR', 'Prediksi Loading Berikutnya']]
+                summary_display = summary_display.rename(columns={'ETA_str': 'ETA'})
+                
+                st.dataframe(summary_display, use_container_width=True, hide_index=True)
+            else:
+                st.info("Tidak ada kapal yang dijadwalkan datang dalam 4 hari ke depan.")
+        else:
+            st.warning("Data forecast tidak tersedia. Silakan jalankan forecast di tab 'Forecast Loading' terlebih dahulu.")
+        
+        st.header("📋 Hasil Analisis Detail")
 
         # --- Persiapan untuk Styling AG Grid dan Summary ---
         df_for_grid = display_df.copy()
         df_for_grid['ETA_Date'] = pd.to_datetime(df_for_grid['ETA']).dt.strftime('%Y-%m-%d')
+        # Gunakan ETA_str untuk tampilan di grid
+        df_for_grid['ETA'] = df_for_grid['ETA_str']
         
         unique_dates = df_for_grid['ETA_Date'].unique()
         zebra_colors = ['#F8F0E5', '#DAC0A3'] 
         date_color_map = {date: zebra_colors[i % 2] for i, date in enumerate(unique_dates)}
 
         clash_map = {}
-        cluster_cols = [col for col in df_for_grid.columns if col not in ['VESSEL', 'CODE', 'SERVICE', 'VOY_OUT', 'ETA', 'TTL BOX', 'TTL CLSTR', 'ETA_Date']]
+        cluster_cols = [col for col in df_for_grid.columns if col not in ['VESSEL', 'CODE', 'SERVICE', 'VOY_OUT', 'ETA', 'TTL BOX', 'TTL CLSTR', 'ETA_Date', 'ETA_str']]
         for date, group in df_for_grid.groupby('ETA_Date'):
             clash_areas_for_date = []
             for col in cluster_cols:
@@ -366,7 +391,7 @@ with tab1:
 
         st.markdown("---")
 
-        # --- PENGGUNAAN AG-GRID (Tambahkan 'SERVICE' ke kolom yang dipin) ---
+        # --- PENGGUNAAN AG-GRID ---
         hide_zero_jscode = JsCode("""function(params) { if (params.value == 0 || params.value === null) { return ''; } return params.value; }""")
         clash_cell_style_jscode = JsCode(f"""
             function(params) {{
@@ -402,7 +427,7 @@ with tab1:
         column_defs.append({"field": "ETA_Date", "hide": True})
         gridOptions = {"defaultColDef": default_col_def, "columnDefs": column_defs, "getRowStyle": zebra_row_style_jscode}
 
-        AgGrid(df_for_grid, gridOptions=gridOptions, height=600, width='100%', theme='streamlit', allow_unsafe_jscode=True)
+        AgGrid(df_for_grid.drop(columns=['ETA_str']), gridOptions=gridOptions, height=600, width='100%', theme='streamlit', allow_unsafe_jscode=True)
         
         # --- LOGIKA TOMBOL DOWNLOAD EXCEL ---
         output = io.BytesIO()
@@ -442,6 +467,12 @@ with tab1:
             file_name="clash_summary_report.xlsx",
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
         )
-# --- KONTEN TAB 2: FORECASTING (KODE BARU) ---
+
+# --- STRUKTUR UTAMA DENGAN TABS ---
+tab1, tab2 = st.tabs(["🚨 Analisis Clash", "📈 Forecast Loading"])
+
+with tab1:
+    render_clash_tab()
+
 with tab2:
     render_forecast_tab()
