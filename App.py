@@ -378,23 +378,11 @@ def render_clash_tab():
                     .apply(highlight_rows, axis=1) \
                     .map(style_difference, subset=['Difference'])
 
-                # Display the styled DataFrame
+                # Display the styled DataFrame (without bar chart column_config)
                 st.dataframe(
                     styled_df,
                     use_container_width=False,
                     hide_index=True,
-                    column_config={
-                        "TOTAL BOX": st.column_config.BarChartColumn(
-                            width="medium",
-                            # FIX: Convert numpy.int64 to python int
-                            y_max=int(summary_display["TOTAL BOX"].max()) + 50,
-                        ),
-                        "Loading Forecast": st.column_config.BarChartColumn(
-                            width="medium",
-                            # FIX: Convert numpy.int64 to python int
-                            y_max=int(summary_display["Loading Forecast"].max()) + 50,
-                        )
-                    }
                 )
                 # --- END: STYLING LOGIC ---
                 
