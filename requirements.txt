@@ -6,3 +6,4 @@ xlsxwriter
 statsmodels
 matplotlib
 numpy
+scikit-learn
