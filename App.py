@@ -102,71 +102,7 @@ with tab1:
 
 # --- KONTEN TAB 2 ---
 with tab2:
-    st.subheader("📤 Upload Files")
-    crane_file_tab2 = st.file_uploader("Upload Crane Sequence File", type=['xlsx', 'csv'], key="crane_uploader_tab2")
-
-    if crane_file_tab2 and unit_list_file:
-        try:
-            df_crane_s1 = pd.read_excel(crane_file_tab2, sheet_name=0)
-            df_crane_s1.columns = df_crane_s1.columns.str.strip()
-
-            df_crane_s2 = pd.read_excel(crane_file_tab2, sheet_name=1)
-            df_crane_s2.columns = df_crane_s2.columns.str.strip()
-            df_crane_s2.rename(columns={'Main Bay': 'Bay', 'QC': 'Crane', 'Sequence': 'Seq.'}, inplace=True)
-
-            if unit_list_file.name.lower().endswith(('.xls', '.xlsx')):
-                df_unit_list = pd.read_excel(unit_list_file)
-            else:
-                df_unit_list = pd.read_csv(unit_list_file)
-            df_unit_list.columns = df_unit_list.columns.str.strip()
-
-            df_crane_s2_loading = df_crane_s2[df_crane_s2['Direction'] == 'Loading'].copy()
-            df_crane_s2_cleaned = df_crane_s2_loading.dropna(subset=['Bay', 'Crane', 'Seq.'])
-            pos_to_crane_map = {}
-            pos_to_seq_map = {}
-
-            for _, row in df_crane_s2_cleaned.iterrows():
-                bay_range_str = format_bay(row['Bay'])
-                crane = row['Crane']
-                seq = row['Seq.']
-                if bay_range_str:
-                    if '-' in bay_range_str:
-                        start, end = map(int, bay_range_str.split('-'))
-                        for pos in range(start, end + 1):
-                            pos_to_crane_map[pos] = crane
-                            pos_to_seq_map[pos] = seq
-                    else:
-                        pos_to_crane_map[int(bay_range_str)] = crane
-                        pos_to_seq_map[int(bay_range_str)] = seq
-
-            df_crane_s1['Pos (Vessel)'] = pd.to_numeric(df_crane_s1['Pos (Vessel)'], errors='coerce')
-            df_crane_s1.dropna(subset=['Pos (Vessel)'], inplace=True)
-            df_crane_s1['Pos (Vessel)'] = df_crane_s1['Pos (Vessel)'].astype(int)
-
-            def extract_pos(pos):
-                pos_str = str(pos)
-                return pos_str[0] if len(pos_str) == 5 else pos_str[:2] if len(pos_str) == 6 else ''
-
-            df_crane_s1['Pos'] = df_crane_s1['Pos (Vessel)'].apply(extract_pos)
-            df_crane_s1['Crane'] = pd.to_numeric(df_crane_s1['Pos'], errors='coerce').map(pos_to_crane_map).fillna('N/A')
-            df_crane_s1['Seq.'] = pd.to_numeric(df_crane_s1['Pos'], errors='coerce').map(pos_to_seq_map).fillna('N/A')
-
-            df_crane_s1['Container'] = df_crane_s1['Container'].astype(str).str.strip()
-            df_unit_list['Unit'] = df_unit_list['Unit'].astype(str).str.strip()
-
-            merged_df = pd.merge(
-                df_crane_s1[['Container', 'Pos', 'Crane', 'Seq.']],
-                df_unit_list[['Unit', 'Area (EXE)']],
-                left_on='Container',
-                right_on='Unit',
-                how='inner'
-            )
-
-            if not merged_df.empty:
-                st.session_state['crane_lookup_df'] = merged_df[['Container', 'Pos', 'Crane', 'Seq.', 'Area (EXE)']].drop_duplicates()
-
-        except Exception as e:
-            st.error(f"Failed to process Container Area Lookup: {e}")
+    st.info("Upload the files and run container lookup before visualizer.")
 
     if 'crane_lookup_df' in st.session_state:
         df = st.session_state['crane_lookup_df']
@@ -180,6 +116,19 @@ with tab2:
         combined_area['Gabungan'] = combined_area['Crane'] + "\n" + combined_area['AreaStr']
 
         pivot_crane_display = combined_area.pivot(index='Seq.', columns='Crane', values='Gabungan').fillna("")
+
+        def get_crane_color(crane):
+            try:
+                crane = int(float(crane))
+                color_map = {
+                    801: "#ffcccc",
+                    802: "#ccffcc",
+                    803: "#ccccff",
+                    804: "#fff0b3"
+                }
+                return f"background-color: {color_map.get(crane, '#f0f0f0')}"
+            except:
+                return ""
 
         cell_style_jscode = JsCode("""
             function(params) {
