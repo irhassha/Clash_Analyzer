@@ -358,7 +358,7 @@ def render_clash_tab():
             with st.expander("Tampilkan Ringkasan Clash", expanded=True):
                 total_clash_days = len(clash_map)
                 total_conflicting_blocks = sum(len(areas) for areas in clash_map.values())
-                st.markdown(f"**� Ditemukan {total_clash_days} hari clash dengan total {total_conflicting_blocks} blok yang berkonflik.**")
+                st.markdown(f"**🔥 Ditemukan {total_clash_days} hari clash dengan total {total_conflicting_blocks} blok yang berkonflik.**")
                 st.markdown("---")
                 
                 clash_dates = sorted(clash_map.keys())
@@ -484,4 +484,3 @@ with tab1:
 
 with tab2:
     render_forecast_tab()
-�
