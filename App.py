@@ -351,33 +351,29 @@ def render_clash_tab():
                 if priority_vessels and adjusted_clstr_req > 0:
                     summary_df.loc[summary_df['VESSEL'].isin(priority_vessels), 'CLSTR REQ'] = adjusted_clstr_req
                 
-                # --- PERUBAHAN BARU: LOGIKA STYLING ---
+                summary_df = summary_df.rename(columns={'ETA_str': 'ETA'})
+                
+                # --- PERBAIKAN LOGIKA STYLING ---
                 def style_summary_table(df_to_style):
-                    # Buat DataFrame kosong dengan style default
                     styler = pd.DataFrame('', index=df_to_style.index, columns=df_to_style.columns)
                     
-                    # Terapkan highlight hijau untuk TTL CLSTR
-                    green_condition = df_to_style['TTL CLSTR'] >= df_to_style['CLSTR REQ']
-                    styler.loc[green_condition, 'TTL CLSTR'] = 'background-color: #D4EDDA; color: #155724'
+                    if 'TTL CLSTR' in df_to_style.columns and 'CLSTR REQ' in df_to_style.columns:
+                        green_condition = df_to_style['TTL CLSTR'] >= df_to_style['CLSTR REQ']
+                        styler.loc[green_condition, 'TTL CLSTR'] = 'background-color: #D4EDDA; color: #155724'
                     
-                    # Terapkan highlight kuning untuk kapal prioritas (menimpa style lain)
-                    for idx, row in df_to_style.iterrows():
-                        if row['VESSEL'] in priority_vessels:
-                            styler.loc[idx, :] = 'background-color: #FFF3CD'
-                    
+                    if 'VESSEL' in df_to_style.columns:
+                        priority_condition = df_to_style['VESSEL'].isin(priority_vessels)
+                        for col in styler.columns:
+                            styler.loc[priority_condition, col] = 'background-color: #FFF3CD'
+                            
                     return styler
 
-                summary_display_cols = [
-                    'VESSEL', 'SERVICE', 'ETA_str', 'TTL BOX', 
-                    'Prediksi Loading Berikutnya', 'Selisih', 'TTL CLSTR', 'CLSTR REQ'
-                ]
+                visible_cols = [col for col in all_summary_cols if col not in cols_to_hide]
                 
-                visible_cols = [col for col in summary_display_cols if col not in cols_to_hide]
-                
-                summary_to_display = summary_df.rename(columns={'ETA_str': 'ETA'})[visible_cols]
+                summary_to_display = summary_df[all_summary_cols]
                 
                 st.dataframe(
-                    summary_to_display.style.apply(style_summary_table, axis=None),
+                    summary_to_display.style.apply(style_summary_table, axis=None).hide(columns=cols_to_hide),
                     use_container_width=True,
                     hide_index=True
                 )
