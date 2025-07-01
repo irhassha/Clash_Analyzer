@@ -274,7 +274,7 @@ with tab1:
                     pivot_df = pivot_df[~condition_to_hide]
                     if pivot_df.empty: st.warning("Tidak ada data tersisa setelah filter ETA & Total."); st.session_state.processed_df = None; st.stop()
 
-                    # 6. Sorting and Ordering (Tambahkan 'Service' ke kolom awal)
+                    # 6. Sorting and Ordering (Tambahkan 'SERVICE' ke kolom awal)
                     cols_awal = ['VESSEL', 'CODE', 'SERVICE', 'VOY_OUT', 'ETA', 'TTL BOX', 'TTL CLSTR']
                     final_cluster_cols = [col for col in pivot_df.columns if col not in cols_awal]
                     final_display_cols = cols_awal + sorted(final_cluster_cols)
@@ -308,7 +308,7 @@ with tab1:
         date_color_map = {date: zebra_colors[i % 2] for i, date in enumerate(unique_dates)}
 
         clash_map = {}
-        cluster_cols = [col for col in df_for_grid.columns if col not in ['VESSEL', 'CODE', 'Service', 'VOY_OUT', 'ETA', 'TTL BOX', 'TTL CLSTR', 'ETA_Date']]
+        cluster_cols = [col for col in df_for_grid.columns if col not in ['VESSEL', 'CODE', 'SERVICE', 'VOY_OUT', 'ETA', 'TTL BOX', 'TTL CLSTR', 'ETA_Date']]
         for date, group in df_for_grid.groupby('ETA_Date'):
             clash_areas_for_date = []
             for col in cluster_cols:
@@ -366,7 +366,7 @@ with tab1:
 
         st.markdown("---")
 
-        # --- PENGGUNAAN AG-GRID (Tambahkan 'Service' ke kolom yang dipin) ---
+        # --- PENGGUNAAN AG-GRID (Tambahkan 'SERVICE' ke kolom yang dipin) ---
         hide_zero_jscode = JsCode("""function(params) { if (params.value == 0 || params.value === null) { return ''; } return params.value; }""")
         clash_cell_style_jscode = JsCode(f"""
             function(params) {{
