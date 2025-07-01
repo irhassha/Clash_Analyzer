@@ -8,26 +8,26 @@ import warnings
 import numpy as np
 import matplotlib.pyplot as plt
 
-# --- Pustaka untuk Machine Learning ---
+# --- Libraries for Machine Learning ---
 from sklearn.model_selection import train_test_split
 from sklearn.ensemble import RandomForestRegressor
 from sklearn.metrics import mean_absolute_error, mean_squared_error, mean_absolute_percentage_error
 
-# Import pustaka yang diperlukan
+# Import necessary libraries
 from st_aggrid import AgGrid, GridOptionsBuilder, JsCode
 
-# Mengabaikan peringatan yang tidak krusial
+# Ignore non-critical warnings
 warnings.filterwarnings("ignore", category=UserWarning)
 
-# --- Konfigurasi Halaman & Judul ---
+# --- Page Configuration & Title ---
 st.set_page_config(page_title="Ops Analyzer", layout="wide")
 st.title("Yard Ops Analyzer")
 
-# --- FUNGSI-FUNGSI UNTUK FORECASTING (MODEL BARU: PER-SERVICE RF) ---
+# --- FUNCTIONS FOR FORECASTING (NEW MODEL: PER-SERVICE RF) ---
 
 @st.cache_data
 def load_history_data(filename="History Loading.xlsx"):
-    """Search for and load the historical data file for forecasting."""
+    """Finds and loads the historical data file for forecasting."""
     if os.path.exists(filename):
         try:
             if filename.lower().endswith('.csv'):
@@ -43,11 +43,11 @@ def load_history_data(filename="History Loading.xlsx"):
         except Exception as e:
             st.error(f"Failed to load history file '{filename}': {e}")
             return None
-    st.warning(f"History file '{filename}' not found in repository.")
+    st.warning(f"History file '{filename}' not found in the repository.")
     return None
 
 def create_time_features(df):
-    """Create time-based features from the 'ata' column."""
+    """Creates time-based features from the 'ata' column."""
     df_copy = df.copy()
     df_copy['hour'] = df_copy['ata'].dt.hour
     df_copy['day_of_week'] = df_copy['ata'].dt.dayofweek
@@ -60,7 +60,7 @@ def create_time_features(df):
 
 @st.cache_data
 def run_per_service_rf_forecast(df_history):
-    """Run the outlier cleaning and forecasting process for each service."""
+    """Runs the outlier cleaning and forecasting process for each service."""
     all_results = []
     unique_services = df_history['service'].unique()
 
@@ -100,7 +100,7 @@ def run_per_service_rf_forecast(df_history):
                 X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42, shuffle=False)
                 
                 if len(X_train) == 0:
-                    raise ValueError("Not enough data to train model.")
+                    raise ValueError("Not enough data to train the model.")
 
                 model = RandomForestRegressor(n_estimators=50, random_state=42, n_jobs=-1, min_samples_leaf=2)
                 model.fit(X_train, y_train)
@@ -129,7 +129,7 @@ def run_per_service_rf_forecast(df_history):
 
         all_results.append({
             "Service": service,
-            "Next Loading Forecast": max(0, forecast_val),
+            "Next Loading Prediction": max(0, forecast_val),
             "Margin of Error (± box)": moe_val,
             "MAPE (%)": mape_val,
             "Method": method
@@ -139,14 +139,14 @@ def run_per_service_rf_forecast(df_history):
     return pd.DataFrame(all_results)
 
 def render_forecast_tab():
-    """Function to display the entire forecasting tab content."""
+    """Function to display the entire content of the forecasting tab."""
     st.header("📈 Loading Forecast with Machine Learning")
     st.write("""
     This feature uses a separate **Random Forest** model for each service. 
-    The model learns from historical time patterns to provide more accurate predictions, complete with outlier cleaning.
+    The model learns from historical time patterns to provide more accurate predictions, complete with anomaly data cleaning.
     """)
     
-    st.info("Ensure the `History Loading.xlsx` file is in your GitHub repository.", icon="ℹ️")
+    st.info("Make sure the `History Loading.xlsx` file is in your GitHub repository.", icon="ℹ️")
 
     if 'forecast_df' not in st.session_state:
         df_history = load_history_data()
@@ -156,20 +156,20 @@ def render_forecast_tab():
                 st.session_state.forecast_df = forecast_df
         else:
             st.session_state.forecast_df = pd.DataFrame()
-            st.error("Could not load historical data. Process cancelled.")
+            st.error("Could not load historical data. Process canceled.")
     
     if 'forecast_df' in st.session_state:
         results_df = st.session_state.forecast_df
         
         if not results_df.empty:
-            results_df['Next Loading Forecast'] = results_df['Next Loading Forecast'].round(2)
+            results_df['Next Loading Prediction'] = results_df['Next Loading Prediction'].round(2)
             results_df['Margin of Error (± box)'] = results_df['Margin of Error (± box)'].fillna(0).round(2)
             results_df['MAPE (%)'] = results_df['MAPE (%)'].replace([np.inf, -np.inf], 0).fillna(0).round(2)
 
             st.markdown("---")
-            st.subheader("📊 Per-Service Forecast Results")
+            st.subheader("📊 Forecast Results per Service")
             st.dataframe(
-                results_df.sort_values(by="Next Loading Forecast", ascending=False).reset_index(drop=True),
+                results_df.sort_values(by="Next Loading Prediction", ascending=False).reset_index(drop=True),
                 use_container_width=True,
                 hide_index=True,
                 column_config={
@@ -180,9 +180,9 @@ def render_forecast_tab():
             st.markdown("---")
             st.subheader("💡 How to Read These Results")
             st.markdown("""
-            - **Next Loading Forecast**: Estimated number of boxes for the next vessel arrival of that service.
-            - **Margin of Error (± box)**: The uncertainty of the forecast. A prediction of **300** with a MoE of **±50** means the actual value is likely between **250** and **350**.
-            - **MAPE (%)**: The model's average percentage error when tested on its historical data. **The smaller, the more accurate the model was in the past.**
+            - **Next Loading Prediction**: The estimated number of boxes for the next vessel arrival of that service.
+            - **Margin of Error (± box)**: The level of uncertainty in the prediction. A prediction of **300** with a MoE of **±50** means the actual value is likely between **250** and **350**.
+            - **MAPE (%)**: The average percentage error of the model when tested on its historical data. **The smaller the value, the more accurate the model has been in the past.**
             - **Method**: The technique used for the forecast and the number of outliers handled.
             """)
         else:
@@ -190,7 +190,7 @@ def render_forecast_tab():
 
 @st.cache_data
 def load_vessel_codes_from_repo(possible_names=['vessel codes.xlsx', 'vessel_codes.xls', 'vessel_codes.csv']):
-    """Search for and load the vessel codes file."""
+    """Finds and loads the vessel codes file."""
     for filename in possible_names:
         if os.path.exists(filename):
             try:
@@ -200,11 +200,11 @@ def load_vessel_codes_from_repo(possible_names=['vessel codes.xlsx', 'vessel_cod
                 return df
             except Exception as e:
                 st.error(f"Failed to read file '{filename}': {e}"); return None
-    st.error(f"Vessel code file not found."); return None
+    st.error(f"Vessel codes file not found."); return None
 
 def render_clash_tab():
-    """Function to display the entire Clash Analysis tab content."""
-    st.sidebar.header("⚙️ Your File Uploads")
+    """Function to display the entire content of the Clash Analysis tab."""
+    st.sidebar.header("⚙️ Upload Your Files")
     schedule_file = st.sidebar.file_uploader("1. Upload Vessel Schedule", type=['xlsx', 'csv'])
     unit_list_file = st.sidebar.file_uploader("2. Upload Unit List", type=['xlsx', 'csv'])
     process_button = st.sidebar.button("🚀 Process Clash Data", type="primary")
@@ -241,31 +241,31 @@ def render_clash_tab():
                     excluded_areas = [str(i) for i in range(801, 809)]
                     merged_df['Area (EXE)'] = merged_df['Area (EXE)'].astype(str)
                     filtered_data = merged_df[~merged_df['Area (EXE)'].isin(excluded_areas)]
-                    if filtered_data.empty: st.warning("No data remaining after filtering."); st.session_state.processed_df = None; st.stop()
+                    if filtered_data.empty: st.warning("No data left after filtering."); st.session_state.processed_df = None; st.stop()
 
                     # 4. Pivoting
                     grouping_cols = ['VESSEL', 'CODE', 'SERVICE', 'VOY_OUT', 'ETA']
                     pivot_df = filtered_data.pivot_table(index=grouping_cols, columns='Area (EXE)', aggfunc='size', fill_value=0)
                     
                     cluster_cols_for_calc = pivot_df.columns.tolist()
-                    pivot_df['TTL BOX'] = pivot_df[cluster_cols_for_calc].sum(axis=1)
+                    pivot_df['TOTAL BOX'] = pivot_df[cluster_cols_for_calc].sum(axis=1)
                     
                     exclude_for_clstr = ['D01', 'C01', 'C02', 'OOG', 'UNKNOWN', 'BR9', 'RC9']
                     clstr_calculation_cols = [col for col in cluster_cols_for_calc if col not in exclude_for_clstr]
-                    pivot_df['TTL CLSTR'] = (pivot_df[clstr_calculation_cols] > 0).sum(axis=1)
+                    pivot_df['TOTAL CLSTR'] = (pivot_df[clstr_calculation_cols] > 0).sum(axis=1)
                     
                     pivot_df = pivot_df.reset_index()
                     
                     # 5. Conditional Filtering
                     two_days_ago = pd.Timestamp.now() - timedelta(days=2)
-                    condition_to_hide = (pivot_df['ETA'] < two_days_ago) & (pivot_df['TTL BOX'] < 50)
+                    condition_to_hide = (pivot_df['ETA'] < two_days_ago) & (pivot_df['TOTAL BOX'] < 50)
                     pivot_df = pivot_df[~condition_to_hide]
-                    if pivot_df.empty: st.warning("No data remaining after ETA & Total filter."); st.session_state.processed_df = None; st.stop()
+                    if pivot_df.empty: st.warning("No data left after ETA & Total filter."); st.session_state.processed_df = None; st.stop()
 
                     # 6. Sorting and Ordering
-                    cols_awal = ['VESSEL', 'CODE', 'SERVICE', 'VOY_OUT', 'ETA', 'TTL BOX', 'TTL CLSTR']
-                    final_cluster_cols = [col for col in pivot_df.columns if col not in cols_awal]
-                    final_display_cols = cols_awal + sorted(final_cluster_cols)
+                    initial_cols = ['VESSEL', 'CODE', 'SERVICE', 'VOY_OUT', 'ETA', 'TOTAL BOX', 'TOTAL CLSTR']
+                    final_cluster_cols = [col for col in pivot_df.columns if col not in initial_cols]
+                    final_display_cols = initial_cols + sorted(final_cluster_cols)
                     pivot_df = pivot_df[final_display_cols]
                     
                     pivot_df['ETA_str'] = pd.to_datetime(pivot_df['ETA']).dt.strftime('%Y-%m-%d %H:%M')
@@ -287,7 +287,7 @@ def render_clash_tab():
         
         # --- NEW SUMMARY: UPCOMING VESSELS & FORECAST ---
         st.markdown("---")
-        st.subheader("🚢 Upcoming Vessels Summary (Today + 3 Days)")
+        st.subheader("🚢 Upcoming Vessel Summary (Today + Next 3 Days)")
         
         forecast_df = st.session_state.get('forecast_df')
         if forecast_df is not None and not forecast_df.empty:
@@ -302,30 +302,33 @@ def render_clash_tab():
             if not upcoming_vessels_df.empty:
                 # --- NEW SIDEBAR OPTIONS ---
                 st.sidebar.markdown("---")
-                st.sidebar.header("🛠️ Upcoming Vessels Summary Options")
+                st.sidebar.header("🛠️ Upcoming Vessel Options")
                 
-                all_summary_cols = ['VESSEL', 'SERVICE', 'ETA', 'TTL BOX', 'Next Loading Forecast', 'Difference', 'TTL CLSTR', 'CLSTR REQ']
+                all_summary_cols = ['VESSEL', 'SERVICE', 'ETA', 'TOTAL BOX', 'Next Loading Prediction', 'Difference', 'TOTAL CLSTR', 'CLSTR REQ']
                 
+                # Option to hide columns
                 cols_to_hide = st.sidebar.multiselect(
                     "Hide columns from summary:",
                     options=all_summary_cols,
                     default=[]
                 )
                 
+                # Option for priority vessels
                 priority_vessels = st.sidebar.multiselect(
                     "Select priority vessels to highlight:",
                     options=upcoming_vessels_df['VESSEL'].unique()
                 )
                 
+                # Option to adjust CLSTR REQ
                 adjusted_clstr_req = st.sidebar.number_input(
                     "Adjust CLSTR REQ for priority vessels:",
                     min_value=0,
                     value=0,
                     step=1,
-                    help="Enter a new value for CLSTR REQ. Leave at 0 for no change."
+                    help="Enter a new value for CLSTR REQ. Leave as 0 to not change."
                 )
 
-                forecast_lookup = forecast_df[['Service', 'Next Loading Forecast']].copy()
+                forecast_lookup = forecast_df[['Service', 'Next Loading Prediction']].copy()
                 
                 summary_df = pd.merge(
                     upcoming_vessels_df,
@@ -334,11 +337,11 @@ def render_clash_tab():
                     right_on='Service',
                     how='left'
                 )
-                summary_df['Next Loading Forecast'] = summary_df['Next Loading Forecast'].fillna(0).round(2)
+                summary_df['Next Loading Prediction'] = summary_df['Next Loading Prediction'].fillna(0).round(2)
                 
-                summary_df['Difference'] = summary_df['TTL BOX'] - summary_df['Next Loading Forecast']
+                summary_df['Difference'] = summary_df['TOTAL BOX'] - summary_df['Next Loading Prediction']
                 
-                summary_df['base_for_req'] = summary_df[['TTL BOX', 'Next Loading Forecast']].max(axis=1)
+                summary_df['base_for_req'] = summary_df[['TOTAL BOX', 'Next Loading Prediction']].max(axis=1)
                 
                 def get_clstr_requirement(value):
                     if value <= 450: return 4
@@ -348,43 +351,40 @@ def render_clash_tab():
                 
                 summary_df['CLSTR REQ'] = summary_df['base_for_req'].apply(get_clstr_requirement)
                 
+                # Apply CLSTR REQ adjustment for priority vessels
                 if priority_vessels and adjusted_clstr_req > 0:
                     summary_df.loc[summary_df['VESSEL'].isin(priority_vessels), 'CLSTR REQ'] = adjusted_clstr_req
                 
-                summary_df = summary_df.rename(columns={'ETA_str': 'ETA'})
+                summary_display_cols = [
+                    'VESSEL', 'SERVICE', 'ETA_str', 'TOTAL BOX', 
+                    'Next Loading Prediction', 'Difference', 'TOTAL CLSTR', 'CLSTR REQ'
+                ]
                 
-                # --- STYLING LOGIC ---
-                def style_summary_table(df_to_style):
-                    styler = pd.DataFrame('', index=df_to_style.index, columns=df_to_style.columns)
-                    
-                    if 'TTL CLSTR' in df_to_style.columns and 'CLSTR REQ' in df_to_style.columns:
-                        green_condition = df_to_style['TTL CLSTR'] >= df_to_style['CLSTR REQ']
-                        styler.loc[green_condition, 'TTL CLSTR'] = 'background-color: #D4EDDA; color: #155724'
-                    
-                    if 'VESSEL' in df_to_style.columns:
-                        priority_condition = df_to_style['VESSEL'].isin(priority_vessels)
-                        for col in styler.columns:
-                            styler.loc[priority_condition, col] = 'background-color: #FFF3CD'
-                            
-                    return styler
+                # Filter columns based on user selection
+                visible_cols = [col for col in summary_display_cols if col not in cols_to_hide]
+                
+                summary_display = summary_df[visible_cols]
+                summary_display = summary_display.rename(columns={'ETA_str': 'ETA', 'TOTAL BOX': 'TOTAL BOX', 'TOTAL CLSTR': 'TOTAL CLSTR', 'Difference': 'Difference'})
+                
+                # Function to style priority rows
+                def highlight_priority(row):
+                    if row.VESSEL in priority_vessels:
+                        return ['background-color: #FFF3CD'] * len(row)
+                    return [''] * len(row)
 
-                visible_cols = [col for col in all_summary_cols if col not in cols_to_hide]
-                
-                summary_to_display = summary_df[visible_cols]
-                
                 st.dataframe(
-                    summary_to_display.style.apply(style_summary_table, axis=None),
+                    summary_display.style.apply(highlight_priority, axis=1),
                     use_container_width=True,
                     hide_index=True
                 )
             else:
                 st.info("No vessels scheduled to arrive in the next 4 days.")
         else:
-            st.warning("Forecast data is not available. Please run the forecast on the 'Loading Forecast' tab first.")
+            st.warning("Forecast data is not available. Please run the forecast in the 'Loading Forecast' tab first.")
         
         st.header("📋 Detailed Analysis Results")
 
-        # --- Prep for AG Grid Styling and Summary ---
+        # --- Preparation for AG Grid Styling and Summary ---
         df_for_grid = display_df.copy()
         df_for_grid['ETA_Date'] = pd.to_datetime(df_for_grid['ETA']).dt.strftime('%Y-%m-%d')
         df_for_grid['ETA'] = df_for_grid['ETA_str']
@@ -394,7 +394,7 @@ def render_clash_tab():
         date_color_map = {date: zebra_colors[i % 2] for i, date in enumerate(unique_dates)}
 
         clash_map = {}
-        cluster_cols = [col for col in df_for_grid.columns if col not in ['VESSEL', 'CODE', 'SERVICE', 'VOY_OUT', 'ETA', 'TTL BOX', 'TTL CLSTR', 'ETA_Date', 'ETA_str']]
+        cluster_cols = [col for col in df_for_grid.columns if col not in ['VESSEL', 'CODE', 'SERVICE', 'VOY_OUT', 'ETA', 'TOTAL BOX', 'TOTAL CLSTR', 'ETA_Date', 'ETA_str']]
         for date, group in df_for_grid.groupby('ETA_Date'):
             clash_areas_for_date = []
             for col in cluster_cols:
@@ -403,7 +403,7 @@ def render_clash_tab():
             if clash_areas_for_date:
                 clash_map[date] = clash_areas_for_date
 
-        # --- CLASH SUMMARY CARD DISPLAY ---
+        # --- CLASH SUMMARY DISPLAY WITH CARDS ---
         summary_data = []
         if clash_map:
             summary_exclude_blocks = ['BR9', 'RC9', 'C01', 'D01', 'OOG']
@@ -411,7 +411,7 @@ def render_clash_tab():
             with st.expander("Show Clash Summary", expanded=True):
                 total_clash_days = len(clash_map)
                 total_conflicting_blocks = sum(len(areas) for areas in clash_map.values())
-                st.markdown(f"**🔥 Found {total_clash_days} clash day(s) with a total of {total_conflicting_blocks} conflicting blocks.**")
+                st.markdown(f"**🔥 Found {total_clash_days} clash days with a total of {total_conflicting_blocks} conflicting blocks.**")
                 st.markdown("---")
                 
                 clash_dates = sorted(clash_map.keys())
@@ -442,8 +442,8 @@ def render_clash_tab():
                                 "Clash Date": date,
                                 "Block": area,
                                 "Total Boxes": total_clash_boxes,
-                                "Vessels": vessel_list_str,
-                                "Remark": ""
+                                "Vessel(s)": vessel_list_str,
+                                "Notes": ""
                             })
                         summary_html += "</div></div>"
                         st.markdown(summary_html, unsafe_allow_html=True)
@@ -452,7 +452,7 @@ def render_clash_tab():
 
         st.markdown("---")
 
-        # --- AG-GRID USAGE ---
+        # --- USING AG-GRID ---
         hide_zero_jscode = JsCode("""function(params) { if (params.value == 0 || params.value === null) { return ''; } return params.value; }""")
         clash_cell_style_jscode = JsCode(f"""
             function(params) {{
@@ -475,13 +475,13 @@ def render_clash_tab():
 
         default_col_def = {"suppressMenu": True, "sortable": True, "resizable": True, "editable": False, "minWidth": 40}
         column_defs = []
-        pinned_cols = ['VESSEL', 'CODE', 'SERVICE', 'VOY_OUT', 'ETA', 'TTL BOX', 'TTL CLSTR']
+        pinned_cols = ['VESSEL', 'CODE', 'SERVICE', 'VOY_OUT', 'ETA', 'TOTAL BOX', 'TOTAL CLSTR']
         for col in pinned_cols:
             width = 110 if col == 'VESSEL' else 80
             if col == 'ETA': width = 120 
             if col == 'SERVICE': width = 90
             col_def = {"field": col, "headerName": col, "pinned": "left", "width": width}
-            if col in ["TTL BOX", "TTL CLSTR"]: col_def["cellRenderer"] = hide_zero_jscode
+            if col in ["TOTAL BOX", "TOTAL CLSTR"]: col_def["cellRenderer"] = hide_zero_jscode
             column_defs.append(col_def)
         for col in cluster_cols:
             column_defs.append({"field": col, "headerName": col, "width": 60, "cellRenderer": hide_zero_jscode, "cellStyle": clash_cell_style_jscode})
