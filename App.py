@@ -109,40 +109,82 @@ with tab1:
 
 # --- KONTEN TAB 2: CRANE SEQUENCE ---
 with tab2:
-    st.header("🏗️ Crane Sequence & Area Visualizer")
+    st.header("🏗️ Crane Tools")
     
     # Letakkan uploader di dalam tabnya
     crane_file_tab2 = st.file_uploader("Upload Crane Sequence File", type=['xlsx', 'csv'], key="crane_uploader_tab2")
 
+    st.markdown("---")
+    
+    # --- Fitur 1: Crane Sequence Visualizer ---
+    st.subheader("Crane Sequence Visualizer")
+    if crane_file_tab2:
+        try:
+            df_crane_sheet2_viz = pd.read_excel(crane_file_tab2, sheet_name=1)
+            df_crane_sheet2_viz.columns = df_crane_sheet2_viz.columns.str.strip()
+            
+            # Ganti nama kolom dan bersihkan kolom 'Bay'
+            df_crane_sheet2_viz.rename(columns={'Main Bay': 'Bay', 'Sequence': 'Seq.', 'QC': 'Crane'}, inplace=True)
+            df_crane_sheet2_viz = df_crane_sheet2_viz.dropna(subset=['Bay'])
+
+            df_crane_sheet2_viz['Bay'] = df_crane_sheet2_viz['Bay'].apply(format_bay)
+            
+            pivot_crane = df_crane_sheet2_viz.pivot(index='Seq.', columns='Bay', values='Crane').fillna('')
+
+            sorted_bays = sorted(pivot_crane.columns, key=lambda x: int(x.split('-')[0]))
+            pivot_crane = pivot_crane[sorted_bays]
+            
+            unique_cranes = df_crane_sheet2_viz['Crane'].unique()
+            crane_colors = ['#8dd3c7','#ffffb3','#bebada','#fb8072','#80b1d3','#fdb462','#b3de69','#fccde5','#d9d9d9','#bc80bd']
+            color_map = {crane: crane_colors[i % len(crane_colors)] for i, crane in enumerate(unique_cranes)}
+            
+            def color_crane_cells(val):
+                return f'background-color: {color_map[val]}' if val in color_map else ''
+            
+            st.dataframe(pivot_crane.style.applymap(color_crane_cells), use_container_width=True)
+
+        except Exception as e:
+            st.error(f"Failed to process Crane Sequence Visualizer: {e}")
+    else:
+        st.info("Upload the 'Crane Sequence File' to use this feature.")
+
+    st.markdown("---")
+
+    # --- Fitur 2: Container Area Lookup ---
+    st.subheader("Container Area Lookup")
     if crane_file_tab2 and unit_list_file:
         try:
-            # --- PENGGABUNGAN DATA & TRANSFORMASI BARU ---
-            
-            # 1. Muat semua data yang dibutuhkan
             df_crane_s1 = pd.read_excel(crane_file_tab2, sheet_name=0)
             df_crane_s1.columns = df_crane_s1.columns.str.strip()
 
             df_crane_s2 = pd.read_excel(crane_file_tab2, sheet_name=1)
             df_crane_s2.columns = df_crane_s2.columns.str.strip()
+            df_crane_s2.rename(columns={'Main Bay': 'Bay', 'QC': 'Crane', 'Sequence': 'Seq.'}, inplace=True)
+
 
             if unit_list_file.name.lower().endswith(('.xls', '.xlsx')):
                 df_unit_list = pd.read_excel(unit_list_file)
             else:
                 df_unit_list = pd.read_csv(unit_list_file)
             df_unit_list.columns = df_unit_list.columns.str.strip()
-
-            # 2. Buat tabel lookup lengkap (Container Area Lookup)
-            required_cols_s1 = ['Container', 'Pos (Vessel)']
-            required_cols_s2 = ['Bay', 'QC', 'Direction', 'Sequence']
-            required_cols_unit = ['Unit', 'Area (EXE)']
             
-            df_crane_s2.rename(columns={'Main Bay': 'Bay', 'QC': 'Crane', 'Sequence': 'Seq.'}, inplace=True)
+            # --- PERBAIKAN: Pengecekan kolom yang lebih spesifik ---
+            def check_columns(df, required_cols, file_desc):
+                missing_cols = [col for col in required_cols if col not in df.columns]
+                if missing_cols:
+                    st.warning(f"Missing columns in **{file_desc}**: `{', '.join(missing_cols)}`")
+                    return False
+                return True
 
-            if all(col in df_crane_s1.columns for col in required_cols_s1) and \
-               all(col in df_crane_s2.columns for col in required_cols_s2) and \
-               all(col in df_unit_list.columns for col in required_cols_unit):
+            s1_ok = check_columns(df_crane_s1, ['Container', 'Pos (Vessel)'], "Crane File (Sheet1)")
+            s2_ok = check_columns(df_crane_s2, ['Bay', 'Crane', 'Direction', 'Seq.'], "Crane File (Sheet2)")
+            unit_ok = check_columns(df_unit_list, ['Unit', 'Area (EXE)'], "Unit List File")
+
+            if s1_ok and s2_ok and unit_ok:
                 
-                # Buat peta dari Pos ke Crane dan Seq, HANYA untuk 'Loading'
+                # --- LOGIKA BARU UNTUK MENCARI CRANE & SEQ ---
+                
+                # 1. Buat peta dari Pos ke Crane dan Seq, HANYA untuk 'Loading'
                 pos_to_crane_map = {}
                 pos_to_seq_map = {}
                 df_crane_s2_loading = df_crane_s2[df_crane_s2['Direction'] == 'Loading'].copy()
@@ -162,7 +204,7 @@ with tab2:
                             pos_to_crane_map[int(bay_range_str)] = crane
                             pos_to_seq_map[int(bay_range_str)] = seq
                 
-                # Proses Sheet1 untuk mendapatkan 'Pos'
+                # 2. Proses Sheet1 dan tambahkan kolom-kolom baru
                 df_crane_s1['Pos (Vessel)'] = pd.to_numeric(df_crane_s1['Pos (Vessel)'], errors='coerce')
                 df_crane_s1.dropna(subset=['Pos (Vessel)'], inplace=True)
                 df_crane_s1['Pos (Vessel)'] = df_crane_s1['Pos (Vessel)'].astype(int)
@@ -173,92 +215,30 @@ with tab2:
                 
                 df_crane_s1['Pos'] = df_crane_s1['Pos (Vessel)'].apply(extract_pos)
                 
-                # Gabungkan dengan Unit List untuk mendapatkan Area
+                # Gunakan kolom 'Pos' yang sudah diproses untuk mencocokkan
+                df_crane_s1['Crane'] = pd.to_numeric(df_crane_s1['Pos'], errors='coerce').map(pos_to_crane_map).fillna('N/A')
+                df_crane_s1['Seq.'] = pd.to_numeric(df_crane_s1['Pos'], errors='coerce').map(pos_to_seq_map).fillna('N/A')
+                
+                # 3. Gabungkan dengan Unit List untuk mendapatkan Area
                 df_crane_s1['Container'] = df_crane_s1['Container'].astype(str).str.strip()
                 df_unit_list['Unit'] = df_unit_list['Unit'].astype(str).str.strip()
                 
-                lookup_df = pd.merge(
-                    df_crane_s1[['Container', 'Pos (Vessel)', 'Pos']],
+                merged_df = pd.merge(
+                    df_crane_s1[['Container', 'Pos', 'Crane', 'Seq.']],
                     df_unit_list[['Unit', 'Area (EXE)']],
                     left_on='Container',
                     right_on='Unit',
                     how='inner'
-                ).drop_duplicates()
-
-                # Tambahkan Crane dan Seq. ke lookup_df
-                lookup_df['Pos_numeric'] = pd.to_numeric(lookup_df['Pos'], errors='coerce')
-                lookup_df['Crane'] = lookup_df['Pos_numeric'].map(pos_to_crane_map).fillna('N/A')
-                lookup_df['Seq.'] = lookup_df['Pos_numeric'].map(pos_to_seq_map).fillna('N/A')
-                
-                # 3. Buat Peta dari (Bay, Seq) ke Area (EXE)
-                bay_seq_to_area_map = {}
-                for _, row in lookup_df.iterrows():
-                    seq = row['Seq.']
-                    pos_vessel = row['Pos (Vessel)']
-                    area = row['Area (EXE)']
-                    
-                    for _, s2_row in df_crane_s2.iterrows():
-                        bay_range_str = format_bay(s2_row['Bay'])
-                        if bay_range_str:
-                            if '-' in bay_range_str:
-                                start, end = map(int, bay_range_str.split('-'))
-                                if start <= pos_vessel <= end:
-                                    key = (s2_row['Seq.'], bay_range_str)
-                                    if key not in bay_seq_to_area_map:
-                                        bay_seq_to_area_map[key] = set()
-                                    bay_seq_to_area_map[key].add(area)
-                                    break
-                            else:
-                                if int(bay_range_str) == pos_vessel:
-                                    key = (s2_row['Seq.'], bay_range_str)
-                                    if key not in bay_seq_to_area_map:
-                                        bay_seq_to_area_map[key] = set()
-                                    bay_seq_to_area_map[key].add(area)
-                                    break
-
-                # 4. Buat Pivot Table final untuk Visualizer
-                df_crane_s2_viz = df_crane_s2.copy()
-                df_crane_s2_viz['Bay_formatted'] = df_crane_s2_viz['Bay'].apply(format_bay)
-
-                def get_display_text_final(row):
-                    crane = row['Crane']
-                    seq = row['Seq.']
-                    bay = row['Bay_formatted']
-                    key = (seq, bay)
-                    areas = bay_seq_to_area_map.get(key, set())
-                    areas_str = ", ".join(sorted(list(areas))) if areas else "N/A"
-                    return f"{crane}\n({areas_str})"
-
-                df_crane_s2_viz['Display'] = df_crane_s2_viz.apply(get_display_text_final, axis=1)
-
-                pivot_crane = df_crane_s2_viz.pivot_table(
-                    index='Seq.', 
-                    columns='Bay_formatted',
-                    values='Display', 
-                    aggfunc='first'
-                ).fillna('')
-                
-                sorted_bays = sorted(pivot_crane.columns, key=lambda x: int(x.split('-')[0]))
-                pivot_crane = pivot_crane[sorted_bays]
-
-                # Tampilkan Visualizer
-                st.subheader("Crane Sequence with Area")
-                st.dataframe(
-                    pivot_crane.style.set_properties(**{'text-align': 'center', 'white-space': 'pre-wrap'}),
-                    use_container_width=True
                 )
-                st.markdown("---")
                 
-                # Tampilkan Container Area Lookup
-                st.subheader("Container Area Lookup")
-                result_df = lookup_df[['Container', 'Pos', 'Crane', 'Seq.', 'Area (EXE)']].drop_duplicates()
-                st.dataframe(result_df, use_container_width=True)
-
-            else:
-                st.warning("Required columns not found. Please check your files.")
+                if not merged_df.empty:
+                    # 4. Tampilkan hasil
+                    result_df = merged_df[['Container', 'Pos', 'Crane', 'Seq.', 'Area (EXE)']].drop_duplicates()
+                    st.write(f"Found area information for {len(result_df)} matching containers.")
+                    st.dataframe(result_df, use_container_width=True)
+                else:
+                    st.info("No matching containers found between the files.")
         except Exception as e:
-            st.error(f"Failed to process Crane Sequence Visualizer: {e}")
-    elif crane_file_tab2:
-        st.info("Please also upload the 'Unit List' file to generate the combined view.")
+            st.error(f"Failed to process Container Area Lookup: {e}")
     else:
-        st.info("Upload the 'Crane Sequence File' and 'Unit List' to use this feature.")
+        st.info("Upload both 'Crane Sequence File' and 'Unit List' to use this feature.")
