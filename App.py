@@ -5,6 +5,7 @@ from datetime import datetime, timedelta
 import json
 import io
 import warnings
+import numpy as np # Pustaka baru untuk perhitungan MAPE
 
 # --- Pustaka baru untuk Forecasting ---
 from statsmodels.tsa.statespace.sarimax import SARIMAX
@@ -20,18 +21,20 @@ warnings.filterwarnings("ignore", category=UserWarning)
 st.set_page_config(page_title="Ops Analyzer", layout="wide")
 st.title("Yard Operations Analyzer")
 
-# --- FUNGSI-FUNGSI UNTUK FORECASTING (BARU) ---
+# --- FUNGSI-FUNGSI UNTUK FORECASTING (DENGAN PENAMBAHAN MAPE) ---
 
 @st.cache_data
 def load_history_data(filename="History Loading.xlsx"):
     """Mencari dan memuat file data historis untuk forecasting."""
     if os.path.exists(filename):
         try:
-            df = pd.read_excel(filename)
+            if filename.lower().endswith('.csv'):
+                df = pd.read_csv(filename)
+            else:
+                df = pd.read_excel(filename)
+            
             df.columns = [col.strip().lower() for col in df.columns]
-            # Konversi kolom tanggal, asumsi format DD/MM/YYYY
             df['ata'] = pd.to_datetime(df['ata'], dayfirst=True, errors='coerce')
-            # Hapus baris jika tanggal tidak valid
             df.dropna(subset=['ata'], inplace=True)
             return df
         except Exception as e:
@@ -41,7 +44,7 @@ def load_history_data(filename="History Loading.xlsx"):
     return None
 
 def run_forecasting_process(df_history):
-    """Menjalankan seluruh proses forecasting per service."""
+    """Menjalankan seluruh proses forecasting per service, termasuk kalkulasi MAPE."""
     all_results = []
     unique_services = df_history['service'].unique()
 
@@ -63,48 +66,53 @@ def run_forecasting_process(df_history):
         IQR = Q3 - Q1
         upper_bound = Q3 + 1.5 * IQR
         lower_bound = Q1 - 1.5 * IQR
-
         num_outliers = ((service_df['loading'] < lower_bound) | (service_df['loading'] > upper_bound)).sum()
-        
-        # Capping: Ganti outlier dengan nilai batas
         service_df['loading_cleaned'] = service_df['loading'].clip(lower=lower_bound, upper=upper_bound)
 
-        # --- 2. Pilih Model & Forecast ---
-        forecast_val, moe_val, method = (None, None, "")
+        # --- 2. Pilih Model, Forecast, dan Hitung MAPE ---
+        forecast_val, moe_val, mape_val, method = (None, None, None, "")
         
-        # Gunakan SARIMA jika data cukup, jika tidak gunakan rata-rata
+        daily_data = service_df.set_index('ata')['loading_cleaned'].resample('D').sum().fillna(0)
+        actuals = daily_data[daily_data > 0] # Ambil data aktual yang tidak nol untuk MAPE
+
         if len(service_df) >= 30:
             try:
-                # Siapkan data harian untuk model time series
-                daily_data = service_df.set_index('ata')['loading_cleaned'].resample('D').sum().fillna(0)
-                
                 model = SARIMAX(daily_data, order=(1, 1, 1), seasonal_order=(1, 1, 0, 7), enforce_stationarity=False, enforce_invertibility=False)
                 results = model.fit(disp=False)
                 
+                # Forecast untuk masa depan
                 forecast_obj = results.get_forecast(steps=1)
                 forecast_val = forecast_obj.predicted_mean.iloc[0]
-                # Hitung Margin of Error (MoE)
                 se = forecast_obj.summary_frame()['mean_se'].iloc[0]
-                moe_val = se * 1.96 # 95% confidence interval
+                moe_val = se * 1.96
+                
+                # --- Kalkulasi MAPE ---
+                fitted_values = results.fittedvalues[actuals.index] # Ambil prediksi historis yg relevan
+                mape_val = np.mean(np.abs((actuals - fitted_values) / actuals)) * 100
                 method = f"Model SARIMA ({num_outliers} outlier dibersihkan)"
             except Exception:
                 # Fallback ke rata-rata jika SARIMA gagal
-                forecast_val = service_df['loading_cleaned'].mean()
+                mean_val = service_df['loading_cleaned'].mean()
+                forecast_val = mean_val
                 moe_val = 1.96 * service_df['loading_cleaned'].std()
+                mape_val = np.mean(np.abs((actuals - mean_val) / actuals)) * 100
                 method = f"Rata-rata Historis (SARIMA Gagal, {num_outliers} outlier dibersihkan)"
         else:
-            forecast_val = service_df['loading_cleaned'].mean()
+            mean_val = service_df['loading_cleaned'].mean()
+            forecast_val = mean_val
             moe_val = 1.96 * service_df['loading_cleaned'].std()
+            mape_val = np.mean(np.abs((actuals - mean_val) / actuals)) * 100
             method = f"Rata-rata Historis ({num_outliers} outlier dibersihkan)"
 
         all_results.append({
             "Service": service,
             "Prediksi Loading Berikutnya": forecast_val,
             "Margin of Error (± box)": moe_val,
+            "MAPE (%)": mape_val,
             "Keterangan": method
         })
         
-    progress_bar.empty() # Hapus progress bar setelah selesai
+    progress_bar.empty()
     return pd.DataFrame(all_results)
 
 
@@ -113,7 +121,7 @@ def render_forecast_tab():
     st.header("📈 Prediksi Loading Kapal per Service")
     st.write("Fitur ini memprediksi jumlah muatan (loading) untuk kedatangan kapal berikutnya berdasarkan data historis. Proses ini sudah termasuk pembersihan data anomali (*outlier*) untuk hasil yang lebih akurat.")
     
-    st.info("Pastikan file `History Loading.xlsx - Sheet1.csv` ada di dalam repository GitHub Anda.", icon="ℹ️")
+    st.info("Pastikan file `History Loading.xlsx` ada di dalam repository GitHub Anda.", icon="ℹ️")
 
     if st.button("🚀 Buat Prediksi Loading", type="primary"):
         df_history = load_history_data()
@@ -127,19 +135,25 @@ def render_forecast_tab():
             # Memformat hasil untuk tampilan yang lebih baik
             forecast_df['Prediksi Loading Berikutnya'] = forecast_df['Prediksi Loading Berikutnya'].round(2)
             forecast_df['Margin of Error (± box)'] = forecast_df['Margin of Error (± box)'].fillna(0).round(2)
-            
+            forecast_df['MAPE (%)'] = forecast_df['MAPE (%)'].fillna(0).round(2)
+
+            # --- Tampilkan DataFrame Hasil ---
             st.dataframe(
                 forecast_df.sort_values(by="Prediksi Loading Berikutnya", ascending=False).reset_index(drop=True),
                 use_container_width=True,
-                hide_index=True
+                hide_index=True,
+                column_config={ # Konfigurasi untuk format kolom
+                    "MAPE (%)": st.column_config.NumberColumn(format="%.2f%%")
+                }
             )
             
             st.markdown("---")
             st.subheader("💡 Apa Arti Hasil Di Atas?")
             st.markdown("""
             - **Prediksi Loading Berikutnya**: Estimasi jumlah box untuk kedatangan kapal selanjutnya dari service tersebut.
-            - **Margin of Error (± box)**: Tingkat ketidakpastian prediksi. Contoh: Prediksi **300** dengan MoE **±50** berarti nilai aktual kemungkinan besar berada di antara **250** dan **350**.
-            - **Keterangan**: Metode yang digunakan. **SARIMA** adalah model statistik time-series, sedangkan **Rata-rata Historis** digunakan jika data terlalu sedikit untuk model kompleks. Keterangan juga menunjukkan jumlah *outlier* yang telah ditangani.
+            - **Margin of Error (± box)**: Tingkat ketidakpastian prediksi ke depan. Prediksi **300** dengan MoE **±50** berarti nilai aktual kemungkinan besar berada di antara **250** dan **350**.
+            - **MAPE (%)**: Rata-rata persentase kesalahan model saat diuji pada data historis. **Semakin kecil nilainya, semakin akurat modelnya di masa lalu.**
+            - **Keterangan**: Metode yang digunakan dan jumlah *outlier* yang ditangani.
             """)
 
 # --- FUNGSI-FUNGSI INTI UNTUK CLASH MONITORING (TETAP SAMA) ---
@@ -178,6 +192,7 @@ with tab1:
         if schedule_file and unit_list_file and (df_vessel_codes is not None and not df_vessel_codes.empty):
             with st.spinner('Loading and processing data...'):
                 try:
+                    # ( ... Kode proses clash monitoring Anda tetap sama persis di sini ... )
                     # 1. Loading & Cleaning
                     if schedule_file.name.lower().endswith(('.xls', '.xlsx')): df_schedule = pd.read_excel(schedule_file)
                     else: df_schedule = pd.read_csv(schedule_file)
@@ -236,6 +251,7 @@ with tab1:
 
     # --- Area Tampilan ---
     if st.session_state.processed_df is not None:
+        # ( ... Kode tampilan AG-Grid dan download Anda tetap sama persis di sini ... )
         display_df = st.session_state.processed_df
         
         st.header("📋 Analysis Result")
@@ -382,7 +398,6 @@ with tab1:
             file_name="clash_summary_report.xlsx",
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
         )
-        
 # --- KONTEN TAB 2: FORECASTING (KODE BARU) ---
 with tab2:
     render_forecast_tab()
