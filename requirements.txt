@@ -3,3 +3,4 @@ pandas>=1.4.0
 openpyxl
 streamlit-aggrid
 xlsxwriter
+SARIMAX
