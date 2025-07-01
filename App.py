@@ -207,13 +207,11 @@ with tab2:
             area_dict = {}
             if result_df is not None:
                 area_summary = (
-                    result_df
-                    .groupby(['Crane', 'Seq.'])['Area (EXE)']
-                    .agg(lambda x: ', '.join(sorted(set(x))))
-                    .reset_index()
-                    .rename(columns={'Area (EXE)': 'AreaSummary'})
+                    result_df.groupby(['Crane', 'Seq.', 'Area (EXE)']).size().reset_index(name='Count')
                 )
-                area_dict = {(row['Crane'], row['Seq.']): row['AreaSummary'] for _, row in area_summary.iterrows()}
+                area_summary['Label'] = area_summary['Area (EXE)'] + ' (' + area_summary['Count'].astype(str) + ')'
+                area_labels = area_summary.groupby(['Crane', 'Seq.'])['Label'].apply(lambda x: '\n'.join(sorted(x))).reset_index()
+                area_dict = {(row['Crane'], row['Seq.']): row['Label'] for _, row in area_labels.iterrows()}
 
             def get_display_value(crane_val, seq_idx):
                 try:
@@ -231,7 +229,7 @@ with tab2:
                     val = pivot_crane_display.loc[row_idx, col]
                     pivot_crane_display.loc[row_idx, col] = get_display_value(val, row_idx)
 
-            st.dataframe(pivot_crane_display, use_container_width=True)
+            st.dataframe(pivot_crane_display, use_container_width=True, height=600)
 
         except Exception as e:
             st.error(f"Failed to process Crane Sequence Visualizer: {e}")
