@@ -355,12 +355,15 @@ def render_clash_tab():
                 
                 # --- PERBAIKAN LOGIKA STYLING ---
                 def style_summary_table(df_to_style):
+                    # Buat DataFrame kosong dengan style default
                     styler = pd.DataFrame('', index=df_to_style.index, columns=df_to_style.columns)
                     
+                    # Terapkan highlight hijau untuk TTL CLSTR jika kolomnya ada
                     if 'TTL CLSTR' in df_to_style.columns and 'CLSTR REQ' in df_to_style.columns:
                         green_condition = df_to_style['TTL CLSTR'] >= df_to_style['CLSTR REQ']
                         styler.loc[green_condition, 'TTL CLSTR'] = 'background-color: #D4EDDA; color: #155724'
                     
+                    # Terapkan highlight kuning untuk kapal prioritas (menimpa style lain)
                     if 'VESSEL' in df_to_style.columns:
                         priority_condition = df_to_style['VESSEL'].isin(priority_vessels)
                         for col in styler.columns:
