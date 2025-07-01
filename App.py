@@ -370,10 +370,12 @@ def render_clash_tab():
 
                 visible_cols = [col for col in all_summary_cols if col not in cols_to_hide]
                 
-                summary_to_display = summary_df[all_summary_cols]
+                # Buat DataFrame untuk ditampilkan dengan kolom yang terlihat
+                summary_to_display = summary_df[visible_cols]
                 
+                # Terapkan styling ke DataFrame yang sudah difilter
                 st.dataframe(
-                    summary_to_display.style.apply(style_summary_table, axis=None).hide(columns=cols_to_hide),
+                    summary_to_display.style.apply(style_summary_table, axis=None),
                     use_container_width=True,
                     hide_index=True
                 )
