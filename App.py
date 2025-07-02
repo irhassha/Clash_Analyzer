@@ -301,7 +301,7 @@ def render_clash_tab():
                 st.sidebar.markdown("---")
                 st.sidebar.header("🛠️ Upcoming Vessel Options")
                 
-                all_summary_cols = ['VESSEL', 'SERVICE', 'ETA', 'TOTAL BOX', 'LOADING FORECAST', 'DIFF', 'TOTAL CLSTR', 'CLSTR REQ']
+                all_summary_cols = ['VESSEL', 'SERVICE', 'ETA', 'TOTAL BOX', 'Loading Forecast', 'DIFF', 'TOTAL CLSTR', 'CLSTR REQ']
                 
                 cols_to_hide = st.sidebar.multiselect(
                     "Hide columns from summary:",
@@ -332,7 +332,7 @@ def render_clash_tab():
                     how='left'
                 )
                 
-                summary_df['LOADING FORECAST'] = summary_df['Loading Forecast'].fillna(0).round(0).astype(int)
+                summary_df['Loading Forecast'] = summary_df['Loading Forecast'].fillna(0).round(0).astype(int)
                 summary_df['DIFF'] = summary_df['TOTAL BOX'] - summary_df['Loading Forecast']
                 summary_df['base_for_req'] = summary_df[['TOTAL BOX', 'Loading Forecast']].max(axis=1)
                 
@@ -349,14 +349,14 @@ def render_clash_tab():
                 
                 summary_display_cols = [
                     'VESSEL', 'SERVICE', 'ETA_str', 'TOTAL BOX', 
-                    'Loading Forecast', 'Difference', 'TOTAL CLSTR', 'CLSTR REQ'
+                    'Loading Forecast', 'DIFF', 'TOTAL CLSTR', 'CLSTR REQ'
                 ]
                 
                 visible_cols = [col for col in summary_display_cols if col not in cols_to_hide]
                 summary_display = summary_df[visible_cols].rename(columns={'ETA_str': 'ETA'})
                 
                 # --- START: STYLING LOGIC ---
-                def style_difference(v):
+                def style_DIFF(v):
                     color = '#4CAF50' if v > 0 else '#F44336' if v < 0 else '#757575' # Green, Red, Gray
                     return f'color: {color}; font-weight: bold;'
 
@@ -373,7 +373,7 @@ def render_clash_tab():
                 # Apply styles
                 styled_df = summary_display.style \
                     .apply(highlight_rows, axis=1) \
-                    .map(style_difference, subset=['Difference'])
+                    .map(style_DIFF, subset=['DIFF'])
 
                 # Display the styled DataFrame (without bar chart column_config)
                 st.dataframe(
