@@ -283,7 +283,8 @@ def render_clash_tab():
                 st.info("No vessels scheduled to arrive in the next 4 days.")
         else:
             st.warning("Forecast data is not available. Please run the forecast in the 'Loading Forecast' tab first.")
-        
+
+        st.markdown("---")
         st.header("📋 Detailed Analysis Results")
         df_for_grid = display_df.copy()
         df_for_grid['ETA_Date'] = pd.to_datetime(df_for_grid['ETA']).dt.strftime('%Y-%m-%d')
