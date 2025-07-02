@@ -20,7 +20,7 @@ from st_aggrid import AgGrid, GridOptionsBuilder, JsCode
 warnings.filterwarnings("ignore", category=UserWarning)
 
 # --- Page Configuration & Title ---
-st.set_page_config(page_title="Ops Analyzer", layout="wide")
+st.set_page_config(page_title="Yard Cluster Monitoring", layout="wide")
 st.title("Yard Cluster Monitoring")
 
 # --- FUNCTIONS FOR FORECASTING (NEW MODEL: PER-SERVICE RF) ---
