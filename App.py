@@ -301,14 +301,6 @@ def render_clash_tab():
                 st.sidebar.markdown("---")
                 st.sidebar.header("🛠️ Upcoming Vessel Options")
                 
-                all_summary_cols = ['VESSEL', 'SERVICE', 'ETA', 'TOTAL BOX', 'Loading Forecast', 'DIFF', 'TOTAL CLSTR', 'CLSTR REQ']
-                
-                cols_to_hide = st.sidebar.multiselect(
-                    "Hide columns from summary:",
-                    options=all_summary_cols,
-                    default=[]
-                )
-                
                 priority_vessels = st.sidebar.multiselect(
                     "Select priority vessels to highlight:",
                     options=upcoming_vessels_df['VESSEL'].unique()
