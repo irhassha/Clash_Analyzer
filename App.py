@@ -21,7 +21,7 @@ warnings.filterwarnings("ignore", category=UserWarning)
 
 # --- Page Configuration & Title ---
 st.set_page_config(page_title="Ops Analyzer", layout="wide")
-st.title("Yard Ops Analyzer")
+st.title("Yard Cluster Monitoring")
 
 # --- FUNCTIONS FOR FORECASTING (NEW MODEL: PER-SERVICE RF) ---
 
