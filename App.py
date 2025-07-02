@@ -145,8 +145,6 @@ def render_forecast_tab():
     This feature uses a separate **Random Forest** model for each service. 
     The model learns from historical time patterns to provide more accurate predictions, complete with anomaly data cleaning.
     """)
-    
-    st.info("Make sure the `History Loading.xlsx` file is in your GitHub repository.", icon="ℹ️")
 
     if 'forecast_df' not in st.session_state:
         df_history = load_history_data()
