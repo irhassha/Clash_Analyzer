@@ -242,7 +242,7 @@ def render_clash_tab():
                     if filtered_data.empty: st.warning("No data left after filtering."); st.session_state.processed_df = None; st.stop()
 
                     # 4. Pivoting
-                    grouping_cols = ['VESSEL', 'CODE', 'SERVICE', 'VOY_OUT', 'ETA', 'CLOSING PHYSIC']
+                    grouping_cols = ['VESSEL', 'CODE', 'SERVICE', 'VOY_OUT', 'ETA']
                     pivot_df = filtered_data.pivot_table(index=grouping_cols, columns='Area (EXE)', aggfunc='size', fill_value=0)
                     
                     cluster_cols_for_calc = pivot_df.columns.tolist()
@@ -261,7 +261,7 @@ def render_clash_tab():
                     if pivot_df.empty: st.warning("No data left after ETA & Total filter."); st.session_state.processed_df = None; st.stop()
 
                     # 6. Sorting and Ordering
-                    initial_cols = ['VESSEL', 'CODE', 'SERVICE', 'VOY_OUT', 'ETA', 'TOTAL BOX', 'TOTAL CLSTR', 'CLOSING PHYSIC']
+                    initial_cols = ['VESSEL', 'CODE', 'SERVICE', 'VOY_OUT', 'ETA', 'TOTAL BOX', 'TOTAL CLSTR']
                     final_cluster_cols = [col for col in pivot_df.columns if col not in initial_cols]
                     final_display_cols = initial_cols + sorted(final_cluster_cols)
                     pivot_df = pivot_df[final_display_cols]
@@ -341,7 +341,7 @@ def render_clash_tab():
                 
                 summary_display_cols = [
                     'VESSEL', 'SERVICE', 'ETA_str', 'TOTAL BOX', 
-                    'Loading Forecast', 'DIFF', 'CLOSING PHYSIC', 'TOTAL CLSTR', 'CLSTR REQ'
+                    'Loading Forecast', 'DIFF', 'TOTAL CLSTR', 'CLSTR REQ'
                 ]
                 
                 visible_cols = summary_display_cols
@@ -349,8 +349,7 @@ def render_clash_tab():
                 summary_display = summary_df[visible_cols].rename(columns={
                     'ETA_str': 'ETA',
                     'TOTAL BOX': 'BOX STACKED',
-                    'Loading Forecast': 'LOADING FORECAST',
-                    'CLOSING PHYSIC': 'CLOSING TIME'
+                    'Loading Forecast': 'LOADING FORECAST'
                 })
                 
                 # --- START: STYLING LOGIC ---
