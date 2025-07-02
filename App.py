@@ -354,8 +354,8 @@ def render_clash_tab():
                 
                 visible_cols = [col for col in summary_display_cols if col not in cols_to_hide]
                 summary_display = summary_df[visible_cols].rename(columns={
-                    'ETA_str': 'ETA'
-                    'TOTAL BOX': 'BOX STACKED'
+                    'ETA_str': 'ETA',
+                    'TOTAL BOX': 'BOX STACKED',
                     'Loading Forecast': 'LOADING FORECAST'
                 })
                 
