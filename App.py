@@ -387,7 +387,8 @@ def render_clash_tab():
                 st.info("No vessels scheduled to arrive in the next 4 days.")
         else:
             st.warning("Forecast data is not available. Please run the forecast in the 'Loading Forecast' tab first.")
-        
+
+        st.markdown("---")
         st.header("📋 Detailed Analysis Results")
 
         # --- Preparation for AG Grid Styling and Summary ---
