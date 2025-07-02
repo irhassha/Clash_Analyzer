@@ -284,7 +284,6 @@ def render_clash_tab():
         display_df = st.session_state.processed_df
         
         # --- NEW SUMMARY: UPCOMING VESSELS & FORECAST ---
-        st.markdown("---")
         st.subheader("🚢 Upcoming Vessel Summary (Today + Next 3 Days)")
         
         forecast_df = st.session_state.get('forecast_df')
@@ -419,7 +418,6 @@ def render_clash_tab():
                 total_clash_days = len(clash_map)
                 total_conflicting_blocks = sum(len(areas) for areas in clash_map.values())
                 st.markdown(f"**🔥 Found {total_clash_days} clash days with a total of {total_conflicting_blocks} conflicting blocks.**")
-                st.markdown("---")
                 
                 clash_dates = sorted(clash_map.keys())
                 cols = st.columns(len(clash_dates) or 1)
