@@ -172,6 +172,9 @@ def render_clash_tab():
         st.session_state.processed_df = None
     if 'clash_summary_df' not in st.session_state:
         st.session_state.clash_summary_df = None
+    if 'filtered_data' not in st.session_state:
+        st.session_state.filtered_data = None
+
     df_vessel_codes = load_vessel_codes_from_repo()
     if process_button:
         if schedule_file and unit_list_file and (df_vessel_codes is not None and not df_vessel_codes.empty):
@@ -193,6 +196,11 @@ def render_clash_tab():
                     excluded_areas = [str(i) for i in range(801, 809)]
                     merged_df['Area (EXE)'] = merged_df['Area (EXE)'].astype(str)
                     filtered_data = merged_df[~merged_df['Area (EXE)'].isin(excluded_areas)]
+                    
+                    # --- BARIS BARU DITAMBAHKAN ---
+                    # Simpan data mentah yang sudah difilter untuk digunakan di visualisasi
+                    st.session_state.filtered_data = filtered_data
+                    
                     if filtered_data.empty: st.warning("No data left after filtering."); st.session_state.processed_df = None; st.stop()
                     
                     grouping_cols = ['VESSEL', 'CODE', 'SERVICE', 'VOY_OUT', 'ETA', 'CLOSING PHYSIC']
@@ -255,7 +263,6 @@ def render_clash_tab():
                 
                 summary_display_cols = ['VESSEL', 'SERVICE', 'ETA_str', 'CLOSING_PHYSIC_str', 'TOTAL BOX', 'Loading Forecast', 'DIFF', 'TOTAL CLSTR', 'CLSTR REQ']
                 
-                # PERBAIKAN: Baris ini diperbaiki agar tidak error
                 visible_cols = summary_display_cols
                 
                 summary_display = summary_df[visible_cols].rename(columns={
@@ -284,6 +291,55 @@ def render_clash_tab():
         else:
             st.warning("Forecast data is not available. Please run the forecast in the 'Loading Forecast' tab first.")
 
+        # --- FITUR BARU: SPREADING CLUSTER VISUALIZATION ---
+        st.markdown("---")
+        st.subheader("🔍 Spreading Cluster Visualization")
+
+        if st.session_state.get('filtered_data') is not None and not st.session_state.filtered_data.empty:
+            filtered_data = st.session_state.filtered_data
+            vessel_list = sorted(filtered_data['VESSEL'].unique())
+            
+            selected_vessel = st.selectbox(
+                "Select a Vessel to see its Cluster Distribution:",
+                options=vessel_list,
+                index=0,
+                help="Pilih kapal untuk melihat sebaran peti kemas di setiap cluster."
+            )
+
+            if selected_vessel:
+                vessel_data = filtered_data[filtered_data['VESSEL'] == selected_vessel]
+                if not vessel_data.empty:
+                    # Kelompokkan berdasarkan Area dan hitung jumlah box
+                    cluster_spread = vessel_data.groupby('Area (EXE)').size().sort_values(ascending=False)
+                    
+                    if not cluster_spread.empty:
+                        st.write(f"Displaying cluster spread for **{selected_vessel}**")
+
+                        # Gunakan Matplotlib untuk kontrol estetika yang lebih baik
+                        fig, ax = plt.subplots(figsize=(12, 6))
+                        bars = ax.bar(cluster_spread.index, cluster_spread.values, color='#1f77b4', zorder=2)
+                        
+                        # Tambahkan label dan judul
+                        ax.set_title(f'Box Distribution per Cluster for {selected_vessel}', fontsize=16, pad=20)
+                        ax.set_xlabel('Cluster Area (Area EXE)', fontsize=12)
+                        ax.set_ylabel('Number of Boxes', fontsize=12)
+                        ax.tick_params(axis='x', rotation=45)
+                        ax.grid(axis='y', linestyle='--', alpha=0.7, zorder=1)
+
+                        # Tambahkan label data di atas bar
+                        for bar in bars:
+                            yval = bar.get_height()
+                            ax.text(bar.get_x() + bar.get_width()/2.0, yval + 0.5, int(yval), ha='center', va='bottom', fontweight='bold')
+
+                        st.pyplot(fig)
+                    else:
+                        st.info(f"No cluster data available for vessel '{selected_vessel}'.")
+                else:
+                    st.info(f"No data found for vessel '{selected_vessel}'.")
+        else:
+            st.info("Process data first to see cluster visualizations. Upload files and click the process button.")
+        # --- AKHIR DARI FITUR BARU ---
+        
         st.markdown("---")
         st.header("📋 Detailed Analysis Results")
         df_for_grid = display_df.copy()
@@ -412,7 +468,6 @@ def render_clash_tab():
             st.error(f"Failed to create download file: {e}")
 
 # --- MAIN STRUCTURE WITH TABS ---
-# (Sisa kode Anda tetap sama)
 tab1, tab2 = st.tabs(["🚨 Clash Analysis", "📈 Loading Forecast"])
 with tab1:
     render_clash_tab()
