@@ -7,7 +7,7 @@ import io
 import warnings
 import numpy as np
 import matplotlib.pyplot as plt
-import plotly.express as px # <-- Import untuk visualisasi interaktif
+import plotly.express as px # Import untuk visualisasi interaktif
 
 # --- Libraries for Machine Learning ---
 from sklearn.model_selection import train_test_split
@@ -298,14 +298,22 @@ def render_clash_tab():
             processed_df = st.session_state.processed_df.copy()
             
             initial_cols = ['VESSEL', 'CODE', 'SERVICE', 'VOY_OUT', 'ETA', 'CLOSING PHYSIC', 'TOTAL BOX', 'TOTAL CLSTR', 'ETA_str', 'CLOSING_PHYSIC_str']
-            cluster_cols = sorted([col for col in processed_df.columns if col not in initial_cols])
             
+            # --- PERUBAHAN DI SINI ---
+            # Definisikan area yang akan di-exclude dari chart
+            exclude_from_chart = ['BR9', 'RC9', 'D01', 'C01', 'C02']
+            cluster_cols = sorted([
+                col for col in processed_df.columns 
+                if col not in initial_cols and col not in exclude_from_chart
+            ])
+            # --- AKHIR PERUBAHAN ---
+
             # 1. Siapkan data: dari format 'lebar' ke 'panjang' yang ideal untuk Plotly
             chart_data_long = pd.melt(processed_df, id_vars=['VESSEL'], value_vars=cluster_cols, var_name='Cluster', value_name='Box Count')
             chart_data_long = chart_data_long[chart_data_long['Box Count'] > 0] # Hanya proses yang ada isinya
 
             if chart_data_long.empty:
-                st.info("Tidak ada data cluster untuk divisualisasikan.")
+                st.info("Tidak ada data cluster untuk divisualisasikan (setelah di-exclude).")
             else:
                 # 2. Buat grafik dengan Plotly Express
                 fig = px.bar(
@@ -322,8 +330,7 @@ def render_clash_tab():
                 # 3. Atur Tampilan Grafik
                 fig.update_layout(
                     yaxis={'categoryorder':'total ascending'}, # Urutkan bar dari total terkecil ke terbesar
-                    xaxis_title='Jumlah Total Box',
-                    yaxis_title='Kapal (Vessel)',
+                    xaxis_title='Total Box',
                     height=len(processed_df['VESSEL'].unique()) * 35 + 150, # Tinggi dinamis
                     legend_title_text='Area Cluster'
                 )
