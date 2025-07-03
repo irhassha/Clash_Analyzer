@@ -13,8 +13,9 @@ from sklearn.model_selection import train_test_split
 from sklearn.ensemble import RandomForestRegressor
 from sklearn.metrics import mean_absolute_error, mean_squared_error, mean_absolute_percentage_error
 
-# Import necessary libraries
+# --- Libraries for UI and PDF Generation ---
 from st_aggrid import AgGrid, GridOptionsBuilder, JsCode
+from fpdf import FPDF # Library untuk membuat PDF
 
 # Ignore non-critical warnings
 warnings.filterwarnings("ignore", category=UserWarning)
@@ -22,6 +23,65 @@ warnings.filterwarnings("ignore", category=UserWarning)
 # --- Page Configuration & Title ---
 st.set_page_config(page_title="Yard Cluster Monitoring", layout="wide")
 st.title("Yard Cluster Monitoring")
+
+# --- KELAS UNTUK MEMBUAT LAPORAN PDF (BARU) ---
+class PDFReport(FPDF):
+    def header(self):
+        """Mendefinisikan header untuk setiap halaman PDF."""
+        self.set_font('Arial', 'B', 12)
+        self.cell(0, 10, 'Yard Cluster Analysis Report', 0, 1, 'C')
+        self.set_font('Arial', '', 8)
+        self.cell(0, 5, f'Generated on: {datetime.now().strftime("%Y-%m-%d %H:%M:%S")}', 0, 1, 'C')
+        self.ln(5)
+
+    def footer(self):
+        """Mendefinisikan footer untuk setiap halaman PDF."""
+        self.set_y(-15)
+        self.set_font('Arial', 'I', 8)
+        self.cell(0, 10, f'Page {self.page_no()}', 0, 0, 'C')
+
+    def add_section_title(self, title):
+        """Fungsi bantuan untuk membuat judul bagian."""
+        self.set_font('Arial', 'B', 11)
+        self.set_fill_color(230, 230, 230)
+        self.cell(0, 8, title, 0, 1, 'L', fill=True)
+        self.ln(4)
+
+    def create_table_from_df(self, df, col_widths=None):
+        """Membuat tabel dari Pandas DataFrame."""
+        if df.empty:
+            self.set_font('Arial', 'I', 10)
+            self.cell(0, 10, "No data available for this section.", 0, 1)
+            self.ln(5)
+            return
+
+        self.set_font('Arial', 'B', 8)
+        header = df.columns.tolist()
+
+        # Atur lebar kolom secara dinamis jika tidak ditentukan
+        if col_widths is None:
+            # Lebar halaman 'L' (Landscape) sekitar 277
+            page_width = self.w - 2 * self.l_margin
+            col_widths = [page_width / len(header)] * len(header)
+
+        # Header Tabel
+        for i, h in enumerate(header):
+            self.cell(col_widths[i], 7, str(h), 1, 0, 'C')
+        self.ln()
+
+        # Body Tabel
+        self.set_font('Arial', '', 7)
+        for _, row in df.iterrows():
+            for i, h in enumerate(header):
+                # Periksa panjang sel, potong jika perlu (opsional)
+                cell_text = str(row[h])
+                if self.get_string_width(cell_text) > col_widths[i] - 2: # margin
+                     # Anda bisa menambahkan logika pemotongan teks di sini jika perlu
+                     pass
+                self.cell(col_widths[i], 6, cell_text, 1, 0, 'L')
+            self.ln()
+        self.ln(10)
+
 
 # --- FUNCTIONS FOR FORECASTING (NEW MODEL: PER-SERVICE RF) ---
 @st.cache_data
@@ -255,13 +315,12 @@ def render_clash_tab():
                 
                 summary_display_cols = ['VESSEL', 'SERVICE', 'ETA_str', 'CLOSING_PHYSIC_str', 'TOTAL BOX', 'Loading Forecast', 'DIFF', 'TOTAL CLSTR', 'CLSTR REQ']
                 
-                # PERBAIKAN: Baris ini diperbaiki agar tidak error
                 visible_cols = summary_display_cols
                 
                 summary_display = summary_df[visible_cols].rename(columns={
-                    'ETA_str': 'ETA',
-                    'CLOSING_PHYSIC_str': 'CLOSING TIME',
-                    'TOTAL BOX': 'BOX STACKED',
+                    'ETA_str': 'ETA', 
+                    'CLOSING_PHYSIC_str': 'CLOSING TIME', 
+                    'TOTAL BOX': 'BOX STACKED', 
                     'Loading Forecast': 'LOADING FORECAST'
                 })
                 
@@ -346,73 +405,82 @@ def render_clash_tab():
         gridOptions = {"defaultColDef": default_col_def, "columnDefs": column_defs, "getRowStyle": zebra_row_style_jscode}
         AgGrid(df_for_grid.drop(columns=['ETA_str', 'CLOSING_PHYSIC_str', 'CLOSING PHYSIC']), gridOptions=gridOptions, height=600, width='100%', theme='streamlit', allow_unsafe_jscode=True)
         
-         # --- PUSAT UNDUHAN YANG DISEMPURNAKAN ---
+        # --- PUSAT UNDUHAN YANG DISEMPURNAKAN (BAGIAN BARU) ---
         st.markdown("---")
         st.subheader("📥 Download Center")
+        
+        col1, col2 = st.columns(2)
 
-        output = io.BytesIO()
-        try:
-            with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
-                workbook = writer.book
-                center_format = workbook.add_format({'align': 'center', 'valign': 'vcenter'})
+        # Tombol Download Excel
+        with col1:
+            output_excel = io.BytesIO()
+            try:
+                with pd.ExcelWriter(output_excel, engine='xlsxwriter') as writer:
+                    # Helper function for formatting
+                    def auto_adjust_and_format_sheet(df, sheet_name, writer_obj):
+                        if not df.empty:
+                            df.to_excel(writer_obj, sheet_name=sheet_name, index=False)
+                            worksheet = writer_obj.sheets[sheet_name]
+                            workbook = writer_obj.book
+                            center_format = workbook.add_format({'align': 'center', 'valign': 'vcenter'})
+                            for idx, col in enumerate(df.columns):
+                                series = df[col].dropna()
+                                max_len = max(([len(str(s)) for s in series] if not series.empty else [0]) + [len(str(col))]) + 4
+                                worksheet.set_column(idx, idx, min(max_len, 50), center_format)
 
-                # Fungsi bantuan untuk memformat sheet Excel secara otomatis
-                def auto_adjust_and_format_sheet(df, sheet_name, writer_obj):
-                    if not df.empty:
-                        df.to_excel(writer_obj, sheet_name=sheet_name, index=False)
-                        worksheet = writer_obj.sheets[sheet_name]
-                        for idx, col in enumerate(df.columns):
-                            series = df[col].dropna()
-                            # Menghitung panjang maksimum dari header dan data
-                            max_len = max(
-                                ([len(str(s)) for s in series] if not series.empty else [0]) + [len(str(col))]
-                            ) + 5
-                            # Batasi lebar maksimum agar tidak terlalu lebar
-                            max_len = min(max_len, 50)
-                            worksheet.set_column(idx, idx, max_len, center_format)
+                    if 'display_df' in locals() and not display_df.empty:
+                        export_detailed_df = display_df.copy().drop(columns=['ETA_str', 'CLOSING_PHYSIC_str'], errors='ignore')
+                        auto_adjust_and_format_sheet(export_detailed_df, 'Detailed Analysis', writer)
+                    
+                    if 'summary_display' in locals() and not summary_display.empty:
+                        auto_adjust_and_format_sheet(summary_display, 'Upcoming Summary', writer)
 
-                # 1. Ekspor Hasil Analisis Detail (data utama dari AgGrid)
-                if 'display_df' in locals() and not display_df.empty:
-                    export_detailed_df = display_df.copy().drop(columns=['ETA_str', 'CLOSING_PHYSIC_str'], errors='ignore')
-                    auto_adjust_and_format_sheet(export_detailed_df, 'Detailed Analysis', writer)
+                    if 'clash_summary_df' in st.session_state and not st.session_state.clash_summary_df.empty:
+                        auto_adjust_and_format_sheet(st.session_state.clash_summary_df, 'Clash Summary', writer)
+                
+                if output_excel.tell() > 0:
+                    st.download_button(
+                        label="📥 Download as Excel",
+                        data=output_excel.getvalue(),
+                        file_name="clash_analysis_report.xlsx",
+                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                        use_container_width=True
+                    )
+            except Exception as e:
+                st.error(f"Failed to create Excel file: {e}")
 
-                # 2. Ekspor Ringkasan Kapal yang Akan Datang
-                if 'summary_display' in locals() and not summary_display.empty:
-                    auto_adjust_and_format_sheet(summary_display, 'Upcoming Vessel Summary', writer)
+        # Tombol Download PDF
+        with col2:
+            if 'display_df' in locals():
+                try:
+                    pdf = PDFReport()
+                    pdf.add_page(orientation='L') # Landscape
 
-                # 3. Ekspor Ringkasan Clash
-                if 'clash_summary_df' in st.session_state and st.session_state.clash_summary_df is not None:
-                    summary_df_for_export = st.session_state.clash_summary_df
-                    if not summary_df_for_export.empty:
-                        # Logika untuk menambahkan baris kosong antar tanggal untuk keterbacaan
-                        final_summary_export = []
-                        last_date = None
-                        for index, row in summary_df_for_export.iterrows():
-                            current_date = row['Clash Date']
-                            if last_date is not None and current_date != last_date:
-                                final_summary_export.append({}) # Menambahkan baris kosong
-                            final_summary_export.append(row.to_dict())
-                            last_date = current_date
-                        final_summary_df = pd.DataFrame(final_summary_export)
-                        auto_adjust_and_format_sheet(final_summary_df, 'Clash Summary', writer)
+                    if 'summary_display' in locals() and not summary_display.empty:
+                        pdf.add_section_title("Upcoming Vessel Summary")
+                        # Sesuaikan lebar kolom untuk tabel ini
+                        summary_widths = [35, 20, 35, 35, 25, 30, 15, 25, 25]
+                        pdf.create_table_from_df(summary_display, col_widths=summary_widths)
 
-            # Tawarkan tombol unduh hanya jika buffer berisi data
-            if output.tell() > 0:
-                st.download_button(
-                    label="📥 Download All Analysis Tables (Excel)",
-                    data=output.getvalue(),
-                    file_name="clash_analysis_report.xlsx",
-                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                    use_container_width=True
-                )
-            else:
-                st.info("No data available to download. Please process the data first.")
+                    if 'clash_summary_df' in st.session_state and not st.session_state.clash_summary_df.empty:
+                        pdf.add_section_title("Clash Summary")
+                        clash_pdf_df = st.session_state.clash_summary_df.rename(columns={"Total Boxes": "Boxes", "Vessel(s)": "Vessels"})
+                        clash_widths = [30, 25, 25, 120, 40]
+                        pdf.create_table_from_df(clash_pdf_df, col_widths=clash_widths)
+                    
+                    pdf_output = pdf.output(dest='S').encode('latin-1')
+                    st.download_button(
+                        label="📄 Download as PDF",
+                        data=pdf_output,
+                        file_name="clash_analysis_report.pdf",
+                        mime="application/pdf",
+                        use_container_width=True
+                    )
+                except Exception as e:
+                    st.error(f"Failed to create PDF file: {e}")
 
-        except Exception as e:
-            st.error(f"Failed to create download file: {e}")
 
 # --- MAIN STRUCTURE WITH TABS ---
-# (Sisa kode Anda tetap sama)
 tab1, tab2 = st.tabs(["🚨 Clash Analysis", "📈 Loading Forecast"])
 with tab1:
     render_clash_tab()
