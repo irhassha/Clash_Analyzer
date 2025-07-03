@@ -6,8 +6,7 @@ import json
 import io
 import warnings
 import numpy as np
-import matplotlib.pyplot as plt
-import plotly.express as px # Import untuk visualisasi interaktif
+import plotly.express as px
 
 # --- Libraries for Machine Learning ---
 from sklearn.model_selection import train_test_split
@@ -171,7 +170,6 @@ def render_clash_tab():
     unit_list_file = st.sidebar.file_uploader("2. Upload Unit List", type=['xlsx', 'csv'])
     process_button = st.sidebar.button("🚀 Process Clash Data", type="primary")
 
-    # Initialize session state variables if they don't exist
     if 'processed_df' not in st.session_state:
         st.session_state.processed_df = None
     if 'clash_summary_df' not in st.session_state:
@@ -204,7 +202,6 @@ def render_clash_tab():
                     if filtered_data.empty: st.warning("No data left after filtering."); st.session_state.processed_df = None; st.stop()
 
                     grouping_cols = ['VESSEL', 'CODE', 'SERVICE', 'VOY_OUT', 'ETA', 'CLOSING PHYSIC']
-
                     pivot_df = filtered_data.pivot_table(index=grouping_cols, columns='Area (EXE)', aggfunc='size', fill_value=0)
                     cluster_cols_for_calc = pivot_df.columns.tolist()
                     pivot_df['TOTAL BOX'] = pivot_df[cluster_cols_for_calc].sum(axis=1)
@@ -218,7 +215,6 @@ def render_clash_tab():
                     if pivot_df.empty: st.warning("No data left after ETA & Total filter."); st.session_state.processed_df = None; st.stop()
 
                     initial_cols = ['VESSEL', 'CODE', 'SERVICE', 'VOY_OUT', 'ETA', 'CLOSING PHYSIC', 'TOTAL BOX', 'TOTAL CLSTR']
-
                     final_cluster_cols = [col for col in pivot_df.columns if col not in initial_cols]
                     final_display_cols = initial_cols + sorted(final_cluster_cols)
                     pivot_df = pivot_df[final_display_cols]
@@ -261,10 +257,10 @@ def render_clash_tab():
                 if priority_vessels and adjusted_clstr_req > 0:
                     summary_df.loc[summary_df['VESSEL'].isin(priority_vessels), 'CLSTR REQ'] = adjusted_clstr_req
 
-                summary_display_cols = ['VESSEL', 'SERVICE', 'ETA_str', 'CLOSING_PHYSIC_str', 'TOTAL BOX', 'Loading Forecast', 'DIFF', 'TOTAL CLSTR', 'CLSTR REQ']
+                summary_display_cols = ['VESSEL', 'SERVICE', 'ETA', 'CLOSING_PHYSIC_str', 'TOTAL BOX', 'Loading Forecast', 'DIFF', 'TOTAL CLSTR', 'CLSTR REQ']
                 visible_cols = summary_display_cols
                 summary_display = summary_df[visible_cols].rename(columns={
-                    'ETA_str': 'ETA',
+                    'ETA': 'ETA',
                     'CLOSING_PHYSIC_str': 'CLOSING TIME',
                     'TOTAL BOX': 'BOX STACKED',
                     'Loading Forecast': 'LOADING FORECAST'
@@ -282,65 +278,59 @@ def render_clash_tab():
                         return ['background-color: #FFF3CD'] * len(row)
                     return [''] * len(row)
 
-                styled_df = summary_display.style.apply(highlight_rows, axis=1).map(style_diff, subset=['DIFF'])
+                styled_df = summary_display.style.apply(highlight_rows, axis=1).map(style_diff, subset=['DIFF']).format({'ETA': '{:%Y-%m-%d %H:%M}'})
                 st.dataframe(styled_df, use_container_width=False, hide_index=True)
             else:
                 st.info("No vessels scheduled to arrive in the next 4 days.")
         else:
             st.warning("Forecast data is not available. Please run the forecast in the 'Loading Forecast' tab first.")
 
-        # --- VISUALISASI SPREADING CLUSTER MENGGUNAKAN PLOTLY ---
         st.markdown("---")
-        st.subheader("📊 Spreading Cluster Visualization (Interactive)")
-        st.write("Arahkan kursor ke bar untuk melihat detail. Anda juga bisa klik pada legenda untuk menampilkan/menyembunyikan cluster.")
+        st.subheader("📊 Cluster Spreading Visualization")
+        st.write("This chart shows the box distribution across various clusters for each vessel. Hover on bars for details and click on the legend to toggle clusters.")
 
         if st.session_state.get('processed_df') is not None and not st.session_state.processed_df.empty:
             processed_df = st.session_state.processed_df.copy()
             
             initial_cols = ['VESSEL', 'CODE', 'SERVICE', 'VOY_OUT', 'ETA', 'CLOSING PHYSIC', 'TOTAL BOX', 'TOTAL CLSTR', 'ETA_str', 'CLOSING_PHYSIC_str']
-            
-            # --- PERUBAHAN DI SINI ---
-            # Definisikan area yang akan di-exclude dari chart
             exclude_from_chart = ['BR9', 'RC9', 'D01', 'C01', 'C02']
             cluster_cols = sorted([
                 col for col in processed_df.columns 
                 if col not in initial_cols and col not in exclude_from_chart
             ])
-            # --- AKHIR PERUBAHAN ---
 
-            # 1. Siapkan data: dari format 'lebar' ke 'panjang' yang ideal untuk Plotly
             chart_data_long = pd.melt(processed_df, id_vars=['VESSEL'], value_vars=cluster_cols, var_name='Cluster', value_name='Box Count')
-            chart_data_long = chart_data_long[chart_data_long['Box Count'] > 0] # Hanya proses yang ada isinya
+            chart_data_long = chart_data_long[chart_data_long['Box Count'] > 0]
 
             if chart_data_long.empty:
-                st.info("Tidak ada data cluster untuk divisualisasikan (setelah di-exclude).")
+                st.info("No cluster data to visualize (after exclusions).")
             else:
-                # 2. Buat grafik dengan Plotly Express
+                vessel_order_by_eta = processed_df['VESSEL'].tolist()
+                
                 fig = px.bar(
                     chart_data_long,
                     x='Box Count',
                     y='VESSEL',
                     color='Cluster',
                     orientation='h',
-                    title='Distribusi Box per Cluster untuk Setiap Kapal',
-                    text='Box Count', # Tambahkan jumlah box di dalam bar
+                    title='Box Distribution per Cluster for Each Vessel',
+                    text='Box Count',
                     hover_data={'VESSEL': False, 'Cluster': True, 'Box Count': True}
                 )
 
-                # 3. Atur Tampilan Grafik
                 fig.update_layout(
-                    yaxis={'categoryorder':'total ascending'}, # Urutkan bar dari total terkecil ke terbesar
-                    xaxis_title='Total Box',
-                    height=len(processed_df['VESSEL'].unique()) * 35 + 150, # Tinggi dinamis
-                    legend_title_text='Area Cluster'
+                    xaxis_title=None,
+                    yaxis_title=None,
+                    height=len(processed_df['VESSEL'].unique()) * 35 + 150,
+                    legend_title_text='Cluster Area',
+                    title_x=0.5
                 )
+                fig.update_yaxes(categoryorder='array', categoryarray=vessel_order_by_eta[::-1]) # Sort by ETA
                 fig.update_traces(textposition='inside', textfont_size=10, textangle=0)
                 
-                # 4. Tampilkan grafik di Streamlit
                 st.plotly_chart(fig, use_container_width=True)
         else:
-            st.info("Proses data terlebih dahulu untuk melihat visualisasi.")
-        # --- AKHIR DARI VISUALISASI PLOTLY ---
+            st.info("Process data first to see the visualization.")
 
         st.markdown("---")
         st.header("📋 Detailed Analysis Results")
@@ -416,10 +406,13 @@ def render_clash_tab():
 
                 def auto_adjust_and_format_sheet(df, sheet_name, writer_obj):
                     if df is not None and not df.empty:
-                        df.to_excel(writer_obj, sheet_name=sheet_name, index=False)
+                        df_to_write = df.copy()
+                        if 'ETA' in df_to_write.columns:
+                            df_to_write['ETA'] = pd.to_datetime(df_to_write['ETA']).dt.strftime('%Y-%m-%d %H:%M')
+                        df_to_write.to_excel(writer_obj, sheet_name=sheet_name, index=False)
                         worksheet = writer_obj.sheets[sheet_name]
-                        for idx, col_name in enumerate(df.columns):
-                            series = df[col_name].dropna()
+                        for idx, col_name in enumerate(df_to_write.columns):
+                            series = df_to_write[col_name].dropna()
                             max_len = max(
                                 ([len(str(s)) for s in series] if not series.empty else [0]) + [len(str(col_name))]
                             ) + 5
