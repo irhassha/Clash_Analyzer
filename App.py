@@ -354,7 +354,7 @@ def render_clash_tab():
                     clash_widths = [30, 25, 25, 120, 40]
                     pdf.create_table_from_df(clash_pdf_df, col_widths=clash_widths)
                 
-                pdf_output = pdf.output(dest='S').encode('latin-1')
+                pdf_output = pdf.output(dest='S')
                 st.download_button(
                     label="📄 Download as PDF",
                     data=pdf_output,
