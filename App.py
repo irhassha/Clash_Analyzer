@@ -336,6 +336,7 @@ def render_clash_tab():
                     x='Box Count',
                     y='VESSEL',
                     color='Cluster',
+                    color_discrete_map=cluster_color_map,
                     orientation='h',
                     title='Box Distribution per Cluster for Each Vessel',
                     text='Box Count',
