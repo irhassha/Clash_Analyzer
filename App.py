@@ -323,7 +323,7 @@ def render_clash_tab():
                     yaxis_title=None,
                     height=len(processed_df['VESSEL'].unique()) * 35 + 150,
                     legend_title_text='Cluster Area',
-                    title_x=0.5
+                    title_x=0
                 )
                 fig.update_yaxes(categoryorder='array', categoryarray=vessel_order_by_eta[::-1]) # Sort by ETA
                 fig.update_traces(textposition='inside', textfont_size=10, textangle=0)
