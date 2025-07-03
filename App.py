@@ -316,7 +316,7 @@ def render_clash_tab():
                     'B02': '#67AE6E', # Oranye
                     'B03': '#90C67C',
                     'B04': '#E1EEBC',
-                    'B05': '#E7EFC7',
+                    'B05': '#D2FF72',
                     'C03': '#B33791', # Slate Gray
                     'C04': '#C562AF', # Sea Green
                     'C05': '#DB8DD0', # Steel Blue
