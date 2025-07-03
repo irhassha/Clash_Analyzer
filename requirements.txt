@@ -6,4 +6,3 @@ xlsxwriter
 statsmodels
 matplotlib
 scikit-learn
-fpdf2
