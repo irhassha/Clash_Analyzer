@@ -328,7 +328,7 @@ def render_clash_tab():
                     'OOG': 'black'
                     # Tambahkan area dan warna lain sesuai kebutuhan Anda
                 }
-            else:
+            
                 vessel_order_by_eta = processed_df['VESSEL'].tolist()
                 
                 fig = px.bar(
