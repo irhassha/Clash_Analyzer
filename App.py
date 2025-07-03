@@ -307,7 +307,7 @@ def render_clash_tab():
             else:
                 # --- PERUBAHAN DI SINI: Definisikan Peta Warna Anda ---
                 cluster_color_map = {
-                    'A01': '#5409DA',
+                    'A01': '#024CAA',
                     'A02': '#4E71FF',
                     'A03': '#8DD8FF',
                     'A04': '#BBFBFF',
