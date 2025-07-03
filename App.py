@@ -7,6 +7,7 @@ import io
 import warnings
 import numpy as np
 import matplotlib.pyplot as plt
+import plotly.express as px # <-- Import untuk visualisasi interaktif
 
 # --- Libraries for Machine Learning ---
 from sklearn.model_selection import train_test_split
@@ -122,32 +123,32 @@ def render_forecast_tab():
     st.write("This feature uses a separate **Random Forest** model for each service. The model learns from historical time patterns to provide more accurate predictions, complete with anomaly data cleaning.")
     if 'forecast_df' not in st.session_state:
         df_history = load_history_data()
-        if df_history is not None:
+        if df_history is not None and not df_history.empty:
             with st.spinner("Processing data and training models for each service..."):
                 forecast_df = run_per_service_rf_forecast(df_history)
                 st.session_state.forecast_df = forecast_df
         else:
             st.session_state.forecast_df = pd.DataFrame()
-            st.error("Could not load historical data. Process canceled.")
+            if df_history is None:
+                st.error("Could not load historical data. Process canceled.")
     
-    if 'forecast_df' in st.session_state:
+    if 'forecast_df' in st.session_state and not st.session_state.forecast_df.empty:
         results_df = st.session_state.forecast_df
-        if not results_df.empty:
-            results_df['Loading Forecast'] = results_df['Loading Forecast'].round(2)
-            results_df['Margin of Error (± box)'] = results_df['Margin of Error (± box)'].fillna(0).round(2)
-            results_df['MAPE (%)'] = results_df['MAPE (%)'].replace([np.inf, -np.inf], 0).fillna(0).round(2)
-            st.markdown("---")
-            st.subheader("📊 Forecast Results per Service")
-            st.dataframe(
-                results_df.sort_values(by="Loading Forecast", ascending=False).reset_index(drop=True),
-                use_container_width=True, hide_index=True,
-                column_config={"MAPE (%)": st.column_config.NumberColumn(format="%.2f%%")}
-            )
-            st.markdown("---")
-            st.subheader("💡 How to Read These Results")
-            st.markdown("- **Loading Forecast**: The estimated number of boxes for the next vessel arrival of that service.\n- **Margin of Error (± box)**: The level of uncertainty in the prediction. A prediction of **300** with a MoE of **±50** means the actual value is likely between **250** and **350**.\n- **MAPE (%)**: The average percentage error of the model when tested on its historical data. **The smaller the value, the more accurate the model has been in the past.**\n- **Method**: The technique used for the forecast and the number of outliers handled.")
-        else:
-            st.warning("No forecast data could be generated. The history file might be empty or contain no valid service data.")
+        results_df['Loading Forecast'] = results_df['Loading Forecast'].round(2)
+        results_df['Margin of Error (± box)'] = results_df['Margin of Error (± box)'].fillna(0).round(2)
+        results_df['MAPE (%)'] = results_df['MAPE (%)'].replace([np.inf, -np.inf], 0).fillna(0).round(2)
+        st.markdown("---")
+        st.subheader("📊 Forecast Results per Service")
+        st.dataframe(
+            results_df.sort_values(by="Loading Forecast", ascending=False).reset_index(drop=True),
+            use_container_width=True, hide_index=True,
+            column_config={"MAPE (%)": st.column_config.NumberColumn(format="%.2f%%")}
+        )
+        st.markdown("---")
+        st.subheader("💡 How to Read These Results")
+        st.markdown("- **Loading Forecast**: The estimated number of boxes for the next vessel arrival of that service.\n- **Margin of Error (± box)**: The level of uncertainty in the prediction. A prediction of **300** with a MoE of **±50** means the actual value is likely between **250** and **350**.\n- **MAPE (%)**: The average percentage error of the model when tested on its historical data. **The smaller the value, the more accurate the model has been in the past.**\n- **Method**: The technique used for the forecast and the number of outliers handled.")
+    else:
+        st.warning("No forecast data could be generated. The history file might be empty or contain no valid service data.")
 
 @st.cache_data
 def load_vessel_codes_from_repo(possible_names=['vessel codes.xlsx', 'vessel_codes.xls', 'vessel_codes.csv']):
@@ -161,7 +162,7 @@ def load_vessel_codes_from_repo(possible_names=['vessel codes.xlsx', 'vessel_cod
                 return df
             except Exception as e:
                 st.error(f"Failed to read file '{filename}': {e}"); return None
-    st.error("Vessel codes file not found."); return None
+    st.error(f"Vessel codes file not found."); return None
 
 def render_clash_tab():
     """Function to display the entire content of the Clash Analysis tab."""
@@ -175,11 +176,8 @@ def render_clash_tab():
         st.session_state.processed_df = None
     if 'clash_summary_df' not in st.session_state:
         st.session_state.clash_summary_df = None
-    if 'filtered_data' not in st.session_state:
-        st.session_state.filtered_data = None
     if 'summary_display' not in st.session_state:
         st.session_state.summary_display = None
-
 
     df_vessel_codes = load_vessel_codes_from_repo()
     if process_button:
@@ -202,8 +200,6 @@ def render_clash_tab():
                     excluded_areas = [str(i) for i in range(801, 809)]
                     merged_df['Area (EXE)'] = merged_df['Area (EXE)'].astype(str)
                     filtered_data = merged_df[~merged_df['Area (EXE)'].isin(excluded_areas)]
-
-                    st.session_state.filtered_data = filtered_data
 
                     if filtered_data.empty: st.warning("No data left after filtering."); st.session_state.processed_df = None; st.stop()
 
@@ -273,7 +269,7 @@ def render_clash_tab():
                     'TOTAL BOX': 'BOX STACKED',
                     'Loading Forecast': 'LOADING FORECAST'
                 })
-                st.session_state.summary_display = summary_display # Save to session state
+                st.session_state.summary_display = summary_display
 
                 def style_diff(v):
                     color = '#4CAF50' if v > 0 else '#F44336' if v < 0 else '#757575'
@@ -282,61 +278,63 @@ def render_clash_tab():
                 def highlight_rows(row):
                     if row['TOTAL CLSTR'] < row['CLSTR REQ']:
                         return ['background-color: #FFCDD2'] * len(row)
-                    if row.name in priority_vessels: # Compare with vessel name
+                    if row['VESSEL'] in priority_vessels:
                         return ['background-color: #FFF3CD'] * len(row)
                     return [''] * len(row)
 
                 styled_df = summary_display.style.apply(highlight_rows, axis=1).map(style_diff, subset=['DIFF'])
-
                 st.dataframe(styled_df, use_container_width=False, hide_index=True)
             else:
                 st.info("No vessels scheduled to arrive in the next 4 days.")
         else:
             st.warning("Forecast data is not available. Please run the forecast in the 'Loading Forecast' tab first.")
 
-        # --- SPREADING CLUSTER VISUALIZATION ---
+        # --- VISUALISASI SPREADING CLUSTER MENGGUNAKAN PLOTLY ---
         st.markdown("---")
-        st.subheader("📊 Spreading Cluster Visualization")
-        st.write("Visualisasi ini menunjukkan distribusi peti kemas di berbagai cluster untuk setiap kapal. Setiap warna mewakili satu cluster area.")
+        st.subheader("📊 Spreading Cluster Visualization (Interactive)")
+        st.write("Arahkan kursor ke bar untuk melihat detail. Anda juga bisa klik pada legenda untuk menampilkan/menyembunyikan cluster.")
 
         if st.session_state.get('processed_df') is not None and not st.session_state.processed_df.empty:
             processed_df = st.session_state.processed_df.copy()
+            
             initial_cols = ['VESSEL', 'CODE', 'SERVICE', 'VOY_OUT', 'ETA', 'CLOSING PHYSIC', 'TOTAL BOX', 'TOTAL CLSTR', 'ETA_str', 'CLOSING_PHYSIC_str']
             cluster_cols = sorted([col for col in processed_df.columns if col not in initial_cols])
-            chart_data = processed_df.set_index('VESSEL')[cluster_cols]
-            chart_data = chart_data.loc[:, (chart_data != 0).any(axis=0)]
+            
+            # 1. Siapkan data: dari format 'lebar' ke 'panjang' yang ideal untuk Plotly
+            chart_data_long = pd.melt(processed_df, id_vars=['VESSEL'], value_vars=cluster_cols, var_name='Cluster', value_name='Box Count')
+            chart_data_long = chart_data_long[chart_data_long['Box Count'] > 0] # Hanya proses yang ada isinya
 
-            if chart_data.empty:
+            if chart_data_long.empty:
                 st.info("Tidak ada data cluster untuk divisualisasikan.")
             else:
-                height_per_vessel = 0.5
-                fig_height = max(4, len(chart_data) * height_per_vessel)
-                fig, ax = plt.subplots(figsize=(12, fig_height))
-                colors = plt.cm.get_cmap('tab20c', len(chart_data.columns))
-                left = pd.Series(0, index=chart_data.index)
+                # 2. Buat grafik dengan Plotly Express
+                fig = px.bar(
+                    chart_data_long,
+                    x='Box Count',
+                    y='VESSEL',
+                    color='Cluster',
+                    orientation='h',
+                    title='Distribusi Box per Cluster untuk Setiap Kapal',
+                    text='Box Count', # Tambahkan jumlah box di dalam bar
+                    hover_data={'VESSEL': False, 'Cluster': True, 'Box Count': True}
+                )
 
-                for i, col in enumerate(chart_data.columns):
-                    values = chart_data[col]
-                    ax.barh(chart_data.index, values, left=left, label=col, color=colors(i), zorder=3, edgecolor='white', linewidth=0.5)
-                    for vessel, value in values.items():
-                        if value > 5:
-                            r, g, b, _ = colors(i)
-                            text_color = 'white' if (r*0.299 + g*0.587 + b*0.114) < 0.6 else 'black'
-                            ax.text(left[vessel] + value / 2, vessel, f"{col}\n{int(value)}",
-                                    ha='center', va='center', fontsize=7, color=text_color, fontweight='bold')
-                    left += values
-
-                ax.set_title('Distribusi Box per Cluster untuk Setiap Kapal', fontsize=16, pad=20)
-                ax.set_xlabel('Jumlah Box', fontsize=12)
-                ax.invert_yaxis()
-                ax.legend(title='Cluster Area', bbox_to_anchor=(1.02, 1), loc='upper left')
-                ax.grid(axis='x', linestyle='--', alpha=0.7, zorder=0)
-                fig.tight_layout(rect=[0, 0, 0.88, 1])
-                st.pyplot(fig)
+                # 3. Atur Tampilan Grafik
+                fig.update_layout(
+                    yaxis={'categoryorder':'total ascending'}, # Urutkan bar dari total terkecil ke terbesar
+                    xaxis_title='Jumlah Total Box',
+                    yaxis_title='Kapal (Vessel)',
+                    height=len(processed_df['VESSEL'].unique()) * 35 + 150, # Tinggi dinamis
+                    legend_title_text='Area Cluster'
+                )
+                fig.update_traces(textposition='inside', textfont_size=10, textangle=0)
+                
+                # 4. Tampilkan grafik di Streamlit
+                st.plotly_chart(fig, use_container_width=True)
         else:
             st.info("Proses data terlebih dahulu untuk melihat visualisasi.")
+        # --- AKHIR DARI VISUALISASI PLOTLY ---
 
-        # --- DETAILED ANALYSIS & DOWNLOAD CENTER ---
         st.markdown("---")
         st.header("📋 Detailed Analysis Results")
         df_for_grid = display_df.copy()
@@ -380,7 +378,7 @@ def render_clash_tab():
                         summary_html += "</div></div>"
                         st.markdown(summary_html, unsafe_allow_html=True)
                 st.session_state.clash_summary_df = pd.DataFrame(summary_data)
-
+        
         hide_zero_jscode = JsCode("""function(params) { if (params.value == 0 || params.value === null) { return ''; } return params.value; }""")
         clash_cell_style_jscode = JsCode(f"""function(params) {{ const clashMap = {json.dumps(clash_map)}; const date = params.data.ETA_Date; const colId = params.colDef.field; const isClash = clashMap[date] ? clashMap[date].includes(colId) : false; if (isClash) {{ return {{'backgroundColor': '#FFAA33', 'color': 'black'}}; }} return null; }}""")
         zebra_row_style_jscode = JsCode(f"""function(params) {{ const dateColorMap = {json.dumps(date_color_map)}; const date = params.data.ETA_Date; const color = dateColorMap[date]; return {{ 'background-color': color }}; }}""")
@@ -413,15 +411,14 @@ def render_clash_tab():
                     if df is not None and not df.empty:
                         df.to_excel(writer_obj, sheet_name=sheet_name, index=False)
                         worksheet = writer_obj.sheets[sheet_name]
-                        for idx, col in enumerate(df.columns):
-                            series = df[col].dropna()
+                        for idx, col_name in enumerate(df.columns):
+                            series = df[col_name].dropna()
                             max_len = max(
-                                ([len(str(s)) for s in series] if not series.empty else [0]) + [len(str(col))]
+                                ([len(str(s)) for s in series] if not series.empty else [0]) + [len(str(col_name))]
                             ) + 5
                             max_len = min(max_len, 50)
                             worksheet.set_column(idx, idx, max_len, center_format)
                 
-                # Export sheets
                 auto_adjust_and_format_sheet(st.session_state.get('processed_df'), 'Detailed Analysis', writer)
                 auto_adjust_and_format_sheet(st.session_state.get('summary_display'), 'Upcoming Vessel Summary', writer)
                 
