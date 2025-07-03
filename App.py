@@ -340,21 +340,23 @@ def render_clash_tab():
         with col2:
             try:
                 pdf = PDFReport()
-                pdf.add_page(orientation='L') # Landscape
-
+                pdf.add_page(orientation='L')
+        
                 if not summary_display.empty:
                     pdf.add_section_title("Upcoming Vessel Summary")
                     summary_widths = [35, 20, 35, 35, 25, 30, 15, 25, 25]
                     pdf.create_table_from_df(summary_display, col_widths=summary_widths)
-
-                # Gunakan variabel clash_summary_df yang sudah kita definisikan
+        
                 if not clash_summary_df.empty:
                     pdf.add_section_title("Clash Summary")
                     clash_pdf_df = clash_summary_df.rename(columns={"Total Boxes": "Boxes", "Vessel(s)": "Vessels"})
                     clash_widths = [30, 25, 25, 120, 40]
                     pdf.create_table_from_df(clash_pdf_df, col_widths=clash_widths)
-                
-                pdf_output = pdf.output(dest='S')
+        
+                buffer = io.BytesIO()
+                pdf.output(buffer)  # ✅ simpan ke file-like object
+                pdf_output = buffer.getvalue()
+        
                 st.download_button(
                     label="📄 Download as PDF",
                     data=pdf_output,
