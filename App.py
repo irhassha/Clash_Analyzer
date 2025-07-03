@@ -305,6 +305,30 @@ def render_clash_tab():
             if chart_data_long.empty:
                 st.info("No cluster data to visualize (after exclusions).")
             else:
+                # --- PERUBAHAN DI SINI: Definisikan Peta Warna Anda ---
+                cluster_color_map = {
+                    'A01': '#5409DA',
+                    'A02': '#4E71FF',
+                    'A03': '#8DD8FF',
+                    'A04': '#BBFBFF',
+                    'A05': '#8DBCC7', # Kuning
+                    'B01': '#328E6E', # Kuning
+                    'B02': '#67AE6E', # Oranye
+                    'B03': '#90C67C',
+                    'B04': '#E1EEBC',
+                    'B05': '#E7EFC7',
+                    'C03': '#B33791', # Slate Gray
+                    'C04': '#C562AF', # Sea Green
+                    'C05': '#DB8DD0', # Steel Blue
+                    'E11': '#8D493A', # Chocolate
+                    'E12': '#D0B8A8', # Coral
+                    'E13': '#DFD3C3', # Cornflower Blue
+                    'E14': '#F8EDE3', # Crimson
+                    'EA09':'#EECEB9', # Gold
+                    'OOG': 'black'
+                    # Tambahkan area dan warna lain sesuai kebutuhan Anda
+                }
+            else:
                 vessel_order_by_eta = processed_df['VESSEL'].tolist()
                 
                 fig = px.bar(
