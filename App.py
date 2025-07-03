@@ -163,6 +163,7 @@ def load_vessel_codes_from_repo(possible_names=['vessel codes.xlsx', 'vessel_cod
     st.error(f"Vessel codes file not found."); return None
 
 def render_clash_tab():
+    def render_clash_tab():
     """Function to display the entire content of the Clash Analysis tab."""
     st.sidebar.header("⚙️ Upload Your Files")
     schedule_file = st.sidebar.file_uploader("1. Upload Vessel Schedule", type=['xlsx', 'csv'])
@@ -197,8 +198,6 @@ def render_clash_tab():
                     merged_df['Area (EXE)'] = merged_df['Area (EXE)'].astype(str)
                     filtered_data = merged_df[~merged_df['Area (EXE)'].isin(excluded_areas)]
                     
-                    # --- BARIS BARU DITAMBAHKAN ---
-                    # Simpan data mentah yang sudah difilter untuk digunakan di visualisasi
                     st.session_state.filtered_data = filtered_data
                     
                     if filtered_data.empty: st.warning("No data left after filtering."); st.session_state.processed_df = None; st.stop()
@@ -291,53 +290,69 @@ def render_clash_tab():
         else:
             st.warning("Forecast data is not available. Please run the forecast in the 'Loading Forecast' tab first.")
 
-        # --- FITUR BARU: SPREADING CLUSTER VISUALIZATION ---
+        # --- FITUR BARU: VISUALISASI GRAFIK BATANG BERTUMPUK ---
         st.markdown("---")
-        st.subheader("🔍 Spreading Cluster Visualization")
+        st.subheader("📊 Spreading Cluster Visualization")
+        st.write("Visualisasi ini menunjukkan distribusi peti kemas di berbagai cluster untuk setiap kapal. Setiap warna mewakili satu cluster area.")
 
-        if st.session_state.get('filtered_data') is not None and not st.session_state.filtered_data.empty:
-            filtered_data = st.session_state.filtered_data
-            vessel_list = sorted(filtered_data['VESSEL'].unique())
+        if st.session_state.get('processed_df') is not None and not st.session_state.processed_df.empty:
+            processed_df = st.session_state.processed_df.copy()
+
+            # Identifikasi kolom-kolom yang merupakan cluster area
+            initial_cols = ['VESSEL', 'CODE', 'SERVICE', 'VOY_OUT', 'ETA', 'CLOSING PHYSIC', 'TOTAL BOX', 'TOTAL CLSTR', 'ETA_str', 'CLOSING_PHYSIC_str']
+            cluster_cols = sorted([col for col in processed_df.columns if col not in initial_cols])
+
+            # Siapkan data untuk grafik: index adalah Kapal, kolom adalah Area Cluster
+            chart_data = processed_df.set_index('VESSEL')[cluster_cols]
             
-            selected_vessel = st.selectbox(
-                "Select a Vessel to see its Cluster Distribution:",
-                options=vessel_list,
-                index=0,
-                help="Pilih kapal untuk melihat sebaran peti kemas di setiap cluster."
-            )
+            # Hapus semua kolom (cluster) yang totalnya nol agar tidak muncul di legenda
+            chart_data = chart_data.loc[:, (chart_data != 0).any(axis=0)]
+            
+            if chart_data.empty:
+                st.info("Tidak ada data cluster untuk divisualisasikan.")
+            else:
+                # Membuat plot
+                # Ukuran diatur dinamis berdasarkan jumlah kapal
+                height_per_vessel = 0.5
+                fig_height = max(4, len(chart_data) * height_per_vessel)
+                fig, ax = plt.subplots(figsize=(12, fig_height))
+                
+                # Siapkan palet warna yang cukup beragam
+                colors = plt.cm.get_cmap('tab20c', len(chart_data.columns))
 
-            if selected_vessel:
-                vessel_data = filtered_data[filtered_data['VESSEL'] == selected_vessel]
-                if not vessel_data.empty:
-                    # Kelompokkan berdasarkan Area dan hitung jumlah box
-                    cluster_spread = vessel_data.groupby('Area (EXE)').size().sort_values(ascending=False)
+                # Variabel untuk menumpuk bar
+                left = pd.Series(0, index=chart_data.index)
+
+                # Loop untuk setiap cluster untuk membuat tumpukan
+                for i, col in enumerate(chart_data.columns):
+                    values = chart_data[col]
+                    ax.barh(chart_data.index, values, left=left, label=col, color=colors(i), zorder=3, edgecolor='white', linewidth=0.5)
+
+                    # Tambahkan label (Area & Jumlah Box) di tengah setiap segmen bar
+                    for vessel, value in values.items():
+                        if value > 5: # Hanya tampilkan label jika jumlah box cukup signifikan
+                            # Tentukan warna teks (putih atau hitam) agar kontras dengan latar
+                            r, g, b, _ = colors(i)
+                            text_color = 'white' if (r*0.299 + g*0.587 + b*0.114) < 0.6 else 'black'
+                            
+                            ax.text(left[vessel] + value / 2, vessel, f"{col}\n{int(value)}", 
+                                    ha='center', va='center', fontsize=7, color=text_color, fontweight='bold')
                     
-                    if not cluster_spread.empty:
-                        st.write(f"Displaying cluster spread for **{selected_vessel}**")
+                    left += values
 
-                        # Gunakan Matplotlib untuk kontrol estetika yang lebih baik
-                        fig, ax = plt.subplots(figsize=(12, 6))
-                        bars = ax.bar(cluster_spread.index, cluster_spread.values, color='#1f77b4', zorder=2)
-                        
-                        # Tambahkan label dan judul
-                        ax.set_title(f'Box Distribution per Cluster for {selected_vessel}', fontsize=16, pad=20)
-                        ax.set_xlabel('Cluster Area (Area EXE)', fontsize=12)
-                        ax.set_ylabel('Number of Boxes', fontsize=12)
-                        ax.tick_params(axis='x', rotation=45)
-                        ax.grid(axis='y', linestyle='--', alpha=0.7, zorder=1)
+                # Estetika dan Pengaturan Grafik
+                ax.set_title('Distribusi Box per Cluster untuk Setiap Kapal', fontsize=16, pad=20)
+                ax.set_xlabel('Jumlah Box', fontsize=12)
+                ax.invert_yaxis()  # Tampilkan kapal pertama di bagian atas
+                ax.legend(title='Cluster Area', bbox_to_anchor=(1.02, 1), loc='upper left')
+                ax.grid(axis='x', linestyle='--', alpha=0.7, zorder=0)
 
-                        # Tambahkan label data di atas bar
-                        for bar in bars:
-                            yval = bar.get_height()
-                            ax.text(bar.get_x() + bar.get_width()/2.0, yval + 0.5, int(yval), ha='center', va='bottom', fontweight='bold')
-
-                        st.pyplot(fig)
-                    else:
-                        st.info(f"No cluster data available for vessel '{selected_vessel}'.")
-                else:
-                    st.info(f"No data found for vessel '{selected_vessel}'.")
+                # Atur layout agar legenda tidak terpotong
+                fig.tight_layout(rect=[0, 0, 0.88, 1]) 
+                
+                st.pyplot(fig)
         else:
-            st.info("Process data first to see cluster visualizations. Upload files and click the process button.")
+            st.info("Proses data terlebih dahulu untuk melihat visualisasi.")
         # --- AKHIR DARI FITUR BARU ---
         
         st.markdown("---")
@@ -348,10 +363,10 @@ def render_clash_tab():
         unique_dates = df_for_grid['ETA_Date'].unique()
         date_color_map = {date: ['#F8F0E5', '#DAC0A3'][i % 2] for i, date in enumerate(unique_dates)}
         clash_map = {}
-        cluster_cols = [col for col in df_for_grid.columns if col not in ['VESSEL', 'CODE', 'SERVICE', 'VOY_OUT', 'ETA', 'CLOSING PHYSIC', 'TOTAL BOX', 'TOTAL CLSTR', 'ETA_Date', 'ETA_str', 'CLOSING_PHYSIC_str']]
+        cluster_cols_aggrid = [col for col in df_for_grid.columns if col not in ['VESSEL', 'CODE', 'SERVICE', 'VOY_OUT', 'ETA', 'CLOSING PHYSIC', 'TOTAL BOX', 'TOTAL CLSTR', 'ETA_Date', 'ETA_str', 'CLOSING_PHYSIC_str']]
         for date, group in df_for_grid.groupby('ETA_Date'):
             clash_areas_for_date = []
-            for col in cluster_cols:
+            for col in cluster_cols_aggrid:
                 if (group[col] > 0).sum() > 1:
                     clash_areas_for_date.append(col)
             if clash_areas_for_date:
@@ -396,13 +411,12 @@ def render_clash_tab():
             col_def = {"field": col, "headerName": col, "pinned": "left", "width": width}
             if col in ["TOTAL BOX", "TOTAL CLSTR"]: col_def["cellRenderer"] = hide_zero_jscode
             column_defs.append(col_def)
-        for col in cluster_cols:
+        for col in cluster_cols_aggrid:
             column_defs.append({"field": col, "headerName": col, "width": 60, "cellRenderer": hide_zero_jscode, "cellStyle": clash_cell_style_jscode})
         column_defs.append({"field": "ETA_Date", "hide": True})
         gridOptions = {"defaultColDef": default_col_def, "columnDefs": column_defs, "getRowStyle": zebra_row_style_jscode}
         AgGrid(df_for_grid.drop(columns=['ETA_str', 'CLOSING_PHYSIC_str', 'CLOSING PHYSIC']), gridOptions=gridOptions, height=600, width='100%', theme='streamlit', allow_unsafe_jscode=True)
         
-         # --- PUSAT UNDUHAN YANG DISEMPURNAKAN ---
         st.markdown("---")
         st.subheader("📥 Download Center")
 
@@ -412,47 +426,39 @@ def render_clash_tab():
                 workbook = writer.book
                 center_format = workbook.add_format({'align': 'center', 'valign': 'vcenter'})
 
-                # Fungsi bantuan untuk memformat sheet Excel secara otomatis
                 def auto_adjust_and_format_sheet(df, sheet_name, writer_obj):
                     if not df.empty:
                         df.to_excel(writer_obj, sheet_name=sheet_name, index=False)
                         worksheet = writer_obj.sheets[sheet_name]
                         for idx, col in enumerate(df.columns):
                             series = df[col].dropna()
-                            # Menghitung panjang maksimum dari header dan data
                             max_len = max(
                                 ([len(str(s)) for s in series] if not series.empty else [0]) + [len(str(col))]
                             ) + 5
-                            # Batasi lebar maksimum agar tidak terlalu lebar
                             max_len = min(max_len, 50)
                             worksheet.set_column(idx, idx, max_len, center_format)
 
-                # 1. Ekspor Hasil Analisis Detail (data utama dari AgGrid)
                 if 'display_df' in locals() and not display_df.empty:
                     export_detailed_df = display_df.copy().drop(columns=['ETA_str', 'CLOSING_PHYSIC_str'], errors='ignore')
                     auto_adjust_and_format_sheet(export_detailed_df, 'Detailed Analysis', writer)
 
-                # 2. Ekspor Ringkasan Kapal yang Akan Datang
                 if 'summary_display' in locals() and not summary_display.empty:
                     auto_adjust_and_format_sheet(summary_display, 'Upcoming Vessel Summary', writer)
 
-                # 3. Ekspor Ringkasan Clash
                 if 'clash_summary_df' in st.session_state and st.session_state.clash_summary_df is not None:
                     summary_df_for_export = st.session_state.clash_summary_df
                     if not summary_df_for_export.empty:
-                        # Logika untuk menambahkan baris kosong antar tanggal untuk keterbacaan
                         final_summary_export = []
                         last_date = None
                         for index, row in summary_df_for_export.iterrows():
                             current_date = row['Clash Date']
                             if last_date is not None and current_date != last_date:
-                                final_summary_export.append({}) # Menambahkan baris kosong
+                                final_summary_export.append({})
                             final_summary_export.append(row.to_dict())
                             last_date = current_date
                         final_summary_df = pd.DataFrame(final_summary_export)
                         auto_adjust_and_format_sheet(final_summary_df, 'Clash Summary', writer)
 
-            # Tawarkan tombol unduh hanya jika buffer berisi data
             if output.tell() > 0:
                 st.download_button(
                     label="📥 Download All Analysis Tables (Excel)",
@@ -466,7 +472,7 @@ def render_clash_tab():
 
         except Exception as e:
             st.error(f"Failed to create download file: {e}")
-
+            
 # --- MAIN STRUCTURE WITH TABS ---
 tab1, tab2 = st.tabs(["🚨 Clash Analysis", "📈 Loading Forecast"])
 with tab1:
