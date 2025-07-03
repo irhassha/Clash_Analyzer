@@ -133,7 +133,7 @@ def render_forecast_tab():
         results_df = st.session_state.forecast_df
         if not results_df.empty:
             results_df['Loading Forecast'] = results_df['Loading Forecast'].round(2)
-            results_df['Margin of Error (± box)'] = results_df['Margin of Error (± box)'].fillna(0).round(2)
+            results_df['Margin of Error (± box)'] = results_df['Margin of Error (± box)].fillna(0).round(2)
             results_df['MAPE (%)'] = results_df['MAPE (%)'].replace([np.inf, -np.inf], 0).fillna(0).round(2)
             st.markdown("---")
             st.subheader("📊 Forecast Results per Service")
@@ -168,11 +168,16 @@ def render_clash_tab():
     schedule_file = st.sidebar.file_uploader("1. Upload Vessel Schedule", type=['xlsx', 'csv'])
     unit_list_file = st.sidebar.file_uploader("2. Upload Unit List", type=['xlsx', 'csv'])
     process_button = st.sidebar.button("🚀 Process Clash Data", type="primary")
+    
     if 'processed_df' not in st.session_state:
         st.session_state.processed_df = None
     if 'clash_summary_df' not in st.session_state:
         st.session_state.clash_summary_df = None
+    if 'upcoming_vessels_summary_df' not in st.session_state: # New session state for upcoming vessel summary
+        st.session_state.upcoming_vessels_summary_df = None
+
     df_vessel_codes = load_vessel_codes_from_repo()
+
     if process_button:
         if schedule_file and unit_list_file and (df_vessel_codes is not None and not df_vessel_codes.empty):
             with st.spinner('Loading and processing data...'):
@@ -183,16 +188,21 @@ def render_clash_tab():
                     if unit_list_file.name.lower().endswith(('.xls', '.xlsx')): df_unit_list = pd.read_excel(unit_list_file)
                     else: df_unit_list = pd.read_csv(unit_list_file)
                     df_unit_list.columns = [col.strip() for col in df_unit_list.columns]
+                    
                     original_vessels_list = df_schedule['VESSEL'].unique().tolist()
                     df_schedule['ETA'] = pd.to_datetime(df_schedule['ETA'], errors='coerce')
                     df_schedule['CLOSING PHYSIC'] = pd.to_datetime(df_schedule['CLOSING PHYSIC'], errors='coerce')
+                    
                     df_schedule_with_code = pd.merge(df_schedule, df_vessel_codes, left_on="VESSEL", right_on="Description", how="left").rename(columns={"Value": "CODE"})
                     merged_df = pd.merge(df_schedule_with_code, df_unit_list, left_on=['CODE', 'VOY_OUT'], right_on=['Carrier Out', 'Voyage Out'], how='inner')
+                    
                     if merged_df.empty: st.warning("No matching data found."); st.session_state.processed_df = None; st.stop()
+                    
                     merged_df = merged_df[merged_df['VESSEL'].isin(original_vessels_list)]
                     excluded_areas = [str(i) for i in range(801, 809)]
                     merged_df['Area (EXE)'] = merged_df['Area (EXE)'].astype(str)
                     filtered_data = merged_df[~merged_df['Area (EXE)'].isin(excluded_areas)]
+                    
                     if filtered_data.empty: st.warning("No data left after filtering."); st.session_state.processed_df = None; st.stop()
                     
                     grouping_cols = ['VESSEL', 'CODE', 'SERVICE', 'VOY_OUT', 'ETA', 'CLOSING PHYSIC']
@@ -200,13 +210,16 @@ def render_clash_tab():
                     pivot_df = filtered_data.pivot_table(index=grouping_cols, columns='Area (EXE)', aggfunc='size', fill_value=0)
                     cluster_cols_for_calc = pivot_df.columns.tolist()
                     pivot_df['TOTAL BOX'] = pivot_df[cluster_cols_for_calc].sum(axis=1)
+                    
                     exclude_for_clstr = ['D01', 'C01', 'C02', 'OOG', 'UNKNOWN', 'BR9', 'RC9']
                     clstr_calculation_cols = [col for col in cluster_cols_for_calc if col not in exclude_for_clstr]
                     pivot_df['TOTAL CLSTR'] = (pivot_df[clstr_calculation_cols] > 0).sum(axis=1)
                     pivot_df = pivot_df.reset_index()
+                    
                     two_days_ago = pd.Timestamp.now() - timedelta(days=2)
                     condition_to_hide = (pivot_df['ETA'] < two_days_ago) & (pivot_df['TOTAL BOX'] < 50)
                     pivot_df = pivot_df[~condition_to_hide]
+                    
                     if pivot_df.empty: st.warning("No data left after ETA & Total filter."); st.session_state.processed_df = None; st.stop()
                     
                     initial_cols = ['VESSEL', 'CODE', 'SERVICE', 'VOY_OUT', 'ETA', 'CLOSING PHYSIC', 'TOTAL BOX', 'TOTAL CLSTR']
@@ -228,34 +241,39 @@ def render_clash_tab():
 
     if st.session_state.get('processed_df') is not None:
         display_df = st.session_state.processed_df
+        
         st.subheader("🚢 Upcoming Vessel Summary (Today + Next 3 Days)")
         forecast_df = st.session_state.get('forecast_df')
         if forecast_df is not None and not forecast_df.empty:
             today = pd.to_datetime(datetime.now().date())
             four_days_later = today + timedelta(days=4)
             upcoming_vessels_df = display_df[(display_df['ETA'] >= today) & (display_df['ETA'] < four_days_later)].copy()
+            
             if not upcoming_vessels_df.empty:
                 st.sidebar.markdown("---")
                 st.sidebar.header("🛠️ Upcoming Vessel Options")
                 priority_vessels = st.sidebar.multiselect("Select priority vessels to highlight:", options=upcoming_vessels_df['VESSEL'].unique())
                 adjusted_clstr_req = st.sidebar.number_input("Adjust CLSTR REQ for priority vessels:", min_value=0, value=0, step=1, help="Enter a new value for CLSTR REQ. Leave as 0 to not change.")
+                
                 forecast_lookup = forecast_df[['Service', 'Loading Forecast']].copy()
                 summary_df = pd.merge(upcoming_vessels_df, forecast_lookup, left_on='SERVICE', right_on='Service', how='left')
                 summary_df['Loading Forecast'] = summary_df['Loading Forecast'].fillna(0).round(0).astype(int)
                 summary_df['DIFF'] = summary_df['TOTAL BOX'] - summary_df['Loading Forecast']
                 summary_df['base_for_req'] = summary_df[['TOTAL BOX', 'Loading Forecast']].max(axis=1)
+                
                 def get_clstr_requirement(value):
                     if value <= 450: return 4
                     elif 451 <= value <= 600: return 5
                     elif 601 <= value <= 800: return 6
                     else: return 8
+                
                 summary_df['CLSTR REQ'] = summary_df['base_for_req'].apply(get_clstr_requirement)
+                
                 if priority_vessels and adjusted_clstr_req > 0:
                     summary_df.loc[summary_df['VESSEL'].isin(priority_vessels), 'CLSTR REQ'] = adjusted_clstr_req
                 
                 summary_display_cols = ['VESSEL', 'SERVICE', 'ETA_str', 'CLOSING_PHYSIC_str', 'TOTAL BOX', 'Loading Forecast', 'DIFF', 'TOTAL CLSTR', 'CLSTR REQ']
                 
-                # PERBAIKAN: Baris ini diperbaiki agar tidak error
                 visible_cols = summary_display_cols
                 
                 summary_display = summary_df[visible_cols].rename(columns={
@@ -279,20 +297,26 @@ def render_clash_tab():
                 styled_df = summary_display.style.apply(highlight_rows, axis=1).map(style_diff, subset=['DIFF'])
                 
                 st.dataframe(styled_df, use_container_width=False, hide_index=True)
+                st.session_state.upcoming_vessels_summary_df = summary_display # Store for download
             else:
                 st.info("No vessels scheduled to arrive in the next 4 days.")
+                st.session_state.upcoming_vessels_summary_df = pd.DataFrame() # Store empty for download
         else:
             st.warning("Forecast data is not available. Please run the forecast in the 'Loading Forecast' tab first.")
+            st.session_state.upcoming_vessels_summary_df = pd.DataFrame() # Store empty for download
 
         st.markdown("---")
         st.header("📋 Detailed Analysis Results")
         df_for_grid = display_df.copy()
         df_for_grid['ETA_Date'] = pd.to_datetime(df_for_grid['ETA']).dt.strftime('%Y-%m-%d')
         df_for_grid['ETA'] = df_for_grid['ETA_str']
+        
         unique_dates = df_for_grid['ETA_Date'].unique()
         date_color_map = {date: ['#F8F0E5', '#DAC0A3'][i % 2] for i, date in enumerate(unique_dates)}
+        
         clash_map = {}
         cluster_cols = [col for col in df_for_grid.columns if col not in ['VESSEL', 'CODE', 'SERVICE', 'VOY_OUT', 'ETA', 'CLOSING PHYSIC', 'TOTAL BOX', 'TOTAL CLSTR', 'ETA_Date', 'ETA_str', 'CLOSING_PHYSIC_str']]
+        
         for date, group in df_for_grid.groupby('ETA_Date'):
             clash_areas_for_date = []
             for col in cluster_cols:
@@ -300,6 +324,7 @@ def render_clash_tab():
                     clash_areas_for_date.append(col)
             if clash_areas_for_date:
                 clash_map[date] = clash_areas_for_date
+        
         summary_data = []
         if clash_map:
             with st.expander("Show Clash Summary", expanded=True):
@@ -307,14 +332,20 @@ def render_clash_tab():
                 total_conflicting_blocks = sum(len(areas) for areas in clash_map.values())
                 st.markdown(f"**🔥 Found {total_clash_days} clash days with a total of {total_conflicting_blocks} conflicting blocks.**")
                 clash_dates = sorted(clash_map.keys())
-                cols = st.columns(len(clash_dates) or 1)
+                
+                # Adjust columns based on number of clash dates, up to a reasonable limit (e.g., 5)
+                num_cols_for_display = min(len(clash_dates), 5) 
+                cols = st.columns(num_cols_for_display)
+
                 for i, date in enumerate(clash_dates):
-                    with cols[i]:
+                    with cols[i % num_cols_for_display]: # Cycle through columns
                         areas = clash_map.get(date, [])
                         summary_exclude_blocks = ['BR9', 'RC9', 'C01', 'D01', 'OOG']
                         filtered_areas = [area for area in areas if area not in summary_exclude_blocks]
+                        
                         if not filtered_areas:
                             continue
+                        
                         summary_html = f"""<div style="background-color: #F8F9FA; border: 1px solid #E9ECEF; border-radius: 10px; padding: 15px; margin-top: 1rem; height: 100%;"><strong style='font-size: 1.2em;'>Clash on: {date}</strong><hr style='margin: 10px 0;'><div style='line-height: 1.7;'>"""
                         for area in sorted(filtered_areas):
                             clashing_rows = df_for_grid[(df_for_grid['ETA_Date'] == date) & (df_for_grid[area] > 0)]
@@ -325,12 +356,19 @@ def render_clash_tab():
                             summary_data.append({"Clash Date": date, "Block": area, "Total Boxes": total_clash_boxes, "Vessel(s)": vessel_list_str, "Notes": ""})
                         summary_html += "</div></div>"
                         st.markdown(summary_html, unsafe_allow_html=True)
+                
                 st.session_state.clash_summary_df = pd.DataFrame(summary_data)
+        else:
+            st.session_state.clash_summary_df = pd.DataFrame() # Store empty for download
+            st.info("No clashes detected for the upcoming vessels.")
+
         st.markdown("---")
         hide_zero_jscode = JsCode("""function(params) { if (params.value == 0 || params.value === null) { return ''; } return params.value; }""")
         clash_cell_style_jscode = JsCode(f"""function(params) {{ const clashMap = {json.dumps(clash_map)}; const date = params.data.ETA_Date; const colId = params.colDef.field; const isClash = clashMap[date] ? clashMap[date].includes(colId) : false; if (isClash) {{ return {{'backgroundColor': '#FFAA33', 'color': 'black'}}; }} return null; }}""")
         zebra_row_style_jscode = JsCode(f"""function(params) {{ const dateColorMap = {json.dumps(date_color_map)}; const date = params.data.ETA_Date; const color = dateColorMap[date]; return {{ 'background-color': color }}; }}""")
+        
         default_col_def = {"suppressMenu": True, "sortable": True, "resizable": True, "editable": False, "minWidth": 40}
+        
         column_defs = []
         pinned_cols = ['VESSEL', 'CODE', 'SERVICE', 'VOY_OUT', 'ETA', 'TOTAL BOX', 'TOTAL CLSTR']
         for col in pinned_cols:
@@ -340,14 +378,33 @@ def render_clash_tab():
             col_def = {"field": col, "headerName": col, "pinned": "left", "width": width}
             if col in ["TOTAL BOX", "TOTAL CLSTR"]: col_def["cellRenderer"] = hide_zero_jscode
             column_defs.append(col_def)
+        
         for col in cluster_cols:
             column_defs.append({"field": col, "headerName": col, "width": 60, "cellRenderer": hide_zero_jscode, "cellStyle": clash_cell_style_jscode})
+        
         column_defs.append({"field": "ETA_Date", "hide": True})
+        
         gridOptions = {"defaultColDef": default_col_def, "columnDefs": column_defs, "getRowStyle": zebra_row_style_jscode}
         AgGrid(df_for_grid.drop(columns=['ETA_str', 'CLOSING_PHYSIC_str', 'CLOSING PHYSIC']), gridOptions=gridOptions, height=600, width='100%', theme='streamlit', allow_unsafe_jscode=True)
+        
+        # --- Combined Download Button ---
         output = io.BytesIO()
         with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
-            if 'clash_summary_df' in st.session_state and st.session_state.clash_summary_df is not None:
+            # Sheet 1: Detailed Analysis Results
+            df_for_grid_export = df_for_grid.drop(columns=['ETA_str', 'CLOSING_PHYSIC_str', 'ETA_Date']) # Drop temp columns for export
+            df_for_grid_export = df_for_grid_export.rename(columns={'ETA': 'ETA (YYYY-MM-DD HH:MM)', 'CLOSING PHYSIC': 'CLOSING PHYSIC (YYYY-MM-DD HH:MM)'})
+            df_for_grid_export.to_excel(writer, sheet_name='Detailed Analysis', index=False)
+
+            # Sheet 2: Upcoming Vessel Summary
+            if st.session_state.upcoming_vessels_summary_df is not None and not st.session_state.upcoming_vessels_summary_df.empty:
+                st.session_state.upcoming_vessels_summary_df.to_excel(writer, sheet_name='Upcoming Vessel Summary', index=False)
+            else:
+                empty_df = pd.DataFrame({"Message": ["No upcoming vessel summary data available."]})
+                empty_df.to_excel(writer, sheet_name='Upcoming Vessel Summary', index=False)
+
+
+            # Sheet 3: Clash Summary
+            if st.session_state.clash_summary_df is not None and not st.session_state.clash_summary_df.empty:
                 summary_df_for_export = st.session_state.clash_summary_df
                 final_summary_export = []
                 last_date = None
@@ -355,11 +412,13 @@ def render_clash_tab():
                     for index, row in summary_df_for_export.iterrows():
                         current_date = row['Clash Date']
                         if last_date is not None and current_date != last_date:
-                            final_summary_export.append({}) 
+                            final_summary_export.append({})  # Add an empty row for separation
                         final_summary_export.append(row.to_dict())
                         last_date = current_date
                 final_summary_df = pd.DataFrame(final_summary_export)
                 final_summary_df.to_excel(writer, sheet_name='Clash Summary', index=False)
+                
+                # Apply formatting to Clash Summary sheet
                 workbook = writer.book
                 summary_sheet = writer.sheets['Clash Summary']
                 center_format = workbook.add_format({'align': 'center', 'valign': 'vcenter'})
@@ -370,9 +429,13 @@ def render_clash_tab():
                         summary_sheet.set_column(idx, idx, max_len, center_format)
                     else:
                         summary_sheet.set_column(idx, idx, len(col) + 4, center_format)
+            else:
+                empty_df = pd.DataFrame({"Message": ["No clash summary data available."]})
+                empty_df.to_excel(writer, sheet_name='Clash Summary', index=False)
+        
         st.download_button(
-            label="📥 Download Clash Summary (Excel)",
-            data=output.getvalue(), file_name="clash_summary_report.xlsx",
+            label="📥 Download All Clash Data (Excel)",
+            data=output.getvalue(), file_name="yard_clash_report.xlsx",
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
         )
 
