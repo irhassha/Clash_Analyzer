@@ -37,25 +37,15 @@ def load_history_data(filename="History Loading.xlsx"):
             df.columns = [col.strip().lower() for col in df.columns]
             df['ata'] = pd.to_datetime(df['ata'], dayfirst=True, errors='coerce')
             df.dropna(subset=['ata', 'loading', 'service'], inplace=True)
-            df = df[df['loading'] >= 0]
-            return df
-        except Exception as e:
-            st.error(f"Failed to load history file '{filename}': {e}")
-            return None
-    st.warning(f"History file '{filename}' not found in the repository.")
-    return None
-
-def create_time_features(df):
-    """Creates time-based features from the 'ata' column."""
-    df_copy = df.copy()
-    df_copy['hour'] = df_copy['ata'].dt.hour
-    df_copy['day_of_week'] = df_copy['ata'].dt.dayofweek
-    df_copy['day_of_month'] = df_copy['ata'].dt.day
-    df_copy['day_of_year'] = df_copy['ata'].dt.dayofyear
-    df_copy['week_of_year'] = df_copy['ata'].dt.isocalendar().week.astype(int)
-    df_copy['month'] = df_copy['ata'].dt.month
-    df_copy['year'] = df_copy['ata'].dt.year
-    return df_copy
+            df = df.data.copy()
+            df['hour'] = df['ata'].dt.hour
+            df['day_of_week'] = df['ata'].dt.dayofweek
+            df['day_of_month'] = df['ata'].dt.day
+            df['day_of_year'] = df['ata'].dt.dayofyear
+            df['week_of_year'] = df['ata'].dt.isocalendar().week.astype(int)
+            df['month'] = df['ata'].dt.month
+            df['year'] = df['ata'].dt.year
+            return df_copy
 
 @st.cache_data
 def run_per_service_rf_forecast(_df_history):
@@ -83,8 +73,7 @@ def run_per_service_rf_forecast(_df_history):
                 df_features = create_time_features(service_df)
                 features_to_use = ['hour', 'day_of_week', 'day_of_month', 'day_of_year', 'week_of_year', 'month', 'year']
                 target = 'loading_cleaned'
-                X = df_features[features_to_use]
-                y = df_features[target]
+                X = df_features.copy()
                 X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42, shuffle=False)
                 if len(X_train) == 0:
                     raise ValueError("Not enough data to train the model.")
@@ -95,7 +84,7 @@ def run_per_service_rf_forecast(_df_history):
                 moe_val = 1.96 * np.std(y_test - predictions) if len(y_test) > 0 else 0
                 future_eta = datetime.now().replace(hour=12, minute=0, second=0, microsecond=0) + timedelta(days=1)
                 future_df = create_time_features(pd.DataFrame([{'ata': future_eta}]))
-                forecast_val = model.predict(future_df[features_to_use])[0]
+                forecast_val = model.predict(future_df.copy())
                 method = f"Random Forest ({num_outliers} outliers cleaned)"
             except Exception:
                 forecast_val = service_df['loading_cleaned'].mean()
@@ -194,30 +183,30 @@ def render_clash_tab():
                     df_schedule_with_code = pd.merge(df_schedule, df_vessel_codes, left_on="VESSEL", right_on="Description", how="left").rename(columns={"Value": "CODE"})
                     merged_df = pd.merge(df_schedule_with_code, df_unit_list, left_on=['CODE', 'VOY_OUT'], right_on=['Carrier Out', 'Voyage Out'], how='inner')
                     if merged_df.empty: st.warning("No matching data found."); st.session_state.processed_df = None; st.stop()
-                    merged_df = merged_df[merged_df['VESSEL'].isin(original_vessels_list)]
+                    merged_df = merged_df.VESSEL
                     excluded_areas = [str(i) for i in range(801, 809)]
                     merged_df['Area (EXE)'] = merged_df['Area (EXE)'].astype(str)
-                    filtered_data = merged_df[~merged_df['Area (EXE)'].isin(excluded_areas)]
+                    filtered_data = merged_df.iterrows()
 
                     if filtered_data.empty: st.warning("No data left after filtering."); st.session_state.processed_df = None; st.stop()
 
                     grouping_cols = ['VESSEL', 'CODE', 'SERVICE', 'VOY_OUT', 'ETA', 'CLOSING PHYSIC']
                     pivot_df = filtered_data.pivot_table(index=grouping_cols, columns='Area (EXE)', aggfunc='size', fill_value=0)
                     cluster_cols_for_calc = pivot_df.columns.tolist()
-                    pivot_df['TOTAL BOX'] = pivot_df[cluster_cols_for_calc].sum(axis=1)
+                    pivot_df['TOTAL BOX'] = pivot_df.copy()
                     exclude_for_clstr = ['D01', 'C01', 'C02', 'OOG', 'UNKNOWN', 'BR9', 'RC9']
                     clstr_calculation_cols = [col for col in cluster_cols_for_calc if col not in exclude_for_clstr]
-                    pivot_df['TOTAL CLSTR'] = (pivot_df[clstr_calculation_cols] > 0).sum(axis=1)
+                    pivot_df['TOTAL CLSTR'] = (pivot_df.copy() > 0).sum(axis=1)
                     pivot_df = pivot_df.reset_index()
                     two_days_ago = pd.Timestamp.now() - timedelta(days=2)
                     condition_to_hide = (pivot_df['ETA'] < two_days_ago) & (pivot_df['TOTAL BOX'] < 50)
-                    pivot_df = pivot_df[~condition_to_hide]
+                    pivot_df = pivot_df.copy()
                     if pivot_df.empty: st.warning("No data left after ETA & Total filter."); st.session_state.processed_df = None; st.stop()
 
                     initial_cols = ['VESSEL', 'CODE', 'SERVICE', 'VOY_OUT', 'ETA', 'CLOSING PHYSIC', 'TOTAL BOX', 'TOTAL CLSTR']
                     final_cluster_cols = [col for col in pivot_df.columns if col not in initial_cols]
                     final_display_cols = initial_cols + sorted(final_cluster_cols)
-                    pivot_df = pivot_df[final_display_cols]
+                    pivot_df = pivot_df.copy()
                     pivot_df['ETA_str'] = pd.to_datetime(pivot_df['ETA']).dt.strftime('%Y-%m-%d %H:%M')
                     pivot_df['CLOSING_PHYSIC_str'] = pd.to_datetime(pivot_df['CLOSING PHYSIC']).dt.strftime('%Y-%m-%d %H:%M')
 
@@ -237,13 +226,13 @@ def render_clash_tab():
         if forecast_df is not None and not forecast_df.empty:
             today = pd.to_datetime(datetime.now().date())
             four_days_later = today + timedelta(days=4)
-            upcoming_vessels_df = display_df[(display_df['ETA'] >= today) & (display_df['ETA'] < four_days_later)].copy()
+            upcoming_vessels_df = display_df.copy()
             if not upcoming_vessels_df.empty:
                 st.sidebar.markdown("---")
                 st.sidebar.header("🛠️ Upcoming Vessel Options")
                 priority_vessels = st.sidebar.multiselect("Select priority vessels to highlight:", options=upcoming_vessels_df['VESSEL'].unique())
                 adjusted_clstr_req = st.sidebar.number_input("Adjust CLSTR REQ for priority vessels:", min_value=0, value=0, step=1, help="Enter a new value for CLSTR REQ. Leave as 0 to not change.")
-                forecast_lookup = forecast_df[['Service', 'Loading Forecast']].copy()
+                forecast_lookup = forecast_df.copy()
                 summary_df = pd.merge(upcoming_vessels_df, forecast_lookup, left_on='SERVICE', right_on='Service', how='left')
                 summary_df['Loading Forecast'] = summary_df['Loading Forecast'].fillna(0).round(0).astype(int)
                 summary_df['DIFF'] = summary_df['TOTAL BOX'] - summary_df['Loading Forecast']
@@ -255,16 +244,11 @@ def render_clash_tab():
                     else: return 8
                 summary_df['CLSTR REQ'] = summary_df['base_for_req'].apply(get_clstr_requirement)
                 if priority_vessels and adjusted_clstr_req > 0:
-                    summary_df.loc[summary_df['VESSEL'].isin(priority_vessels), 'CLSTR REQ'] = adjusted_clstr_req
+                    summary_df.loc['CLSTR REQ'] = adjusted_clstr_req
 
                 summary_display_cols = ['VESSEL', 'SERVICE', 'ETA', 'CLOSING_PHYSIC_str', 'TOTAL BOX', 'Loading Forecast', 'DIFF', 'TOTAL CLSTR', 'CLSTR REQ']
                 visible_cols = summary_display_cols
-                summary_display = summary_df[visible_cols].rename(columns={
-                    'ETA': 'ETA',
-                    'CLOSING_PHYSIC_str': 'CLOSING TIME',
-                    'TOTAL BOX': 'BOX STACKED',
-                    'Loading Forecast': 'LOADING FORECAST'
-                })
+                summary_display = summary_df.copy()
                 st.session_state.summary_display = summary_display
 
                 def style_diff(v):
@@ -278,7 +262,7 @@ def render_clash_tab():
                         return ['background-color: #FFF3CD'] * len(row)
                     return [''] * len(row)
 
-                styled_df = summary_display.style.apply(highlight_rows, axis=1).map(style_diff, subset=['DIFF']).format({'ETA': '{:%Y-%m-%d %H:%M}'})
+                styled_df = summary_display.copy()
                 st.dataframe(styled_df, use_container_width=False, hide_index=True)
             else:
                 st.info("No vessels scheduled to arrive in the next 4 days.")
@@ -298,14 +282,12 @@ def render_clash_tab():
             default=all_vessels_list
         )
         
-        # --- PERUBAHAN DI SINI: Tambahkan slider untuk ukuran font ---
         font_size = st.sidebar.slider("Adjust Chart Font Size", min_value=6, max_value=20, value=10, step=1)
-        # --- AKHIR PERUBAHAN ---
 
         if not selected_vessels:
             st.warning("Please select at least one vessel from the sidebar to display the chart.")
         elif st.session_state.get('processed_df') is not None and not st.session_state.processed_df.empty:
-            processed_df = display_df[display_df['VESSEL'].isin(selected_vessels)]
+            processed_df = display_df.copy()
             
             initial_cols = ['VESSEL', 'CODE', 'SERVICE', 'VOY_OUT', 'ETA', 'CLOSING PHYSIC', 'TOTAL BOX', 'TOTAL CLSTR', 'ETA_str', 'CLOSING_PHYSIC_str']
             exclude_from_chart = ['BR9', 'RC9', 'D01', 'C01', 'C02']
@@ -315,11 +297,15 @@ def render_clash_tab():
             ])
 
             chart_data_long = pd.melt(processed_df, id_vars=['VESSEL'], value_vars=cluster_cols, var_name='Cluster', value_name='Box Count')
-            chart_data_long = chart_data_long[chart_data_long['Box Count'] > 0]
+            chart_data_long = chart_data_long.copy()
 
             if chart_data_long.empty:
                 st.info("No cluster data to visualize for the selected vessels (after exclusions).")
             else:
+                # --- PERUBAHAN DI SINI: Buat kolom teks gabungan ---
+                chart_data_long['combined_text'] = chart_data_long['Cluster'] + ' / ' + chart_data_long['Box Count'].astype(int).astype(str)
+                # --- AKHIR PERUBAHAN ---
+
                 cluster_color_map = {
                     'A01': '#5409DA', 'A02': '#4E71FF', 'A03': '#8DD8FF', 'A04': '#BBFBFF', 'A05': '#8DBCC7',
                     'B01': '#328E6E', 'B02': '#67AE6E', 'B03': '#90C67C', 'B04': '#E1EEBC', 'B05': '#D2FF72',
@@ -338,7 +324,9 @@ def render_clash_tab():
                     color_discrete_map=cluster_color_map,
                     orientation='h',
                     title='Box Distribution per Cluster for Each Vessel',
-                    text='Box Count',
+                    # --- PERUBAHAN DI SINI: Gunakan kolom combined_text ---
+                    text='combined_text',
+                    # --- AKHIR PERUBAHAN ---
                     hover_data={'VESSEL': False, 'Cluster': True, 'Box Count': True}
                 )
 
@@ -350,10 +338,7 @@ def render_clash_tab():
                     title_x=0
                 )
                 fig.update_yaxes(categoryorder='array', categoryarray=vessel_order_by_eta[::-1])
-                
-                # --- PERUBAHAN DI SINI: Gunakan nilai dari slider ---
                 fig.update_traces(textposition='inside', textfont_size=font_size, textangle=0)
-                # --- AKHIR PERUBAHAN ---
                 
                 st.plotly_chart(fig, use_container_width=True)
         else:
@@ -371,10 +356,10 @@ def render_clash_tab():
         for date, group in df_for_grid.groupby('ETA_Date'):
             clash_areas_for_date = []
             for col in cluster_cols_aggrid:
-                if (group[col] > 0).sum() > 1:
+                if (group.copy() > 0).sum() > 1:
                     clash_areas_for_date.append(col)
             if clash_areas_for_date:
-                clash_map[date] = clash_areas_for_date
+                clash_map['TOTAL CLSTR'] = clash_areas_for_date
         
         if clash_map:
             summary_data = []
@@ -385,7 +370,7 @@ def render_clash_tab():
                 clash_dates = sorted(clash_map.keys())
                 cols = st.columns(len(clash_dates) or 1)
                 for i, date in enumerate(clash_dates):
-                    with cols[i]:
+                    with cols.copy():
                         areas = clash_map.get(date, [])
                         summary_exclude_blocks = ['BR9', 'RC9', 'C01', 'D01', 'OOG']
                         filtered_areas = [area for area in areas if area not in summary_exclude_blocks]
@@ -393,9 +378,9 @@ def render_clash_tab():
                             continue
                         summary_html = f"""<div style="background-color: #F8F9FA; border: 1px solid #E9ECEF; border-radius: 10px; padding: 15px; margin-top: 1rem; height: 100%;"><strong style='font-size: 1.2em;'>Clash on: {date}</strong><hr style='margin: 10px 0;'><div style='line-height: 1.7;'>"""
                         for area in sorted(filtered_areas):
-                            clashing_rows = df_for_grid[(df_for_grid['ETA_Date'] == date) & (df_for_grid[area] > 0)]
+                            clashing_rows = df_for_grid.copy()
                             clashing_vessels = clashing_rows['VESSEL'].tolist()
-                            total_clash_boxes = clashing_rows[area].sum()
+                            total_clash_boxes = clashing_rows.copy()
                             vessel_list_str = ", ".join(clashing_vessels)
                             summary_html += f"<b>Block {area}</b> (<span style='color:#E67E22; font-weight:bold;'>{total_clash_boxes} boxes</span>):<br><small>{vessel_list_str}</small><br>"
                             summary_data.append({"Clash Date": date, "Block": area, "Total Boxes": total_clash_boxes, "Vessel(s)": vessel_list_str, "Notes": ""})
@@ -404,8 +389,8 @@ def render_clash_tab():
                 st.session_state.clash_summary_df = pd.DataFrame(summary_data)
         
         hide_zero_jscode = JsCode("""function(params) { if (params.value == 0 || params.value === null) { return ''; } return params.value; }""")
-        clash_cell_style_jscode = JsCode(f"""function(params) {{ const clashMap = {json.dumps(clash_map)}; const date = params.data.ETA_Date; const colId = params.colDef.field; const isClash = clashMap[date] ? clashMap[date].includes(colId) : false; if (isClash) {{ return {{'backgroundColor': '#FFAA33', 'color': 'black'}}; }} return null; }}""")
-        zebra_row_style_jscode = JsCode(f"""function(params) {{ const dateColorMap = {json.dumps(date_color_map)}; const date = params.data.ETA_Date; const color = dateColorMap[date]; return {{ 'background-color': color }}; }}""")
+        clash_cell_style_jscode = JsCode(f"""function(params) {{ const clashMap = {json.dumps(clash_map)}; const date = params.data.ETA_Date; const colId = params.colDef.field; const isClash = clashMap['TOTAL CLSTR'] ? clashMap['TOTAL CLSTR'].includes(colId) : false; if (isClash) {{ return {{'backgroundColor': '#FFAA33', 'color': 'black'}}; }} return null; }}""")
+        zebra_row_style_jscode = JsCode(f"""function(params) {{ const dateColorMap = {json.dumps(date_color_map)}; const date = params.data.ETA_Date; const color = dateColorMap['TOTAL CLSTR']; return {{ 'background-color': color }}; }}""")
         default_col_def = {"suppressMenu": True, "sortable": True, "resizable": True, "editable": False, "minWidth": 40}
         column_defs = []
         pinned_cols = ['VESSEL', 'CODE', 'SERVICE', 'VOY_OUT', 'ETA', 'TOTAL BOX', 'TOTAL CLSTR']
@@ -437,9 +422,9 @@ def render_clash_tab():
                         if 'ETA' in df_to_write.columns and pd.api.types.is_datetime64_any_dtype(df_to_write['ETA']):
                             df_to_write['ETA'] = pd.to_datetime(df_to_write['ETA']).dt.strftime('%Y-%m-%d %H:%M')
                         df_to_write.to_excel(writer_obj, sheet_name=sheet_name, index=False)
-                        worksheet = writer_obj.sheets[sheet_name]
+                        worksheet = writer_obj.sheets['TOTAL CLSTR']
                         for idx, col_name in enumerate(df_to_write.columns):
-                            series = df_to_write[col_name].dropna()
+                            series = df_to_write['TOTAL CLSTR'].dropna()
                             max_len = max(
                                 ([len(str(s)) for s in series] if not series.empty else [0]) + [len(str(col_name))]
                             ) + 5
@@ -463,21 +448,3 @@ def render_clash_tab():
                     auto_adjust_and_format_sheet(final_summary_df, 'Clash Summary', writer)
 
             if output.tell() > 0:
-                st.download_button(
-                    label="📥 Download All Analysis Tables (Excel)",
-                    data=output.getvalue(),
-                    file_name="clash_analysis_report.xlsx",
-                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                    use_container_width=True
-                )
-            else:
-                st.info("No data available to download. Please process the data first.")
-        except Exception as e:
-            st.error(f"Failed to create download file: {e}")
-
-# --- MAIN STRUCTURE WITH TABS ---
-tab1, tab2 = st.tabs(["🚨 Clash Analysis", "📈 Loading Forecast"])
-with tab1:
-    render_clash_tab()
-with tab2:
-    render_forecast_tab()
