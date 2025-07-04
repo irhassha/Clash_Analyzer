@@ -289,8 +289,22 @@ def render_clash_tab():
         st.subheader("📊 Cluster Spreading Visualization")
         st.write("This chart shows the box distribution across various clusters for each vessel. Hover on bars for details and click on the legend to toggle clusters.")
 
-        if st.session_state.get('processed_df') is not None and not st.session_state.processed_df.empty:
-            processed_df = st.session_state.processed_df.copy()
+        # --- PERUBAHAN DI SINI: Filter untuk Chart ---
+        all_vessels_list = display_df['VESSEL'].unique().tolist()
+        st.sidebar.markdown("---")
+        st.sidebar.header("📊 Chart Options")
+        selected_vessels = st.sidebar.multiselect(
+            "Filter Vessels on Chart:",
+            options=all_vessels_list,
+            default=all_vessels_list
+        )
+        # --- AKHIR DARI PERUBAHAN ---
+
+        if not selected_vessels:
+            st.warning("Please select at least one vessel from the sidebar to display the chart.")
+        elif st.session_state.get('processed_df') is not None and not st.session_state.processed_df.empty:
+            # Filter the main dataframe based on sidebar selection
+            processed_df = display_df[display_df['VESSEL'].isin(selected_vessels)]
             
             initial_cols = ['VESSEL', 'CODE', 'SERVICE', 'VOY_OUT', 'ETA', 'CLOSING PHYSIC', 'TOTAL BOX', 'TOTAL CLSTR', 'ETA_str', 'CLOSING_PHYSIC_str']
             exclude_from_chart = ['BR9', 'RC9', 'D01', 'C01', 'C02']
@@ -303,32 +317,16 @@ def render_clash_tab():
             chart_data_long = chart_data_long[chart_data_long['Box Count'] > 0]
 
             if chart_data_long.empty:
-                st.info("No cluster data to visualize (after exclusions).")
+                st.info("No cluster data to visualize for the selected vessels (after exclusions).")
             else:
-                # --- PERUBAHAN DI SINI: Definisikan Peta Warna Anda ---
                 cluster_color_map = {
-                    'A01': '#024CAA',
-                    'A02': '#4E71FF',
-                    'A03': '#8DD8FF',
-                    'A04': '#BBFBFF',
-                    'A05': '#8DBCC7', # Kuning
-                    'B01': '#328E6E', # Kuning
-                    'B02': '#67AE6E', # Oranye
-                    'B03': '#90C67C',
-                    'B04': '#E1EEBC',
-                    'B05': '#D2FF72',
-                    'C03': '#B33791', # Slate Gray
-                    'C04': '#C562AF', # Sea Green
-                    'C05': '#DB8DD0', # Steel Blue
-                    'E11': '#8D493A', # Chocolate
-                    'E12': '#D0B8A8', # Coral
-                    'E13': '#DFD3C3', # Cornflower Blue
-                    'E14': '#F8EDE3', # Crimson
-                    'EA09':'#EECEB9', # Gold
-                    'OOG': 'black'
-                    # Tambahkan area dan warna lain sesuai kebutuhan Anda
+                    'A01': '#5409DA', 'A02': '#4E71FF', 'A03': '#8DD8FF', 'A04': '#BBFBFF', 'A05': '#8DBCC7',
+                    'B01': '#328E6E', 'B02': '#67AE6E', 'B03': '#90C67C', 'B04': '#E1EEBC', 'B05': '#D2FF72',
+                    'C03': '#B33791', 'C04': '#C562AF', 'C05': '#DB8DD0',
+                    'E11': '#8D493A', 'E12': '#D0B8A8', 'E13': '#DFD3C3', 'E14': '#F8EDE3',
+                    'EA09':'#EECEB9', 'OOG': 'black'
                 }
-            
+                
                 vessel_order_by_eta = processed_df['VESSEL'].tolist()
                 
                 fig = px.bar(
@@ -350,7 +348,7 @@ def render_clash_tab():
                     legend_title_text='Cluster Area',
                     title_x=0
                 )
-                fig.update_yaxes(categoryorder='array', categoryarray=vessel_order_by_eta[::-1]) # Sort by ETA
+                fig.update_yaxes(categoryorder='array', categoryarray=vessel_order_by_eta[::-1])
                 fig.update_traces(textposition='inside', textfont_size=10, textangle=0)
                 
                 st.plotly_chart(fig, use_container_width=True)
@@ -432,7 +430,7 @@ def render_clash_tab():
                 def auto_adjust_and_format_sheet(df, sheet_name, writer_obj):
                     if df is not None and not df.empty:
                         df_to_write = df.copy()
-                        if 'ETA' in df_to_write.columns:
+                        if 'ETA' in df_to_write.columns and pd.api.types.is_datetime64_any_dtype(df_to_write['ETA']):
                             df_to_write['ETA'] = pd.to_datetime(df_to_write['ETA']).dt.strftime('%Y-%m-%d %H:%M')
                         df_to_write.to_excel(writer_obj, sheet_name=sheet_name, index=False)
                         worksheet = writer_obj.sheets[sheet_name]
