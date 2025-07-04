@@ -289,7 +289,6 @@ def render_clash_tab():
         st.subheader("📊 Cluster Spreading Visualization")
         st.write("This chart shows the box distribution across various clusters for each vessel. Hover on bars for details and click on the legend to toggle clusters.")
 
-        # --- PERUBAHAN DI SINI: Filter untuk Chart ---
         all_vessels_list = display_df['VESSEL'].unique().tolist()
         st.sidebar.markdown("---")
         st.sidebar.header("📊 Chart Options")
@@ -298,12 +297,14 @@ def render_clash_tab():
             options=all_vessels_list,
             default=all_vessels_list
         )
-        # --- AKHIR DARI PERUBAHAN ---
+        
+        # --- PERUBAHAN DI SINI: Tambahkan slider untuk ukuran font ---
+        font_size = st.sidebar.slider("Adjust Chart Font Size", min_value=6, max_value=20, value=10, step=1)
+        # --- AKHIR PERUBAHAN ---
 
         if not selected_vessels:
             st.warning("Please select at least one vessel from the sidebar to display the chart.")
         elif st.session_state.get('processed_df') is not None and not st.session_state.processed_df.empty:
-            # Filter the main dataframe based on sidebar selection
             processed_df = display_df[display_df['VESSEL'].isin(selected_vessels)]
             
             initial_cols = ['VESSEL', 'CODE', 'SERVICE', 'VOY_OUT', 'ETA', 'CLOSING PHYSIC', 'TOTAL BOX', 'TOTAL CLSTR', 'ETA_str', 'CLOSING_PHYSIC_str']
@@ -349,7 +350,10 @@ def render_clash_tab():
                     title_x=0
                 )
                 fig.update_yaxes(categoryorder='array', categoryarray=vessel_order_by_eta[::-1])
-                fig.update_traces(textposition='inside', textfont_size=10, textangle=0)
+                
+                # --- PERUBAHAN DI SINI: Gunakan nilai dari slider ---
+                fig.update_traces(textposition='inside', textfont_size=font_size, textangle=0)
+                # --- AKHIR PERUBAHAN ---
                 
                 st.plotly_chart(fig, use_container_width=True)
         else:
