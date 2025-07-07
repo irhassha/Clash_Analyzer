@@ -414,7 +414,7 @@ def render_clash_tab():
                 for i, date in enumerate(clash_dates):
                     with cols[i]:
                         areas = clash_map.get(date, [])
-                        summary_exclude_blocks = ['BR9', 'RC9', 'C01', 'D01', 'OOG']
+                        summary_exclude_blocks = ['BR9', 'RC9', 'C01', 'D01', 'C02', 'OOG']
                         filtered_areas = [area for area in areas if area not in summary_exclude_blocks]
                         if not filtered_areas:
                             continue
