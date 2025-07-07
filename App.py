@@ -207,7 +207,7 @@ def render_clash_tab():
                     else: df_unit_list = pd.read_csv(unit_list_file)
                     df_unit_list.columns = [col.strip() for col in df_unit_list.columns]
                     original_vessels_list = df_schedule['VESSEL'].unique().tolist()
-                    df_schedule['ETA'] = pd.to_datetime(df_schedule['ETA'], format='%m/%d/%Y %I:%M', errors='coerce')
+                    df_schedule['ETA'] = pd.to_datetime(df_schedule['ETA'], format='%d/%m/%Y %I:%M', errors='coerce')
                     df_schedule['CLOSING PHYSIC'] = pd.to_datetime(df_schedule['CLOSING PHYSIC'], errors='coerce')
                     df_schedule_with_code = pd.merge(df_schedule, df_vessel_codes, left_on="VESSEL", right_on="Description", how="left").rename(columns={"Value": "CODE"})
                     merged_df = pd.merge(df_schedule_with_code, df_unit_list, left_on=['CODE', 'VOY_OUT'], right_on=['Carrier Out', 'Voyage Out'], how='inner')
@@ -236,8 +236,8 @@ def render_clash_tab():
                     final_cluster_cols = [col for col in pivot_df.columns if col not in initial_cols]
                     final_display_cols = initial_cols + sorted(final_cluster_cols)
                     pivot_df = pivot_df[final_display_cols]
-                    pivot_df['ETA_str'] = pd.to_datetime(pivot_df['ETA']).dt.strftime('%Y-%m-%d %H:%M')
-                    pivot_df['CLOSING_PHYSIC_str'] = pd.to_datetime(pivot_df['CLOSING PHYSIC']).dt.strftime('%Y-%m-%d %H:%M')
+                    pivot_df['ETA_str'] = pd.to_datetime(pivot_df['ETA']).dt.strftime('%d/%m/%Y %H:%M')
+                    pivot_df['CLOSING_PHYSIC_str'] = pd.to_datetime(pivot_df['CLOSING PHYSIC']).dt.strftime('%d/%m/%Y %H:%M')
 
                     pivot_df = pivot_df.sort_values(by='ETA', ascending=True).reset_index(drop=True)
                     st.session_state.processed_df = pivot_df
@@ -296,7 +296,7 @@ def render_clash_tab():
                         return ['background-color: #FFF3CD'] * len(row)
                     return [''] * len(row)
 
-                styled_df = summary_display.style.apply(highlight_rows, axis=1).map(style_diff, subset=['DIFF']).format({'ETA': '{:%Y-%m-%d %H:%M}'})
+                styled_df = summary_display.style.apply(highlight_rows, axis=1).map(style_diff, subset=['DIFF']).format({'ETA': '{:%d/%m/%Y %H:%M}'})
                 st.dataframe(styled_df, use_container_width=False, hide_index=True)
             else:
                 st.info("No vessels scheduled to arrive in the next 4 days.")
@@ -375,7 +375,7 @@ def render_clash_tab():
         st.markdown("---")
         st.header("📋 Detailed Analysis Results")
         df_for_grid = display_df.copy()
-        df_for_grid['ETA_Date'] = pd.to_datetime(df_for_grid['ETA']).dt.strftime('%Y-%m-%d')
+        df_for_grid['ETA_Date'] = pd.to_datetime(df_for_grid['ETA']).dt.strftime('%d/%m/%Y')
         df_for_grid['ETA'] = df_for_grid['ETA_str']
         unique_dates = df_for_grid['ETA_Date'].unique()
         date_color_map = {date: ['#F8F0E5', '#DAC0A3'][i % 2] for i, date in enumerate(unique_dates)}
@@ -452,7 +452,7 @@ def render_clash_tab():
                     if df is not None and not df.empty:
                         df_to_write = df.copy()
                         if 'ETA' in df_to_write.columns and pd.api.types.is_datetime64_any_dtype(df_to_write['ETA']):
-                            df_to_write['ETA'] = pd.to_datetime(df_to_write['ETA']).dt.strftime('%Y-%m-%d %H:%M')
+                            df_to_write['ETA'] = pd.to_datetime(df_to_write['ETA']).dt.strftime('%d/%m/%Y %H:%M')
                         df_to_write.to_excel(writer_obj, sheet_name=sheet_name, index=False)
                         worksheet = writer_obj.sheets[sheet_name]
                         for idx, col_name in enumerate(df_to_write.columns):
