@@ -209,7 +209,7 @@ def render_clash_tab():
                     # Menggunakan format %d/%m/%Y %H:%M untuk memastikan hari dibaca terlebih dahulu
                     # dan %H untuk format jam 24
                     df_schedule['ETA'] = pd.to_datetime(df_schedule['ETA'], format='%d/%m/%Y %H:%M', errors='coerce')
-                    df_schedule['CLOSING PHYSIC'] = pd.to_datetime(df_schedule['CLOSING PHYSIC'], dayfirst=True, errors='coerce') # Asumsi format sama
+                    df_schedule['CLOSING PHYSIC'] = pd.to_datetime(df_schedule['CLOSING PHYSIC'], format='%d/%m/%Y %H:%M', errors='coerce')
                     # --- AKHIR PERBAIKAN UTAMA ---
 
                     df_schedule_with_code = pd.merge(df_schedule, df_vessel_codes, left_on="VESSEL", right_on="Description", how="left").rename(columns={"Value": "CODE"})
@@ -239,8 +239,8 @@ def render_clash_tab():
                     final_cluster_cols = [col for col in pivot_df.columns if col not in initial_cols]
                     final_display_cols = initial_cols + sorted(final_cluster_cols)
                     pivot_df = pivot_df[final_display_cols]
-                    pivot_df['ETA_str'] = pd.to_datetime(pivot_df['ETA']).dt.strftime('%d/%m/%Y %H:%M')
-                    pivot_df['CLOSING_PHYSIC_str'] = pd.to_datetime(pivot_df['CLOSING PHYSIC']).dt.strftime('%d/%m/%Y %H:%M')
+                    pivot_df['ETA_str'] = pivot_df['ETA'].dt.strftime('%d/%m/%Y %H:%M')
+                    pivot_df['CLOSING_PHYSIC_str'] = pivot_df['CLOSING PHYSIC'].dt.strftime('%d/%m/%Y %H:%M')
 
                     pivot_df = pivot_df.sort_values(by='ETA', ascending=True).reset_index(drop=True)
                     st.session_state.processed_df = pivot_df
