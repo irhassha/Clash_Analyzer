@@ -207,7 +207,7 @@ def render_clash_tab():
                     else: df_unit_list = pd.read_csv(unit_list_file)
                     df_unit_list.columns = [col.strip() for col in df_unit_list.columns]
                     original_vessels_list = df_schedule['VESSEL'].unique().tolist()
-                    df_schedule['ETA'] = pd.to_datetime(df_schedule['ETA'], errors='coerce')
+                    df_schedule['ETA'] = pd.to_datetime(df_schedule['ETA'], format='%m/%d/%Y %I:%M, errors='coerce')
                     df_schedule['CLOSING PHYSIC'] = pd.to_datetime(df_schedule['CLOSING PHYSIC'], errors='coerce')
                     df_schedule_with_code = pd.merge(df_schedule, df_vessel_codes, left_on="VESSEL", right_on="Description", how="left").rename(columns={"Value": "CODE"})
                     merged_df = pd.merge(df_schedule_with_code, df_unit_list, left_on=['CODE', 'VOY_OUT'], right_on=['Carrier Out', 'Voyage Out'], how='inner')
