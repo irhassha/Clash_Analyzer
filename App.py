@@ -23,6 +23,16 @@ warnings.filterwarnings("ignore", category=UserWarning)
 st.set_page_config(page_title="Yard Cluster Monitoring", layout="wide")
 st.title("Yard Cluster Monitoring")
 
+# --- PERUBAHAN DI SINI: Fungsi untuk mereset data di memori ---
+def reset_data():
+    """Clears relevant data from the session state."""
+    keys_to_clear = ['processed_df', 'clash_summary_df', 'summary_display']
+    for key in keys_to_clear:
+        if key in st.session_state:
+            del st.session_state[key]
+# --- AKHIR PERUBAHAN ---
+
+
 # --- FUNCTIONS FOR FORECASTING (NEW MODEL: PER-SERVICE RF) ---
 @st.cache_data
 def load_history_data(filename="History Loading.xlsx"):
@@ -183,7 +193,14 @@ def render_clash_tab():
     st.sidebar.header("⚙️ Upload Your Files")
     schedule_file = st.sidebar.file_uploader("1. Upload Vessel Schedule", type=['xlsx', 'csv'])
     unit_list_file = st.sidebar.file_uploader("2. Upload Unit List", type=['xlsx', 'csv'])
-    process_button = st.sidebar.button("🚀 Process Clash Data", type="primary")
+    
+    # --- PERUBAHAN DI SINI: Tombol Reset dan Tombol Proses ---
+    col1, col2 = st.sidebar.columns(2)
+    with col1:
+        process_button = st.button("🚀 Process Data", use_container_width=True, type="primary")
+    with col2:
+        st.button("Reset Data", on_click=reset_data, use_container_width=True)
+    # --- AKHIR PERUBAHAN ---
 
     if 'processed_df' not in st.session_state:
         st.session_state.processed_df = None
@@ -205,11 +222,8 @@ def render_clash_tab():
                     df_unit_list.columns = [col.strip() for col in df_unit_list.columns]
                     original_vessels_list = df_schedule['VESSEL'].unique().tolist()
                     
-                    # --- PERUBAHAN DI SINI ---
-                    # Menggunakan dayfirst=True yang lebih fleksibel untuk kedua kolom
                     df_schedule['ETA'] = pd.to_datetime(df_schedule['ETA'], dayfirst=True, errors='coerce')
                     df_schedule['CLOSING PHYSIC'] = pd.to_datetime(df_schedule['CLOSING PHYSIC'], dayfirst=True, errors='coerce')
-                    # --- AKHIR PERUBAHAN ---
 
                     df_schedule_with_code = pd.merge(df_schedule, df_vessel_codes, left_on="VESSEL", right_on="Description", how="left").rename(columns={"Value": "CODE"})
                     merged_df = pd.merge(df_schedule_with_code, df_unit_list, left_on=['CODE', 'VOY_OUT'], right_on=['Carrier Out', 'Voyage Out'], how='inner')
