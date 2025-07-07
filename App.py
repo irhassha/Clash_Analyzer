@@ -132,14 +132,32 @@ def render_forecast_tab():
                 st.error("Could not load historical data. Process canceled.")
     
     if 'forecast_df' in st.session_state and not st.session_state.forecast_df.empty:
-        results_df = st.session_state.forecast_df
+        results_df = st.session_state.forecast_df.copy()
         results_df['Loading Forecast'] = results_df['Loading Forecast'].round(2)
         results_df['Margin of Error (± box)'] = results_df['Margin of Error (± box)'].fillna(0).round(2)
         results_df['MAPE (%)'] = results_df['MAPE (%)'].replace([np.inf, -np.inf], 0).fillna(0).round(2)
+        
         st.markdown("---")
         st.subheader("📊 Forecast Results per Service")
+
+        # --- PERUBAHAN DI SINI: Filter untuk tabel forecast ---
+        filter_option = st.radio(
+            "Filter Services:",
+            ("All Services", "Current Services"),
+            horizontal=True,
+            label_visibility="collapsed"
+        )
+
+        current_services_list = ['JPI-A', 'JPI-B', 'CIT', 'IN1', 'JKF', 'IN1-2', 'KCI', 'CMI3', 'CMI2', 'CMI', 'I15', 'SE8', 'IA8', 'IA1', 'SEAGULL', 'JTH', 'ICN']
+        
+        if filter_option == "Current Services":
+            display_forecast_df = results_df[results_df['Service'].isin(current_services_list)]
+        else:
+            display_forecast_df = results_df
+        # --- AKHIR PERUBAHAN ---
+        
         st.dataframe(
-            results_df.sort_values(by="Loading Forecast", ascending=False).reset_index(drop=True),
+            display_forecast_df.sort_values(by="Loading Forecast", ascending=False).reset_index(drop=True),
             use_container_width=True, hide_index=True,
             column_config={"MAPE (%)": st.column_config.NumberColumn(format="%.2f%%")}
         )
@@ -318,10 +336,6 @@ def render_clash_tab():
             if chart_data_long.empty:
                 st.info("No cluster data to visualize for the selected vessels (after exclusions).")
             else:
-                # --- PERUBAHAN DI SINI: Buat kolom teks gabungan ---
-                chart_data_long['combined_text'] = chart_data_long['Cluster'] + ' / ' + chart_data_long['Box Count'].astype(str)
-                # --- AKHIR PERUBAHAN ---
-                
                 cluster_color_map = {
                     'A01': '#5409DA', 'A02': '#4E71FF', 'A03': '#8DD8FF', 'A04': '#BBFBFF', 'A05': '#8DBCC7',
                     'B01': '#328E6E', 'B02': '#67AE6E', 'B03': '#90C67C', 'B04': '#E1EEBC', 'B05': '#E7EFC7',
@@ -340,8 +354,7 @@ def render_clash_tab():
                     color_discrete_map=cluster_color_map,
                     orientation='h',
                     title='Box Distribution per Cluster for Each Vessel',
-                    # --- PERUBAHAN DI SINI: Gunakan kolom combined_text ---
-                    text='combined_text',
+                    text='Box Count',
                     hover_data={'VESSEL': False, 'Cluster': True, 'Box Count': True}
                 )
 
@@ -378,10 +391,12 @@ def render_clash_tab():
         
         if clash_map:
             summary_data = []
-            with st.expander("Show Clash Summary", expanded=True):
+            # --- PERUBAHAN DI SINI ---
+            with st.expander("Show Potential Clash Summary", expanded=True):
                 total_clash_days = len(clash_map)
                 total_conflicting_blocks = sum(len(areas) for areas in clash_map.values())
-                st.markdown(f"**🔥 Found {total_clash_days} clash days with a total of {total_conflicting_blocks} conflicting blocks.**")
+                st.markdown(f"**🔥 Found {total_clash_days} potential clash days with a total of {total_conflicting_blocks} conflicting blocks.**")
+                # --- AKHIR PERUBAHAN ---
                 clash_dates = sorted(clash_map.keys())
                 cols = st.columns(len(clash_dates) or 1)
                 for i, date in enumerate(clash_dates):
@@ -391,7 +406,9 @@ def render_clash_tab():
                         filtered_areas = [area for area in areas if area not in summary_exclude_blocks]
                         if not filtered_areas:
                             continue
-                        summary_html = f"""<div style="background-color: #F8F9FA; border: 1px solid #E9ECEF; border-radius: 10px; padding: 15px; margin-top: 1rem; height: 100%;"><strong style='font-size: 1.2em;'>Clash on: {date}</strong><hr style='margin: 10px 0;'><div style='line-height: 1.7;'>"""
+                        # --- PERUBAHAN DI SINI ---
+                        summary_html = f"""<div style="background-color: #F8F9FA; border: 1px solid #E9ECEF; border-radius: 10px; padding: 15px; margin-top: 1rem; height: 100%;"><strong style='font-size: 1.2em;'>Potential Clash on: {date}</strong><hr style='margin: 10px 0;'><div style='line-height: 1.7;'>"""
+                        # --- AKHIR PERUBAHAN ---
                         for area in sorted(filtered_areas):
                             clashing_rows = df_for_grid[(df_for_grid['ETA_Date'] == date) & (df_for_grid[area] > 0)]
                             clashing_vessels = clashing_rows['VESSEL'].tolist()
