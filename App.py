@@ -23,14 +23,13 @@ warnings.filterwarnings("ignore", category=UserWarning)
 st.set_page_config(page_title="Yard Cluster Monitoring", layout="wide")
 st.title("Yard Cluster Monitoring")
 
-# --- PERUBAHAN DI SINI: Fungsi untuk mereset data di memori ---
+# --- Function to reset data in memory ---
 def reset_data():
     """Clears relevant data from the session state."""
     keys_to_clear = ['processed_df', 'clash_summary_df', 'summary_display']
     for key in keys_to_clear:
         if key in st.session_state:
             del st.session_state[key]
-# --- AKHIR PERUBAHAN ---
 
 
 # --- FUNCTIONS FOR FORECASTING (NEW MODEL: PER-SERVICE RF) ---
@@ -194,12 +193,9 @@ def render_clash_tab():
     schedule_file = st.sidebar.file_uploader("1. Upload Vessel Schedule", type=['xlsx', 'csv'])
     unit_list_file = st.sidebar.file_uploader("2. Upload Unit List", type=['xlsx', 'csv'])
     
-    # --- PERUBAHAN DI SINI: Tombol Reset dan Tombol Proses ---
-    col1, col2 = st.sidebar.columns(2)
-    with col1:
-        process_button = st.button("🚀 Process Data", use_container_width=True, type="primary")
-    with col2:
-        st.button("Reset Data", on_click=reset_data, use_container_width=True)
+    # --- PERUBAHAN DI SINI: Layout tombol diubah menjadi vertikal ---
+    process_button = st.sidebar.button("🚀 Process Data", use_container_width=True, type="primary")
+    st.sidebar.button("Reset Data", on_click=reset_data, use_container_width=True, help="Clear all processed data from memory to start fresh.")
     # --- AKHIR PERUBAHAN ---
 
     if 'processed_df' not in st.session_state:
