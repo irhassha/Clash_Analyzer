@@ -352,7 +352,7 @@ def render_clash_tab():
                 
                 cluster_color_map = {
                     'A01': '#5409DA', 'A02': '#4E71FF', 'A03': '#8DD8FF', 'A04': '#BBFBFF', 'A05': '#8DBCC7',
-                    'B01': '#328E6E', 'B02': '#67AE6E', 'B03': '#90C67C', 'B04': '#E1EEBC', 'B05': '#E7EFC7',
+                    'B01': '#328E6E', 'B02': '#67AE6E', 'B03': '#90C67C', 'B04': '#E1EEBC', 'B05': '#D2FF72',
                     'C03': '#B33791', 'C04': '#C562AF', 'C05': '#DB8DD0',
                     'E11': '#8D493A', 'E12': '#D0B8A8', 'E13': '#DFD3C3', 'E14': '#F8EDE3',
                     'EA09':'#EECEB9', 'OOG': 'black'
