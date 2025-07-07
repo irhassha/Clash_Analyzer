@@ -140,12 +140,10 @@ def render_forecast_tab():
         st.markdown("---")
         st.subheader("📊 Forecast Results per Service")
 
-        # --- PERUBAHAN DI SINI: Filter untuk tabel forecast ---
         filter_option = st.radio(
             "Filter Services:",
             ("All Services", "Current Services"),
-            horizontal=True,
-            label_visibility="collapsed"
+            horizontal=True
         )
 
         current_services_list = ['JPI-A', 'JPI-B', 'CIT', 'IN1', 'JKF', 'IN1-2', 'KCI', 'CMI3', 'CMI2', 'CMI', 'I15', 'SE8', 'IA8', 'IA1', 'SEAGULL', 'JTH', 'ICN']
@@ -154,7 +152,6 @@ def render_forecast_tab():
             display_forecast_df = results_df[results_df['Service'].isin(current_services_list)]
         else:
             display_forecast_df = results_df
-        # --- AKHIR PERUBAHAN ---
         
         st.dataframe(
             display_forecast_df.sort_values(by="Loading Forecast", ascending=False).reset_index(drop=True),
@@ -207,8 +204,14 @@ def render_clash_tab():
                     else: df_unit_list = pd.read_csv(unit_list_file)
                     df_unit_list.columns = [col.strip() for col in df_unit_list.columns]
                     original_vessels_list = df_schedule['VESSEL'].unique().tolist()
-                    df_schedule['ETA'] = pd.to_datetime(df_schedule['ETA'], format='%d/%m/%Y %I:%M', errors='coerce')
-                    df_schedule['CLOSING PHYSIC'] = pd.to_datetime(df_schedule['CLOSING PHYSIC'], errors='coerce')
+                    
+                    # --- PERBAIKAN UTAMA DI SINI ---
+                    # Menggunakan format %d/%m/%Y %H:%M untuk memastikan hari dibaca terlebih dahulu
+                    # dan %H untuk format jam 24
+                    df_schedule['ETA'] = pd.to_datetime(df_schedule['ETA'], format='%d/%m/%Y %H:%M', errors='coerce')
+                    df_schedule['CLOSING PHYSIC'] = pd.to_datetime(df_schedule['CLOSING PHYSIC'], dayfirst=True, errors='coerce') # Asumsi format sama
+                    # --- AKHIR PERBAIKAN UTAMA ---
+
                     df_schedule_with_code = pd.merge(df_schedule, df_vessel_codes, left_on="VESSEL", right_on="Description", how="left").rename(columns={"Value": "CODE"})
                     merged_df = pd.merge(df_schedule_with_code, df_unit_list, left_on=['CODE', 'VOY_OUT'], right_on=['Carrier Out', 'Voyage Out'], how='inner')
                     if merged_df.empty: st.warning("No matching data found."); st.session_state.processed_df = None; st.stop()
@@ -336,6 +339,8 @@ def render_clash_tab():
             if chart_data_long.empty:
                 st.info("No cluster data to visualize for the selected vessels (after exclusions).")
             else:
+                chart_data_long['combined_text'] = chart_data_long['Cluster'] + ' / ' + chart_data_long['Box Count'].astype(str)
+                
                 cluster_color_map = {
                     'A01': '#5409DA', 'A02': '#4E71FF', 'A03': '#8DD8FF', 'A04': '#BBFBFF', 'A05': '#8DBCC7',
                     'B01': '#328E6E', 'B02': '#67AE6E', 'B03': '#90C67C', 'B04': '#E1EEBC', 'B05': '#E7EFC7',
@@ -354,7 +359,7 @@ def render_clash_tab():
                     color_discrete_map=cluster_color_map,
                     orientation='h',
                     title='Box Distribution per Cluster for Each Vessel',
-                    text='Box Count',
+                    text='combined_text',
                     hover_data={'VESSEL': False, 'Cluster': True, 'Box Count': True}
                 )
 
@@ -391,12 +396,10 @@ def render_clash_tab():
         
         if clash_map:
             summary_data = []
-            # --- PERUBAHAN DI SINI ---
             with st.expander("Show Potential Clash Summary", expanded=True):
                 total_clash_days = len(clash_map)
                 total_conflicting_blocks = sum(len(areas) for areas in clash_map.values())
                 st.markdown(f"**🔥 Found {total_clash_days} potential clash days with a total of {total_conflicting_blocks} conflicting blocks.**")
-                # --- AKHIR PERUBAHAN ---
                 clash_dates = sorted(clash_map.keys())
                 cols = st.columns(len(clash_dates) or 1)
                 for i, date in enumerate(clash_dates):
@@ -406,9 +409,7 @@ def render_clash_tab():
                         filtered_areas = [area for area in areas if area not in summary_exclude_blocks]
                         if not filtered_areas:
                             continue
-                        # --- PERUBAHAN DI SINI ---
                         summary_html = f"""<div style="background-color: #F8F9FA; border: 1px solid #E9ECEF; border-radius: 10px; padding: 15px; margin-top: 1rem; height: 100%;"><strong style='font-size: 1.2em;'>Potential Clash on: {date}</strong><hr style='margin: 10px 0;'><div style='line-height: 1.7;'>"""
-                        # --- AKHIR PERUBAHAN ---
                         for area in sorted(filtered_areas):
                             clashing_rows = df_for_grid[(df_for_grid['ETA_Date'] == date) & (df_for_grid[area] > 0)]
                             clashing_vessels = clashing_rows['VESSEL'].tolist()
