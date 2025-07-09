@@ -27,20 +27,19 @@ st.title("Yard Cluster Monitoring")
 # --- Function to reset data in memory ---
 def reset_data():
     """Clears session state and all of Streamlit's internal caches."""
-    keys_to_clear = ['processed_df', 'summary_display', 'vessel_area_slots']
+    keys_to_clear = ['processed_df', 'summary_display', 'vessel_area_slots', 'clash_summary_df', 'forecast_df']
     for key in keys_to_clear:
         if key in st.session_state:
             del st.session_state[key]
     st.cache_data.clear()
     st.cache_resource.clear()
 
-
 # --- HELPER & FORECASTING FUNCTIONS ---
 @st.cache_data
 def load_history_data(filename="History Loading.xlsx"):
     if os.path.exists(filename):
         try:
-            df = pd.read_excel(filename)
+            df = pd.read_excel(filename) if filename.lower().endswith('.xlsx') else pd.read_csv(filename)
             df.columns = [col.strip().lower() for col in df.columns]
             df['ata'] = pd.to_datetime(df['ata'], dayfirst=True, errors='coerce')
             df.dropna(subset=['ata', 'loading', 'service'], inplace=True)
@@ -151,7 +150,6 @@ def render_forecast_tab():
         st.warning("No forecast data could be generated.")
 
 def render_clash_tab():
-    """Function to display the entire content of the Clash Analysis tab."""
     st.sidebar.header("⚙️ Upload Your Files")
     schedule_file = st.sidebar.file_uploader("1. Upload Vessel Schedule", type=['xlsx', 'csv'])
     unit_list_file = st.sidebar.file_uploader("2. Upload Unit List", type=['xlsx', 'csv'])
@@ -160,7 +158,6 @@ def render_clash_tab():
     process_button = st.sidebar.button("🚀 Process Data", use_container_width=True, type="primary")
     st.sidebar.button("Reset Data", on_click=reset_data, use_container_width=True, help="Clear all processed data and caches to start fresh.")
 
-    # Initialize session state keys
     for key in ['processed_df', 'summary_display', 'vessel_area_slots']:
         if key not in st.session_state: st.session_state[key] = None
 
@@ -203,7 +200,6 @@ def render_clash_tab():
                     pivot_for_display['TOTAL BOX'] = pivot_for_display.sum(axis=1)
                     pivot_for_display['TOTAL CLSTR'] = (pivot_for_display > 0).sum(axis=1)
                     pivot_for_display.reset_index(inplace=True)
-                    pivot_for_display['ETA_Display'] = pivot_for_display['ETA'].dt.strftime('%d/%m/%Y %H:%M')
                     
                     st.session_state.processed_df = pivot_for_display.sort_values(by='ETA', ascending=True)
                     st.session_state.vessel_area_slots = vessel_area_slots
@@ -218,15 +214,72 @@ def render_clash_tab():
         vessel_area_slots_df = st.session_state.vessel_area_slots.copy()
         
         st.subheader("🚢 Upcoming Vessel Summary (Today + Next 3 Days)")
-        # Upcoming Vessel Summary Logic...
-        
+        forecast_df = st.session_state.get('forecast_df')
+        if forecast_df is not None and not forecast_df.empty:
+            today = pd.to_datetime(datetime.now().date())
+            four_days_later = today + timedelta(days=4)
+            upcoming_vessels_df = display_df[(display_df['ETA'] >= today) & (display_df['ETA'] < four_days_later)].copy()
+            if not upcoming_vessels_df.empty:
+                st.sidebar.markdown("---")
+                st.sidebar.header("🛠️ Upcoming Vessel Options")
+                priority_vessels = st.sidebar.multiselect("Select priority vessels to highlight:", options=upcoming_vessels_df['VESSEL'].unique())
+                adjusted_clstr_req = st.sidebar.number_input("Adjust CLSTR REQ for priority vessels:", min_value=0, value=0, step=1, help="Enter a new value for CLSTR REQ. Leave as 0 to not change.")
+                
+                summary_df = pd.merge(upcoming_vessels_df, forecast_df[['Service', 'Loading Forecast']], left_on='SERVICE', right_on='Service', how='left')
+                summary_df['Loading Forecast'] = summary_df['Loading Forecast'].fillna(0).round(0).astype(int)
+                summary_df['DIFF'] = summary_df['TOTAL BOX'] - summary_df['Loading Forecast']
+                summary_df['base_for_req'] = summary_df[['TOTAL BOX', 'Loading Forecast']].max(axis=1)
+                summary_df['CLSTR REQ'] = summary_df['base_for_req'].apply(lambda v: 4 if v <= 450 else (5 if v <= 600 else (6 if v <= 800 else 8)))
+                if priority_vessels and adjusted_clstr_req > 0:
+                    summary_df.loc[summary_df['VESSEL'].isin(priority_vessels), 'CLSTR REQ'] = adjusted_clstr_req
+
+                summary_display = summary_df[['VESSEL', 'SERVICE', 'ETA', 'TOTAL BOX', 'Loading Forecast', 'DIFF', 'TOTAL CLSTR', 'CLSTR REQ']].rename(columns={'ETA': 'ETA', 'TOTAL BOX': 'BOX STACKED', 'Loading Forecast': 'LOADING FORECAST'})
+                
+                def style_diff(v): return f'color: {"#4CAF50" if v > 0 else ("#F44336" if v < 0 else "#757575")}; font-weight: bold;'
+                def highlight_rows(row):
+                    if row['TOTAL CLSTR'] < row['CLSTR REQ']: return ['background-color: #FFCDD2'] * len(row)
+                    if row['VESSEL'] in priority_vessels: return ['background-color: #FFF3CD'] * len(row)
+                    return [''] * len(row)
+
+                styled_df = summary_display.style.apply(highlight_rows, axis=1).map(style_diff, subset=['DIFF']).format({'ETA': '{:%d/%m/%Y %H:%M}'})
+                st.dataframe(styled_df, use_container_width=True, hide_index=True)
+            else:
+                st.info("No vessels scheduled to arrive in the next 4 days.")
+        else:
+            st.warning("Forecast data is not available. Please run the forecast in the 'Loading Forecast' tab first.")
+
         st.markdown("---")
         st.subheader("📊 Cluster Spreading Visualization")
-        # Cluster Spreading Visualization Logic...
+        all_vessels_list = display_df['VESSEL'].unique().tolist()
+        st.sidebar.markdown("---")
+        st.sidebar.header("📊 Chart Options")
+        selected_vessels = st.sidebar.multiselect("Filter Vessels on Chart:", options=all_vessels_list, default=all_vessels_list)
+        font_size = st.sidebar.slider("Adjust Chart Font Size", min_value=6, max_value=20, value=10, step=1)
+
+        if not selected_vessels:
+            st.warning("Please select at least one vessel.")
+        else:
+            processed_df_chart = display_df[display_df['VESSEL'].isin(selected_vessels)]
+            initial_cols = ['VESSEL', 'VOY_OUT', 'ETA', 'ETD', 'SERVICE', 'TOTAL BOX', 'TOTAL CLSTR']
+            cluster_cols = sorted([col for col in processed_df_chart.columns if col not in initial_cols and col not in df_vessel_codes.columns and col != 'ETA_Display'])
+            
+            chart_data_long = pd.melt(processed_df_chart, id_vars=['VESSEL'], value_vars=cluster_cols, var_name='Cluster', value_name='Box Count')
+            chart_data_long = chart_data_long[chart_data_long['Box Count'] > 0]
+
+            if not chart_data_long.empty:
+                chart_data_long['combined_text'] = chart_data_long['Cluster'] + ' / ' + chart_data_long['Box Count'].astype(str)
+                cluster_color_map = {'A01': '#5409DA', 'A02': '#4E71FF', 'A03': '#8DD8FF', 'A04': '#BBFBFF', 'A05': '#8DBCC7', 'B01': '#328E6E', 'B02': '#67AE6E', 'B03': '#90C67C', 'B04': '#E1EEBC', 'B05': '#D2FF72', 'C03': '#B33791', 'C04': '#C562AF', 'C05': '#DB8DD0', 'E11': '#8D493A', 'E12': '#D0B8A8', 'E13': '#DFD3C3', 'E14': '#F8EDE3', 'EA09':'#EECEB9', 'OOG': 'black'}
+                vessel_order_by_eta = processed_df_chart.sort_values('ETA')['VESSEL'].tolist()
+                fig = px.bar(chart_data_long, x='Box Count', y='VESSEL', color='Cluster', color_discrete_map=cluster_color_map, orientation='h', title='Box Distribution per Cluster for Each Vessel', text='combined_text', hover_data={'VESSEL': False, 'Cluster': True, 'Box Count': True})
+                fig.update_layout(xaxis_title=None, yaxis_title=None, height=len(vessel_order_by_eta) * 35 + 150, legend_title_text='Cluster Area', title_x=0)
+                fig.update_yaxes(categoryorder='array', categoryarray=vessel_order_by_eta[::-1])
+                fig.update_traces(textposition='inside', textfont_size=font_size, textangle=0)
+                st.plotly_chart(fig, use_container_width=True)
+            else:
+                st.info("No cluster data to visualize for the selected vessels.")
 
         st.markdown("---")
         st.header("💥 Potential Clash Summary")
-        
         clash_details = {}
         active_vessels = vessel_area_slots_df[['VESSEL', 'VOY_OUT', 'ETA', 'ETD']].drop_duplicates()
         summary_exclude_blocks = ['BR9', 'RC9', 'C01', 'C02', 'D01', 'OOG']
@@ -250,7 +303,7 @@ def render_clash_tab():
                         date_key = clash_date.strftime('%d/%m/%Y')
                         if date_key not in clash_details: clash_details[date_key] = []
                         
-                        clash_info = {"block": area, "vessel1_name": vessel1['VESSEL'], "vessel1_slots": f"{range1[0]}-{range1[1]}", "vessel1_box": row['BOX_COUNT_v1'], "vessel1_period": f"{row['ETA_v1'].strftime('%d/%m %H:%M')} - {row['ETD_v1'].strftime('%d/%m %H:%M')}", "vessel2_name": vessel2['VESSEL'], "vessel2_slots": f"{range2[0]}-{range2[1]}", "vessel2_box": row['BOX_COUNT_v2'], "vessel2_period": f"{row['ETD_v2'].strftime('%d/%m %H:%M')} - {row['ETD_v2'].strftime('%d/%m %H:%M')}", "gap": gap}
+                        clash_info = {"block": area, "vessel1_name": vessel1['VESSEL'], "vessel1_slots": f"{range1[0]}-{range1[1]}", "vessel1_box": row['BOX_COUNT_v1'], "vessel2_name": vessel2['VESSEL'], "vessel2_slots": f"{range2[0]}-{range2[1]}", "vessel2_box": row['BOX_COUNT_v2'], "gap": gap}
                         is_duplicate = any(d['block'] == area and d['vessel1_name'] in [vessel1['VESSEL'], vessel2['VESSEL']] and d['vessel2_name'] in [vessel1['VESSEL'], vessel2['VESSEL']] for d in clash_details[date_key])
                         if not is_duplicate: clash_details[date_key].append(clash_info)
         
@@ -275,8 +328,7 @@ def render_clash_tab():
         
         st.markdown("---")
         st.header("📋 Detailed Analysis Results")
-        # (AgGrid and Download sections omitted for brevity)
-        st.dataframe(display_df)
+        st.dataframe(display_df.drop(columns=['VOY_OUT', 'ETD']))
 
     else:
         st.info("Welcome! Please upload your files and click 'Process Data' to begin.")
