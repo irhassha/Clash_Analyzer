@@ -34,8 +34,151 @@ def reset_data():
     st.cache_data.clear()
     st.cache_resource.clear()
 
-# --- FORECASTING FUNCTIONS (No changes here) ---
-# ... (All forecasting functions are assumed to be here) ...
+# --- FORECASTING FUNCTIONS ---
+@st.cache_data
+def load_history_data(filename="History Loading.xlsx"):
+    """Finds and loads the historical data file for forecasting."""
+    if os.path.exists(filename):
+        try:
+            if filename.lower().endswith('.csv'):
+                df = pd.read_csv(filename)
+            else:
+                df = pd.read_excel(filename)
+            
+            df.columns = [col.strip().lower() for col in df.columns]
+            df['ata'] = pd.to_datetime(df['ata'], dayfirst=True, errors='coerce')
+            df.dropna(subset=['ata', 'loading', 'service'], inplace=True)
+            df = df[df['loading'] >= 0]
+            return df
+        except Exception as e:
+            st.error(f"Failed to load history file '{filename}': {e}")
+            return None
+    st.warning(f"History file '{filename}' not found in the repository.")
+    return None
+
+def create_time_features(df):
+    """Creates time-based features from the 'ata' column."""
+    df_copy = df.copy()
+    df_copy['hour'] = df_copy['ata'].dt.hour
+    df_copy['day_of_week'] = df_copy['ata'].dt.dayofweek
+    df_copy['day_of_month'] = df_copy['ata'].dt.day
+    df_copy['day_of_year'] = df_copy['ata'].dt.dayofyear
+    df_copy['week_of_year'] = df_copy['ata'].dt.isocalendar().week.astype(int)
+    df_copy['month'] = df_copy['ata'].dt.month
+    df_copy['year'] = df_copy['ata'].dt.year
+    return df_copy
+
+@st.cache_data
+def run_per_service_rf_forecast(_df_history):
+    """Runs the outlier cleaning and forecasting process for each service."""
+    all_results = []
+    unique_services = _df_history['service'].unique()
+    progress_bar = st.progress(0, text="Analyzing services...")
+    total_services = len(unique_services)
+    for i, service in enumerate(unique_services):
+        progress_text = f"Analyzing service: {service} ({i+1}/{total_services})"
+        progress_bar.progress((i + 1) / total_services, text=progress_text)
+        service_df = _df_history[_df_history['service'] == service].copy()
+        if service_df.empty or service_df['loading'].isnull().all():
+            continue
+        Q1 = service_df['loading'].quantile(0.25)
+        Q3 = service_df['loading'].quantile(0.75)
+        IQR = Q3 - Q1
+        upper_bound = Q3 + 1.5 * IQR
+        lower_bound = Q1 - 1.5 * IQR
+        num_outliers = ((service_df['loading'] < lower_bound) | (service_df['loading'] > upper_bound)).sum()
+        service_df['loading_cleaned'] = service_df['loading'].clip(lower=lower_bound, upper=upper_bound)
+        forecast_val, moe_val, mape_val, method = (0, 0, 0, "")
+        if len(service_df) >= 10:
+            try:
+                df_features = create_time_features(service_df)
+                features_to_use = ['hour', 'day_of_week', 'day_of_month', 'day_of_year', 'week_of_year', 'month', 'year']
+                target = 'loading_cleaned'
+                X = df_features[features_to_use]
+                y = df_features[target]
+                X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42, shuffle=False)
+                if len(X_train) == 0:
+                    raise ValueError("Not enough data to train the model.")
+                model = RandomForestRegressor(n_estimators=50, random_state=42, n_jobs=-1, min_samples_leaf=2)
+                model.fit(X_train, y_train)
+                predictions = model.predict(X_test)
+                mape_val = mean_absolute_percentage_error(y_test, predictions) * 100 if len(y_test) > 0 else 0
+                moe_val = 1.96 * np.std(y_test - predictions) if len(y_test) > 0 else 0
+                future_eta = datetime.now().replace(hour=12, minute=0, second=0, microsecond=0) + timedelta(days=1)
+                future_df = create_time_features(pd.DataFrame([{'ata': future_eta}]))
+                forecast_val = model.predict(future_df[features_to_use])[0]
+                method = f"Random Forest ({num_outliers} outliers cleaned)"
+            except Exception:
+                forecast_val = service_df['loading_cleaned'].mean()
+                moe_val = 1.96 * service_df['loading_cleaned'].std()
+                actuals = service_df['loading_cleaned']
+                mape_val = np.mean(np.abs((actuals - forecast_val) / actuals)) * 100 if not actuals.empty else 0
+                method = f"Historical Average (RF Failed, {num_outliers} outliers cleaned)"
+        else:
+            forecast_val = service_df['loading_cleaned'].mean()
+            moe_val = 1.96 * service_df['loading_cleaned'].std()
+            actuals = service_df['loading_cleaned']
+            mape_val = np.mean(np.abs((actuals - forecast_val) / actuals)) * 100 if not actuals.empty else 0
+            method = f"Historical Average ({num_outliers} outliers cleaned)"
+        all_results.append({
+            "Service": service, "Loading Forecast": max(0, forecast_val),
+            "Margin of Error (± box)": moe_val, "MAPE (%)": mape_val, "Method": method
+        })
+    progress_bar.empty()
+    return pd.DataFrame(all_results)
+
+# --- FUNGSI YANG HILANG DIKEMBALIKAN ---
+@st.cache_data
+def load_vessel_codes_from_repo(possible_names=['vessel codes.xlsx', 'vessel_codes.xls', 'vessel_codes.csv']):
+    """Finds and loads the vessel codes file."""
+    for filename in possible_names:
+        if os.path.exists(filename):
+            try:
+                if filename.lower().endswith('.csv'): df = pd.read_csv(filename)
+                else: df = pd.read_excel(filename)
+                df.columns = df.columns.str.strip()
+                return df
+            except Exception as e:
+                st.error(f"Failed to read file '{filename}': {e}"); return None
+    st.error(f"Vessel codes file not found."); return None
+# --- AKHIR BAGIAN YANG DIKEMBALIKAN ---
+
+def render_forecast_tab():
+    """Function to display the entire content of the forecasting tab."""
+    st.header("📈 Loading Forecast with Machine Learning")
+    st.write("This feature uses a separate **Random Forest** model for each service. The model learns from historical time patterns to provide more accurate predictions, complete with anomaly data cleaning.")
+    if 'forecast_df' not in st.session_state:
+        df_history = load_history_data()
+        if df_history is not None and not df_history.empty:
+            with st.spinner("Processing data and training models for each service..."):
+                forecast_df = run_per_service_rf_forecast(df_history)
+                st.session_state.forecast_df = forecast_df
+        else:
+            st.session_state.forecast_df = pd.DataFrame()
+            if df_history is None:
+                st.error("Could not load historical data. Process canceled.")
+    
+    if 'forecast_df' in st.session_state and not st.session_state.forecast_df.empty:
+        results_df = st.session_state.forecast_df.copy()
+        results_df['Loading Forecast'] = results_df['Loading Forecast'].round(2)
+        results_df['Margin of Error (± box)'] = results_df['Margin of Error (± box)'].fillna(0).round(2)
+        results_df['MAPE (%)'] = results_df['MAPE (%)'].replace([np.inf, -np.inf], 0).fillna(0).round(2)
+        
+        st.markdown("---")
+        st.subheader("📊 Forecast Results per Service")
+        filter_option = st.radio("Filter Services:", ("All Services", "Current Services"), horizontal=True)
+        current_services_list = ['JPI-A', 'JPI-B', 'CIT', 'IN1', 'JKF', 'IN1-2', 'KCI', 'CMI3', 'CMI2', 'CMI', 'I15', 'SE8', 'IA8', 'IA1', 'SEAGULL', 'JTH', 'ICN']
+        if filter_option == "Current Services":
+            display_forecast_df = results_df[results_df['Service'].isin(current_services_list)]
+        else:
+            display_forecast_df = results_df
+        
+        st.dataframe(display_forecast_df.sort_values(by="Loading Forecast", ascending=False).reset_index(drop=True), use_container_width=True, hide_index=True, column_config={"MAPE (%)": st.column_config.NumberColumn(format="%.2f%%")})
+        st.markdown("---")
+        st.subheader("💡 How to Read These Results")
+        st.markdown("- **Loading Forecast**: The estimated number of boxes for the next vessel arrival of that service.\n- **Margin of Error (± box)**: The level of uncertainty in the prediction. A prediction of **300** with a MoE of **±50** means the actual value is likely between **250** and **350**.\n- **MAPE (%)**: The average percentage error of the model when tested on its historical data. **The smaller the value, the more accurate the model has been in the past.**\n- **Method**: The technique used for the forecast and the number of outliers handled.")
+    else:
+        st.warning("No forecast data could be generated. The history file might be empty or contain no valid service data.")
 
 def render_clash_tab():
     """Function to display the entire content of the Clash Analysis tab."""
@@ -47,17 +190,15 @@ def render_clash_tab():
     process_button = st.sidebar.button("🚀 Process Data", use_container_width=True, type="primary")
     st.sidebar.button("Reset Data", on_click=reset_data, use_container_width=True, help="Clear all processed data and caches to start fresh.")
 
-    # Initialize session state keys
     for key in ['processed_df', 'summary_display', 'vessel_area_slots']:
         if key not in st.session_state:
             st.session_state[key] = None
 
-    df_vessel_codes = load_vessel_codes_from_repo() # Assuming this function exists
+    df_vessel_codes = load_vessel_codes_from_repo()
     if process_button:
         if schedule_file and unit_list_file and (df_vessel_codes is not None and not df_vessel_codes.empty):
             with st.spinner('Loading and processing data...'):
                 try:
-                    # Data loading and processing logic...
                     if schedule_file.name.lower().endswith(('.xls', '.xlsx')): df_schedule = pd.read_excel(schedule_file)
                     else: df_schedule = pd.read_csv(schedule_file)
                     df_schedule.columns = [col.strip().upper() for col in df_schedule.columns]
@@ -78,7 +219,7 @@ def render_clash_tab():
                     df_unit_list['SLOT'] = pd.to_numeric(df_unit_list['SLOT'], errors='coerce')
                     df_unit_list.dropna(subset=['SLOT'], inplace=True)
                     df_unit_list['SLOT'] = df_unit_list['SLOT'].astype(int)
-                    
+
                     df_schedule_with_code = pd.merge(df_schedule, df_vessel_codes, left_on="VESSEL", right_on="Description", how="left").rename(columns={"Value": "CODE"})
                     merged_df = pd.merge(df_schedule_with_code, df_unit_list, left_on=['CODE', 'VOY_OUT'], right_on=['Carrier Out', 'Voyage Out'], how='inner')
                     if merged_df.empty: st.warning("No matching data found."); st.session_state.processed_df = None; st.stop()
@@ -121,10 +262,10 @@ def render_clash_tab():
         display_df = st.session_state.processed_df.copy()
         vessel_area_slots_df = st.session_state.vessel_area_slots.copy()
         
-        # ... (Other UI sections like Upcoming Summary and Chart can be placed here) ...
+        # ... (Other UI components like Upcoming Summary and Chart can be placed here) ...
 
         st.markdown("---")
-        st.header("💥 Potential Clash Summary")
+        st.header("💥 Potential Clash Summary (Based on Slot Distance)")
         
         clash_details = {}
         active_vessels = vessel_area_slots_df[['VESSEL', 'VOY_OUT', 'ETA', 'ETD']].drop_duplicates()
@@ -152,11 +293,10 @@ def render_clash_tab():
                         
                         clash_info = {
                             "block": area,
-                            "vessel1_name": vessel1['VESSEL'], "vessel1_slots": f"{range1[0]}-{range1[1]}", "vessel1_box": row['BOX_COUNT_v1'],
-                            "vessel2_name": vessel2['VESSEL'], "vessel2_slots": f"{range2[0]}-{range2[1]}", "vessel2_box": row['BOX_COUNT_v2'],
+                            "vessel1_name": vessel1['VESSEL'], "vessel1_slots": f"{range1[0]}-{range1[1]}", "vessel1_box": row['BOX_COUNT_v1'], "vessel1_period": f"{row['ETA_v1'].strftime('%d/%m %H:%M')} - {row['ETD_v1'].strftime('%d/%m %H:%M')}",
+                            "vessel2_name": vessel2['VESSEL'], "vessel2_slots": f"{range2[0]}-{range2[1]}", "vessel2_box": row['BOX_COUNT_v2'], "vessel2_period": f"{row['ETD_v2'].strftime('%d/%m %H:%M')} - {row['ETD_v2'].strftime('%d/%m %H:%M')}",
                             "gap": gap
                         }
-                        # Cek duplikasi
                         is_duplicate = False
                         for existing_clash in clash_details[date_key]:
                             if (existing_clash['block'] == area and existing_clash['vessel1_name'] in [vessel1['VESSEL'], vessel2['VESSEL']] and existing_clash['vessel2_name'] in [vessel1['VESSEL'], vessel2['VESSEL']]):
@@ -165,7 +305,6 @@ def render_clash_tab():
                         if not is_duplicate:
                             clash_details[date_key].append(clash_info)
         
-        # --- PERUBAHAN TAMPILAN CLASH SUMMARY MENJADI st.container ---
         if not clash_details:
             st.info(f"No potential clashes found with a minimum distance of {min_clash_distance} slots.")
         else:
@@ -173,23 +312,20 @@ def render_clash_tab():
             st.markdown(f"**🔥 Found {total_clash_days} day(s) with potential clashes.**")
             clash_dates = sorted(clash_details.keys(), key=lambda x: datetime.strptime(x, '%d/%m/%Y'))
             cols = st.columns(len(clash_dates) or 1)
-            
             for i, date_key in enumerate(clash_dates):
                 with cols[i]:
-                    with st.container(border=True): # Membuat kartu dengan bingkai
+                    with st.container(border=True):
                         st.markdown(f"**Potential Clash on: {date_key}**")
-                        
                         clashes_on_day = clash_details.get(date_key, [])
                         for clash in clashes_on_day:
-                            st.divider() # Garis pemisah antar clash
+                            st.divider()
                             st.markdown(f"**Block {clash['block']}** (Gap: `{clash['gap']}` slots)")
                             st.markdown(f"↳ **{clash['vessel1_name']}**: `{clash['vessel1_box']}` boxes (Slots: `{clash['vessel1_slots']}`)")
                             st.markdown(f"↳ **{clash['vessel2_name']}**: `{clash['vessel2_box']}` boxes (Slots: `{clash['vessel2_slots']}`)")
-        # --- AKHIR PERUBAHAN TAMPILAN ---
-
+        
         st.markdown("---")
         st.header("📋 Detailed Analysis Results")
-        st.dataframe(display_df) # Placeholder display for now
+        st.dataframe(display_df)
 
     else:
         st.info("Welcome! Please upload your files and click 'Process Data' to begin.")
@@ -199,4 +335,4 @@ tab1, tab2 = st.tabs(["🚨 Clash Analysis", "📈 Loading Forecast"])
 with tab1:
     render_clash_tab()
 with tab2:
-    st.info("Forecasting tab is available.")
+    render_forecast_tab()
