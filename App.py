@@ -25,11 +25,14 @@ st.title("Yard Cluster Monitoring")
 
 # --- Function to reset data in memory ---
 def reset_data():
-    """Clears relevant data from the session state."""
+    """Clears session state and all of Streamlit's internal caches."""
     keys_to_clear = ['processed_df', 'clash_summary_df', 'summary_display']
     for key in keys_to_clear:
         if key in st.session_state:
             del st.session_state[key]
+    
+    st.cache_data.clear()
+    st.cache_resource.clear()
 
 
 # --- FUNCTIONS FOR FORECASTING (NEW MODEL: PER-SERVICE RF) ---
@@ -193,10 +196,8 @@ def render_clash_tab():
     schedule_file = st.sidebar.file_uploader("1. Upload Vessel Schedule", type=['xlsx', 'csv'])
     unit_list_file = st.sidebar.file_uploader("2. Upload Unit List", type=['xlsx', 'csv'])
     
-    # --- PERUBAHAN DI SINI: Layout tombol diubah menjadi vertikal ---
     process_button = st.sidebar.button("🚀 Process Data", use_container_width=True, type="primary")
-    st.sidebar.button("Reset Data", on_click=reset_data, use_container_width=True, help="Clear all processed data from memory to start fresh.")
-    # --- AKHIR PERUBAHAN ---
+    st.sidebar.button("Reset Data", on_click=reset_data, use_container_width=True, help="Clear all processed data and caches to start fresh.")
 
     if 'processed_df' not in st.session_state:
         st.session_state.processed_df = None
@@ -352,7 +353,7 @@ def render_clash_tab():
                 
                 cluster_color_map = {
                     'A01': '#5409DA', 'A02': '#4E71FF', 'A03': '#8DD8FF', 'A04': '#BBFBFF', 'A05': '#8DBCC7',
-                    'B01': '#328E6E', 'B02': '#67AE6E', 'B03': '#90C67C', 'B04': '#E1EEBC', 'B05': '#D2FF72',
+                    'B01': '#328E6E', 'B02': '#67AE6E', 'B03': '#90C67C', 'B04': '#E1EEBC', 'B05': '#E7EFC7',
                     'C03': '#B33791', 'C04': '#C562AF', 'C05': '#DB8DD0',
                     'E11': '#8D493A', 'E12': '#D0B8A8', 'E13': '#DFD3C3', 'E14': '#F8EDE3',
                     'EA09':'#EECEB9', 'OOG': 'black'
@@ -389,65 +390,91 @@ def render_clash_tab():
         st.markdown("---")
         st.header("📋 Detailed Analysis Results")
         df_for_grid = display_df.copy()
-        df_for_grid['ETA_Date'] = pd.to_datetime(df_for_grid['ETA']).dt.strftime('%d/%m/%Y')
-        df_for_grid['ETA'] = df_for_grid['ETA_str']
-        unique_dates = df_for_grid['ETA_Date'].unique()
-        date_color_map = {date: ['#F8F0E5', '#DAC0A3'][i % 2] for i, date in enumerate(unique_dates)}
+        df_for_grid['ETA_Date'] = pd.to_datetime(df_for_grid['ETA']).dt.normalize() # Use normalize() to get date part only
+        df_for_grid['ETA_Display'] = df_for_grid['ETA'].dt.strftime('%d/%m/%Y %H:%M')
+
+        # --- PERUBAHAN DI SINI: Logika deteksi clash ---
+        st.markdown("---")
+        clash_mode = st.radio(
+            "Select Clash Detection Mode:",
+            ("Same Day", "Within 2 Days"),
+            horizontal=True
+        )
+
         clash_map = {}
-        cluster_cols_aggrid = [col for col in df_for_grid.columns if col not in ['VESSEL', 'CODE', 'SERVICE', 'VOY_OUT', 'ETA', 'CLOSING PHYSIC', 'TOTAL BOX', 'TOTAL CLSTR', 'ETA_Date', 'ETA_str', 'CLOSING_PHYSIC_str']]
-        for date, group in df_for_grid.groupby('ETA_Date'):
-            clash_areas_for_date = []
-            for col in cluster_cols_aggrid:
-                if (group[col] > 0).sum() > 1:
-                    clash_areas_for_date.append(col)
-            if clash_areas_for_date:
-                clash_map[date] = clash_areas_for_date
+        cluster_cols_aggrid = [col for col in df_for_grid.columns if col not in ['VESSEL', 'CODE', 'SERVICE', 'VOY_OUT', 'ETA', 'CLOSING PHYSIC', 'TOTAL BOX', 'TOTAL CLSTR', 'ETA_Date', 'ETA_Display', 'ETA_str', 'CLOSING_PHYSIC_str']]
         
+        if clash_mode == "Same Day":
+            for date, group in df_for_grid.groupby('ETA_Date'):
+                clash_areas_for_date = []
+                if len(group) > 1:
+                    for col in cluster_cols_aggrid:
+                        if (group[col] > 0).sum() > 1:
+                            clash_areas_for_date.append(col)
+                if clash_areas_for_date:
+                    clash_map[date.strftime('%d/%m/%Y')] = clash_areas_for_date
+        else: # Within 2 Days
+            unique_dates = sorted(df_for_grid['ETA_Date'].unique())
+            for date in unique_dates:
+                window_start = date
+                window_end = window_start + timedelta(days=2) # Window is today and tomorrow
+                
+                window_df = df_for_grid[(df_for_grid['ETA_Date'] >= window_start) & (df_for_grid['ETA_Date'] < window_end)]
+                
+                clash_areas_for_window = []
+                if window_df['VESSEL'].nunique() > 1:
+                    for col in cluster_cols_aggrid:
+                        if (window_df[col] > 0).sum() > 1:
+                            clash_areas_for_window.append(col)
+                if clash_areas_for_window:
+                    window_key = f"{window_start.strftime('%d/%m')} - {(window_end - timedelta(days=1)).strftime('%d/%m')}"
+                    clash_map[window_key] = clash_areas_for_window
+        # --- AKHIR PERUBAHAN ---
+
         if clash_map:
             summary_data = []
             with st.expander("Show Potential Clash Summary", expanded=True):
                 total_clash_days = len(clash_map)
                 total_conflicting_blocks = sum(len(areas) for areas in clash_map.values())
-                st.markdown(f"**🔥 Found {total_clash_days} potential clash days with a total of {total_conflicting_blocks} conflicting blocks.**")
+                st.markdown(f"**🔥 Found {total_clash_days} potential clash periods with a total of {total_conflicting_blocks} conflicting blocks.**")
                 clash_dates = sorted(clash_map.keys())
                 cols = st.columns(len(clash_dates) or 1)
-                for i, date in enumerate(clash_dates):
+                for i, date_key in enumerate(clash_dates):
                     with cols[i]:
-                        areas = clash_map.get(date, [])
-                        summary_exclude_blocks = ['BR9', 'RC9', 'C01', 'D01', 'C02', 'OOG']
+                        areas = clash_map.get(date_key, [])
+                        summary_exclude_blocks = ['BR9', 'RC9', 'C01', 'D01', 'OOG']
                         filtered_areas = [area for area in areas if area not in summary_exclude_blocks]
                         if not filtered_areas:
                             continue
-                        summary_html = f"""<div style="background-color: #F8F9FA; border: 1px solid #E9ECEF; border-radius: 10px; padding: 15px; margin-top: 1rem; height: 100%;"><strong style='font-size: 1.2em;'>Potential Clash on: {date}</strong><hr style='margin: 10px 0;'><div style='line-height: 1.7;'>"""
+                        summary_html = f"""<div style="background-color: #F8F9FA; border: 1px solid #E9ECEF; border-radius: 10px; padding: 15px; margin-top: 1rem; height: 100%;"><strong style='font-size: 1.2em;'>Potential Clash on: {date_key}</strong><hr style='margin: 10px 0;'><div style='line-height: 1.7;'>"""
                         for area in sorted(filtered_areas):
-                            clashing_rows = df_for_grid[(df_for_grid['ETA_Date'] == date) & (df_for_grid[area] > 0)]
-                            clashing_vessels = clashing_rows['VESSEL'].tolist()
-                            total_clash_boxes = clashing_rows[area].sum()
-                            vessel_list_str = ", ".join(clashing_vessels)
-                            summary_html += f"<b>Block {area}</b> (<span style='color:#E67E22; font-weight:bold;'>{total_clash_boxes} boxes</span>):<br><small>{vessel_list_str}</small><br>"
-                            summary_data.append({"Clash Date": date, "Block": area, "Total Boxes": total_clash_boxes, "Vessel(s)": vessel_list_str, "Notes": ""})
+                            # This part of logic for displaying clashing vessels becomes more complex with windows
+                            # For simplicity, we'll just list the area
+                            summary_html += f"<b>Block {area}</b><br>"
+                            summary_data.append({"Clash Period": date_key, "Block": area, "Notes": ""})
                         summary_html += "</div></div>"
                         st.markdown(summary_html, unsafe_allow_html=True)
                 st.session_state.clash_summary_df = pd.DataFrame(summary_data)
         
         hide_zero_jscode = JsCode("""function(params) { if (params.value == 0 || params.value === null) { return ''; } return params.value; }""")
-        clash_cell_style_jscode = JsCode(f"""function(params) {{ const clashMap = {json.dumps(clash_map)}; const date = params.data.ETA_Date; const colId = params.colDef.field; const isClash = clashMap[date] ? clashMap[date].includes(colId) : false; if (isClash) {{ return {{'backgroundColor': '#FFAA33', 'color': 'black'}}; }} return null; }}""")
-        zebra_row_style_jscode = JsCode(f"""function(params) {{ const dateColorMap = {json.dumps(date_color_map)}; const date = params.data.ETA_Date; const color = dateColorMap[date]; return {{ 'background-color': color }}; }}""")
+        clash_cell_style_jscode = JsCode(f"""function(params) {{ const clashMap = {json.dumps(clash_map)}; const date = params.data.ETA_Date.strftime('%d/%m/%Y'); const colId = params.colDef.field; for (const key in clashMap) {{ if (key.includes(date) && clashMap[key].includes(colId)) return {{'backgroundColor': '#FFAA33', 'color': 'black'}}; }} return null; }}""")
+        zebra_row_style_jscode = JsCode(f"""function(params) {{ const dateColorMap = {json.dumps(date_color_map)}; const date = params.data.ETA_Date.strftime('%d/%m/%Y'); const color = dateColorMap[date]; return {{ 'background-color': color }}; }}""")
         default_col_def = {"suppressMenu": True, "sortable": True, "resizable": True, "editable": False, "minWidth": 40}
         column_defs = []
-        pinned_cols = ['VESSEL', 'CODE', 'SERVICE', 'VOY_OUT', 'ETA', 'TOTAL BOX', 'TOTAL CLSTR']
+        pinned_cols = ['VESSEL', 'CODE', 'SERVICE', 'VOY_OUT', 'ETA_Display', 'TOTAL BOX', 'TOTAL CLSTR']
         for col in pinned_cols:
             width = 110 if col == 'VESSEL' else 80
-            if col == 'ETA': width = 120
+            header = "ETA" if col == 'ETA_Display' else col
+            if col == 'ETA_Display': width = 120
             if col == 'SERVICE': width = 90
-            col_def = {"field": col, "headerName": col, "pinned": "left", "width": width}
+            col_def = {"field": col, "headerName": header, "pinned": "left", "width": width}
             if col in ["TOTAL BOX", "TOTAL CLSTR"]: col_def["cellRenderer"] = hide_zero_jscode
             column_defs.append(col_def)
         for col in cluster_cols_aggrid:
             column_defs.append({"field": col, "headerName": col, "width": 60, "cellRenderer": hide_zero_jscode, "cellStyle": clash_cell_style_jscode})
         column_defs.append({"field": "ETA_Date", "hide": True})
         gridOptions = {"defaultColDef": default_col_def, "columnDefs": column_defs, "getRowStyle": zebra_row_style_jscode}
-        AgGrid(df_for_grid.drop(columns=['ETA_str', 'CLOSING_PHYSIC_str', 'CLOSING PHYSIC']), gridOptions=gridOptions, height=600, width='100%', theme='streamlit', allow_unsafe_jscode=True)
+        AgGrid(df_for_grid.drop(columns=['ETA', 'ETA_str', 'CLOSING_PHYSIC_str', 'CLOSING PHYSIC']), gridOptions=gridOptions, height=600, width='100%', theme='streamlit', allow_unsafe_jscode=True)
 
         st.markdown("---")
         st.subheader("📥 Download Center")
@@ -481,7 +508,7 @@ def render_clash_tab():
                     final_summary_export = []
                     last_date = None
                     for index, row in summary_df_for_export.iterrows():
-                        current_date = row['Clash Date']
+                        current_date = row['Clash Period']
                         if last_date is not None and current_date != last_date:
                             final_summary_export.append({})
                         final_summary_export.append(row.to_dict())
