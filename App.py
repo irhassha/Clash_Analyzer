@@ -27,14 +27,14 @@ st.title("Yard Cluster Monitoring")
 # --- Function to reset data in memory ---
 def reset_data():
     """Clears session state and all of Streamlit's internal caches."""
-    keys_to_clear = ['processed_df', 'clash_summary_df', 'summary_display', 'vessel_area_slots']
+    keys_to_clear = ['processed_df', 'summary_display', 'vessel_area_slots']
     for key in keys_to_clear:
         if key in st.session_state:
             del st.session_state[key]
     st.cache_data.clear()
     st.cache_resource.clear()
 
-# --- FUNCTIONS FOR FORECASTING (Restored) ---
+# --- FUNCTIONS FOR FORECASTING ---
 @st.cache_data
 def load_history_data(filename="History Loading.xlsx"):
     """Finds and loads the historical data file for forecasting."""
@@ -127,22 +127,6 @@ def run_per_service_rf_forecast(_df_history):
     progress_bar.empty()
     return pd.DataFrame(all_results)
 
-# --- FUNGSI YANG HILANG DIKEMBALIKAN ---
-@st.cache_data
-def load_vessel_codes_from_repo(possible_names=['vessel codes.xlsx', 'vessel_codes.xls', 'vessel_codes.csv']):
-    """Finds and loads the vessel codes file."""
-    for filename in possible_names:
-        if os.path.exists(filename):
-            try:
-                if filename.lower().endswith('.csv'): df = pd.read_csv(filename)
-                else: df = pd.read_excel(filename)
-                df.columns = df.columns.str.strip()
-                return df
-            except Exception as e:
-                st.error(f"Failed to read file '{filename}': {e}"); return None
-    st.error(f"Vessel codes file not found."); return None
-# --- AKHIR BAGIAN YANG DIKEMBALIKAN ---
-
 def render_forecast_tab():
     """Function to display the entire content of the forecasting tab."""
     st.header("📈 Loading Forecast with Machine Learning")
@@ -180,6 +164,20 @@ def render_forecast_tab():
     else:
         st.warning("No forecast data could be generated. The history file might be empty or contain no valid service data.")
 
+@st.cache_data
+def load_vessel_codes_from_repo(possible_names=['vessel codes.xlsx', 'vessel_codes.xls', 'vessel_codes.csv']):
+    """Finds and loads the vessel codes file."""
+    for filename in possible_names:
+        if os.path.exists(filename):
+            try:
+                if filename.lower().endswith('.csv'): df = pd.read_csv(filename)
+                else: df = pd.read_excel(filename)
+                df.columns = df.columns.str.strip()
+                return df
+            except Exception as e:
+                st.error(f"Failed to read file '{filename}': {e}"); return None
+    st.error(f"Vessel codes file not found."); return None
+
 def render_clash_tab():
     """Function to display the entire content of the Clash Analysis tab."""
     st.sidebar.header("⚙️ Upload Your Files")
@@ -199,7 +197,6 @@ def render_clash_tab():
         if schedule_file and unit_list_file and (df_vessel_codes is not None and not df_vessel_codes.empty):
             with st.spinner('Loading and processing data...'):
                 try:
-                    # --- Data Loading and Parsing ---
                     if schedule_file.name.lower().endswith(('.xls', '.xlsx')): df_schedule = pd.read_excel(schedule_file)
                     else: df_schedule = pd.read_csv(schedule_file)
                     df_schedule.columns = [col.strip().upper() for col in df_schedule.columns]
@@ -221,7 +218,6 @@ def render_clash_tab():
                     df_unit_list.dropna(subset=['SLOT'], inplace=True)
                     df_unit_list['SLOT'] = df_unit_list['SLOT'].astype(int)
 
-                    # --- Merging and Filtering ---
                     df_schedule_with_code = pd.merge(df_schedule, df_vessel_codes, left_on="VESSEL", right_on="Description", how="left").rename(columns={"Value": "CODE"})
                     merged_df = pd.merge(df_schedule_with_code, df_unit_list, left_on=['CODE', 'VOY_OUT'], right_on=['Carrier Out', 'Voyage Out'], how='inner')
                     if merged_df.empty: st.warning("No matching data found."); st.session_state.processed_df = None; st.stop()
@@ -233,7 +229,6 @@ def render_clash_tab():
                     filtered_data = merged_df[~merged_df['Area (EXE)'].isin(excluded_areas)]
                     if filtered_data.empty: st.warning("No data left after filtering."); st.session_state.processed_df = None; st.stop()
                     
-                    # --- Data Aggregation for Display and Clash Logic ---
                     vessel_area_slots = filtered_data.groupby(['VESSEL', 'VOY_OUT', 'ETA', 'ETD', 'SERVICE', 'Area (EXE)']).agg(
                         MIN_SLOT=('SLOT', 'min'),
                         MAX_SLOT=('SLOT', 'max'),
@@ -244,7 +239,8 @@ def render_clash_tab():
                         index=['VESSEL', 'VOY_OUT', 'ETA', 'ETD', 'SERVICE'],
                         columns='Area (EXE)',
                         values='BOX_COUNT',
-                        fill_value=0)
+                        fill_value=0
+                    )
                     
                     pivot_for_display['TOTAL BOX'] = pivot_for_display.sum(axis=1)
                     pivot_for_display['TOTAL CLSTR'] = (pivot_for_display > 0).sum(axis=1)
@@ -266,12 +262,13 @@ def render_clash_tab():
         display_df = st.session_state.processed_df.copy()
         vessel_area_slots_df = st.session_state.vessel_area_slots.copy()
         
-        # ... (Upcoming Vessel Summary logic placeholder) ...
+        # --- Upcoming Vessel Summary ---
+        # (This section is omitted for brevity but should be included in your final script)
 
         # --- Cluster Spreading Visualization ---
         st.markdown("---")
         st.subheader("📊 Cluster Spreading Visualization")
-        # ... (Visualization logic placeholder) ...
+        # (This section is omitted for brevity but should be included in your final script)
 
         # --- Clash Detection Logic ---
         st.markdown("---")
@@ -279,10 +276,14 @@ def render_clash_tab():
         
         clash_details = {}
         active_vessels = vessel_area_slots_df[['VESSEL', 'VOY_OUT', 'ETA', 'ETD']].drop_duplicates()
-        summary_exclude_blocks = ['BR9', 'RC9', 'C01', 'D01', 'OOG']
+        
+        # --- PERUBAHAN DI SINI ---
+        summary_exclude_blocks = ['BR9', 'RC9', 'C01', 'C02', 'D01', 'OOG']
+        # --- AKHIR PERUBAHAN ---
 
         for (idx1, vessel1), (idx2, vessel2) in combinations(active_vessels.iterrows(), 2):
             if (vessel1['ETA'] < vessel2['ETD']) and (vessel2['ETA'] < vessel1['ETD']):
+                
                 v1_slots = vessel_area_slots_df[(vessel_area_slots_df['VESSEL'] == vessel1['VESSEL']) & (vessel_area_slots_df['VOY_OUT'] == vessel1['VOY_OUT'])]
                 v2_slots = vessel_area_slots_df[(vessel_area_slots_df['VESSEL'] == vessel2['VESSEL']) & (vessel_area_slots_df['VOY_OUT'] == vessel2['VOY_OUT'])]
                 
@@ -298,7 +299,7 @@ def render_clash_tab():
                     gap = max(range1[0], range2[0]) - min(range1[1], range2[1]) - 1
 
                     if gap <= min_clash_distance:
-                        period_key = f"{vessel1['VESSEL']} & {vessel2['VESSEL']}"
+                        period_key = f"Clash between {vessel1['VESSEL']} & {vessel2['VESSEL']}"
                         if period_key not in clash_details:
                             clash_details[period_key] = []
                         
@@ -308,7 +309,6 @@ def render_clash_tab():
                             "vessel2_detail": f"{vessel2['VESSEL']} (Slots: {range2[0]}-{range2[1]})",
                             "gap": gap
                         }
-                        # Add only if not already present to avoid duplicates
                         if clash_info not in clash_details[period_key]:
                             clash_details[period_key].append(clash_info)
         
@@ -318,15 +318,14 @@ def render_clash_tab():
         else:
             st.markdown(f"**🔥 Found {len(clash_details)} pair(s) of vessels with potential clashes.**")
             for period, clashes in clash_details.items():
-                with st.expander(f"Clash between **{period}**"):
+                with st.expander(f"**{period}**"):
                     for clash in clashes:
                         st.warning(f"**Block {clash['block']}:** Clash between **{clash['vessel1_detail']}** and **{clash['vessel2_detail']}**. (Gap: {clash['gap']} slots)")
 
         # --- Detailed Analysis Results Table (AgGrid) ---
         st.markdown("---")
         st.header("📋 Detailed Analysis Results")
-        # (AgGrid logic needs to be simplified or adapted for the new data structure)
-        st.dataframe(display_df)
+        st.dataframe(display_df.drop(columns=['ETA', 'ETD', 'CLOSING PHYSIC'])) # Simplified display for now
 
     else:
         st.info("Welcome! Please upload your files and click 'Process Data' to begin.")
