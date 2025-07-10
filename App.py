@@ -163,19 +163,13 @@ def render_forecast_tab():
     else:
         st.warning("No forecast data could be generated.")
 
-def render_clash_tab():
-    st.sidebar.header("⚙️ Upload Your Files")
-    schedule_file = st.sidebar.file_uploader("1. Upload Vessel Schedule", type=['xlsx', 'csv'])
-    unit_list_file = st.sidebar.file_uploader("2. Upload Unit List", type=['xlsx', 'csv'])
-    min_clash_distance = st.sidebar.number_input("Minimum Safe Distance (slots)", min_value=0, value=5, step=1, help="A clash is detected if the distance between vessel allocations is this value or less.")
+def render_clash_tab(process_button, schedule_file, unit_list_file, min_clash_distance):
+    """Renders the entire Clash Analysis tab."""
+    df_vessel_codes = load_vessel_codes_from_repo()
     
-    process_button = st.sidebar.button("🚀 Process Data", use_container_width=True, type="primary")
-    st.sidebar.button("Reset Data", on_click=reset_data, use_container_width=True, help="Clear all processed data and caches to start fresh.")
-
-    for key in ['processed_df', 'summary_display', 'vessel_area_slots', 'clash_summary_df']:
+    for key in ['processed_df', 'vessel_area_slots', 'clash_summary_df']:
         if key not in st.session_state: st.session_state[key] = None
 
-    df_vessel_codes = load_vessel_codes_from_repo()
     if process_button:
         if schedule_file and unit_list_file and (df_vessel_codes is not None and not df_vessel_codes.empty):
             with st.spinner('Loading and processing data...'):
@@ -188,7 +182,6 @@ def render_clash_tab():
 
                     for col in ['ETA', 'ETD', 'CLOSING PHYSIC']:
                         if col in df_schedule.columns: df_schedule[col] = pd.to_datetime(df_schedule[col], dayfirst=True, errors='coerce')
-                    
                     df_schedule.dropna(subset=['ETA', 'ETD'], inplace=True)
                     
                     if 'Row/bay (EXE)' not in df_unit_list.columns:
@@ -226,8 +219,7 @@ def render_clash_tab():
             st.warning("Please upload both files.")
 
     if st.session_state.get('processed_df') is not None:
-        display_df = st.session_state.processed_df.copy()
-        
+        display_df = st.session_state.processed_df.copy()        
         st.subheader("🚢 Upcoming Vessel Summary (Today + Next 3 Days)")
         forecast_df = st.session_state.get('forecast_df')
         if forecast_df is not None and not forecast_df.empty:
