@@ -122,7 +122,6 @@ def load_vessel_codes_from_repo(possible_names=['vessel codes.xlsx', 'vessel_cod
 
 @st.cache_data
 def load_stacking_trend(filename="stacking_trend.xlsx"):
-    """Loads the stacking trend file."""
     if not os.path.exists(filename):
         st.error(f"File '{filename}' not found in the repository.")
         return None
@@ -131,7 +130,7 @@ def load_stacking_trend(filename="stacking_trend.xlsx"):
     except Exception as e:
         st.error(f"Failed to load stacking trend file: {e}")
         return None
-        
+
 def render_forecast_tab():
     st.header("📈 Loading Forecast with Machine Learning")
     st.write("This feature uses a separate **Random Forest** model for each service to provide more accurate predictions.")
@@ -139,9 +138,9 @@ def render_forecast_tab():
         df_history = load_history_data()
         if df_history is not None and not df_history.empty:
             with st.spinner("Processing data and training models..."):
-                st.session_state.forecast_df = run_per_service_rf_forecast(df_history)
+                st.session_state['forecast_df'] = run_per_service_rf_forecast(df_history)
         else:
-            st.session_state.forecast_df = pd.DataFrame()
+            st.session_state['forecast_df'] = pd.DataFrame()
             if df_history is None: st.error("Could not load historical data.")
     
     if 'forecast_df' in st.session_state and not st.session_state.forecast_df.empty:
@@ -152,9 +151,10 @@ def render_forecast_tab():
         
         st.markdown("---")
         st.subheader("📊 Forecast Results per Service")
-        filter_option = st.radio("Filter Services:", ("All Services", "Current Services"), horizontal=True)
+        filter_option = st.radio("Filter Services:", ("All Services", "Current Services"), horizontal=True, key="forecast_filter")
         current_services_list = ['JPI-A', 'JPI-B', 'CIT', 'IN1', 'JKF', 'IN1-2', 'KCI', 'CMI3', 'CMI2', 'CMI', 'I15', 'SE8', 'IA8', 'IA1', 'SEAGULL', 'JTH', 'ICN']
-        display_forecast_df = results_df[results_df['Service'].isin(current_services_list)] if filter_option == "Current Services" else results_df
+        
+        display_forecast_df = results_df[results_df['Service'].str.upper().isin(current_services_list)] if filter_option == "Current Services" else results_df
         
         st.dataframe(display_forecast_df.sort_values(by="Loading Forecast", ascending=False).reset_index(drop=True), use_container_width=True, hide_index=True, column_config={"MAPE (%)": st.column_config.NumberColumn(format="%.2f%%")})
         st.markdown("---")
@@ -488,24 +488,14 @@ def render_recommendation_tab():
 
 
 # --- MAIN APPLICATION STRUCTURE ---
-st.sidebar.header("⚙️ Upload Your Files")
-schedule_file = st.sidebar.file_uploader("1. Upload Vessel Schedule", type=['xlsx', 'csv'], key="schedule_uploader")
-unit_list_file = st.sidebar.file_uploader("2. Upload Unit List", type=['xlsx', 'csv'], key="unit_list_uploader")
-min_clash_distance = st.sidebar.number_input("Minimum Safe Distance (slots)", min_value=0, value=5, step=1, help="A clash is detected if the distance between vessel allocations is this value or less.")
-
-process_button = st.sidebar.button("🚀 Process Data", use_container_width=True, type="primary")
-st.sidebar.button("Reset Data", on_click=reset_data, use_container_width=True, help="Clear all processed data and caches to start fresh.")
-# --- AKHIR PERUBAHAN ---
+st.sidebar.header("⚙️ Global Options")
+# (Global options could go here if needed later)
 
 tab1, tab2, tab3 = st.tabs(["🚨 Clash Analysis", "📈 Loading Forecast", "💡 Stacking Recommendation"])
 
 with tab1:
-    # Berikan variabel dari sidebar sebagai argumen
-    render_clash_tab(process_button, schedule_file, unit_list_file, min_clash_distance)
-
+    render_clash_tab()
 with tab2:
     render_forecast_tab()
-
 with tab3:
-    # Berikan variabel dari sidebar sebagai argumen
-    render_recommendation_tab(min_clash_distance)
+    render_recommendation_tab()
