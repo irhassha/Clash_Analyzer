@@ -63,9 +63,10 @@ def create_time_features(df):
     return df_copy
 
 @st.cache_data
-
 def run_per_service_rf_forecast(_df_history):
     all_results = []
+    if _df_history is None or _df_history.empty:
+        return pd.DataFrame(all_results)
     unique_services = _df_history['service'].unique()
     progress_bar = st.progress(0, text="Analyzing services...")
     total_services = len(unique_services)
@@ -119,6 +120,18 @@ def load_vessel_codes_from_repo(possible_names=['vessel codes.xlsx', 'vessel_cod
                 st.error(f"Failed to read file '{filename}': {e}"); return None
     st.error(f"Vessel codes file not found."); return None
 
+@st.cache_data
+def load_stacking_trend(filename="stacking_trend.xlsx"):
+    """Loads the stacking trend file."""
+    if not os.path.exists(filename):
+        st.error(f"File '{filename}' not found in the repository.")
+        return None
+    try:
+        return pd.read_excel(filename).set_index('STACKING TREND')
+    except Exception as e:
+        st.error(f"Failed to load stacking trend file: {e}")
+        return None
+        
 def render_forecast_tab():
     st.header("📈 Loading Forecast with Machine Learning")
     st.write("This feature uses a separate **Random Forest** model for each service to provide more accurate predictions.")
@@ -175,6 +188,7 @@ def render_clash_tab():
 
                     for col in ['ETA', 'ETD', 'CLOSING PHYSIC']:
                         if col in df_schedule.columns: df_schedule[col] = pd.to_datetime(df_schedule[col], dayfirst=True, errors='coerce')
+                    
                     df_schedule.dropna(subset=['ETA', 'ETD'], inplace=True)
                     
                     if 'Row/bay (EXE)' not in df_unit_list.columns:
@@ -201,8 +215,6 @@ def render_clash_tab():
                     pivot_for_display['TOTAL BOX'] = pivot_for_display.sum(axis=1)
                     pivot_for_display['TOTAL CLSTR'] = (pivot_for_display > 0).sum(axis=1)
                     pivot_for_display.reset_index(inplace=True)
-                    pivot_for_display['ETA_Display'] = pivot_for_display['ETA'].dt.strftime('%d/%m/%Y %H:%M')
-                    pivot_for_display['CLOSING_PHYSIC_str'] = pivot_for_display.get('CLOSING PHYSIC', pd.Series(pd.NaT, index=pivot_for_display.index)).dt.strftime('%d/%m/%Y %H:%M')
                     
                     st.session_state.processed_df = pivot_for_display.sort_values(by='ETA', ascending=True)
                     st.session_state.vessel_area_slots = vessel_area_slots
@@ -216,7 +228,6 @@ def render_clash_tab():
     if st.session_state.get('processed_df') is not None:
         display_df = st.session_state.processed_df.copy()
         
-        # --- UPCOMING VESSEL SUMMARY ---
         st.subheader("🚢 Upcoming Vessel Summary (Today + Next 3 Days)")
         forecast_df = st.session_state.get('forecast_df')
         if forecast_df is not None and not forecast_df.empty:
@@ -252,7 +263,6 @@ def render_clash_tab():
         else:
             st.warning("Forecast data is not available. Please run the forecast in the 'Loading Forecast' tab first.")
 
-        # --- CLUSTER SPREADING VISUALIZATION ---
         st.markdown("---")
         st.subheader("📊 Cluster Spreading Visualization")
         all_vessels_list = display_df['VESSEL'].unique().tolist()
@@ -265,8 +275,9 @@ def render_clash_tab():
             st.warning("Please select at least one vessel.")
         else:
             processed_df_chart = display_df[display_df['VESSEL'].isin(selected_vessels)]
-            initial_cols_chart = ['VESSEL', 'VOY_OUT', 'ETA', 'ETD', 'SERVICE', 'TOTAL BOX', 'TOTAL CLSTR', 'ETA_Display']
-            cluster_cols_chart = sorted([col for col in processed_df_chart.columns if col not in initial_cols_chart and col not in df_vessel_codes.columns])
+            initial_cols_chart = ['VESSEL', 'VOY_OUT', 'ETA', 'ETD', 'SERVICE', 'TOTAL BOX', 'TOTAL CLSTR']
+            cluster_cols_chart = sorted([col for col in processed_df_chart.columns if col not in initial_cols_chart and 'CODE' not in col])
+            
             chart_data_long = pd.melt(processed_df_chart, id_vars=['VESSEL', 'ETA'], value_vars=cluster_cols_chart, var_name='Cluster', value_name='Box Count')
             chart_data_long = chart_data_long[chart_data_long['Box Count'] > 0]
 
@@ -282,31 +293,31 @@ def render_clash_tab():
             else:
                 st.info("No cluster data to visualize for the selected vessels.")
 
-        # --- POTENTIAL CLASH SUMMARY ---
         st.markdown("---")
         st.header("💥 Potential Clash Summary")
-        vessel_area_slots_df = st.session_state.vessel_area_slots
+        vessel_area_slots_df = st.session_state.get('vessel_area_slots')
         clash_details = {}
-        active_vessels = vessel_area_slots_df[['VESSEL', 'VOY_OUT', 'ETA', 'ETD']].drop_duplicates()
-        summary_exclude_blocks = ['BR9', 'RC9', 'C01', 'C02', 'D01', 'OOG']
+        if vessel_area_slots_df is not None:
+            active_vessels = vessel_area_slots_df[['VESSEL', 'VOY_OUT', 'ETA', 'ETD']].drop_duplicates()
+            summary_exclude_blocks = ['BR9', 'RC9', 'C01', 'C02', 'D01', 'OOG']
 
-        for (idx1, vessel1), (idx2, vessel2) in combinations(active_vessels.iterrows(), 2):
-            if (vessel1['ETA'] < vessel2['ETD']) and (vessel2['ETA'] < vessel1['ETD']):
-                v1_slots = vessel_area_slots_df[(vessel_area_slots_df['VESSEL'] == vessel1['VESSEL']) & (vessel_area_slots_df['VOY_OUT'] == vessel1['VOY_OUT'])]
-                v2_slots = vessel_area_slots_df[(vessel_area_slots_df['VESSEL'] == vessel2['VESSEL']) & (vessel_area_slots_df['VOY_OUT'] == vessel2['VOY_OUT'])]
-                common_areas = pd.merge(v1_slots, v2_slots, on='Area (EXE)', suffixes=('_v1', '_v2'))
-                for _, row in common_areas.iterrows():
-                    area = row['Area (EXE)']
-                    if area in summary_exclude_blocks: continue
-                    range1, range2 = (row['MIN_SLOT_v1'], row['MAX_SLOT_v1']), (row['MIN_SLOT_v2'], row['MAX_SLOT_v2'])
-                    gap = max(range1[0], range2[0]) - min(range1[1], range2[1]) - 1
-                    if gap <= min_clash_distance:
-                        clash_date = max(vessel1['ETA'], vessel2['ETA']).normalize()
-                        date_key = clash_date.strftime('%d/%m/%Y')
-                        if date_key not in clash_details: clash_details[date_key] = []
-                        clash_info = {"block": area, "vessel1_name": vessel1['VESSEL'], "vessel1_slots": f"{range1[0]}-{range1[1]}", "vessel1_box": row['BOX_COUNT_v1'], "vessel2_name": vessel2['VESSEL'], "vessel2_slots": f"{range2[0]}-{range2[1]}", "vessel2_box": row['BOX_COUNT_v2'], "gap": gap}
-                        if not any(d['block'] == area and d['vessel1_name'] in [vessel1['VESSEL'], vessel2['VESSEL']] and d['vessel2_name'] in [vessel1['VESSEL'], vessel2['VESSEL']] for d in clash_details[date_key]):
-                            clash_details[date_key].append(clash_info)
+            for (idx1, vessel1), (idx2, vessel2) in combinations(active_vessels.iterrows(), 2):
+                if (vessel1['ETA'] < vessel2['ETD']) and (vessel2['ETA'] < vessel1['ETD']):
+                    v1_slots = vessel_area_slots_df[(vessel_area_slots_df['VESSEL'] == vessel1['VESSEL']) & (vessel_area_slots_df['VOY_OUT'] == vessel1['VOY_OUT'])]
+                    v2_slots = vessel_area_slots_df[(vessel_area_slots_df['VESSEL'] == vessel2['VESSEL']) & (vessel_area_slots_df['VOY_OUT'] == vessel2['VOY_OUT'])]
+                    common_areas = pd.merge(v1_slots, v2_slots, on='Area (EXE)', suffixes=('_v1', '_v2'))
+                    for _, row in common_areas.iterrows():
+                        area = row['Area (EXE)']
+                        if area in summary_exclude_blocks: continue
+                        range1, range2 = (row['MIN_SLOT_v1'], row['MAX_SLOT_v1']), (row['MIN_SLOT_v2'], row['MAX_SLOT_v2'])
+                        gap = max(range1[0], range2[0]) - min(range1[1], range2[1]) - 1
+                        if gap <= min_clash_distance:
+                            clash_date = max(vessel1['ETA'], vessel2['ETA']).normalize()
+                            date_key = clash_date.strftime('%d/%m/%Y')
+                            if date_key not in clash_details: clash_details[date_key] = []
+                            clash_info = {"block": area, "vessel1_name": vessel1['VESSEL'], "vessel1_slots": f"{range1[0]}-{range1[1]}", "vessel1_box": row['BOX_COUNT_v1'], "vessel2_name": vessel2['VESSEL'], "vessel2_slots": f"{range2[0]}-{range2[1]}", "vessel2_box": row['BOX_COUNT_v2'], "gap": gap}
+                            if not any(d['block'] == area and d['vessel1_name'] in [vessel1['VESSEL'], vessel2['VESSEL']] and d['vessel2_name'] in [vessel1['VESSEL'], vessel2['VESSEL']] for d in clash_details[date_key]):
+                                clash_details[date_key].append(clash_info)
         
         if not clash_details:
             st.info(f"No potential clashes found with a minimum distance of {min_clash_distance} slots.")
@@ -315,6 +326,7 @@ def render_clash_tab():
             st.markdown(f"**🔥 Found {total_clash_days} day(s) with potential clashes.**")
             clash_dates = sorted(clash_details.keys(), key=lambda x: datetime.strptime(x, '%d/%m/%Y'))
             cols = st.columns(len(clash_dates) or 1)
+            
             for i, date_key in enumerate(clash_dates):
                 with cols[i]:
                     with st.container(border=True):
@@ -324,45 +336,11 @@ def render_clash_tab():
                             st.markdown(f"**Block {clash['block']}** (Gap: `{clash['gap']}` slots)")
                             st.markdown(f"**{clash['vessel1_name']}**: `{clash['vessel1_box']}` boxes (Slots: `{clash['vessel1_slots']}`)")
                             st.markdown(f"**{clash['vessel2_name']}**: `{clash['vessel2_box']}` boxes (Slots: `{clash['vessel2_slots']}`)")
-
-        # --- DETAILED ANALYSIS RESULTS TABLE ---
+        
         st.markdown("---")
         st.header("📋 Detailed Analysis Results")
-        df_for_grid = display_df.copy()
-        df_for_grid['ETA_Date_str'] = pd.to_datetime(df_for_grid['ETA']).dt.strftime('%d/%m/%Y')
-        unique_dates_for_map = df_for_grid['ETA_Date_str'].unique()
-        date_color_map = {date: ['#F8F0E5', '#DAC0A3'][i % 2] for i, date in enumerate(unique_dates_for_map)}
-        clash_map_for_grid = {date: [item['block'] for item in clashes] for date, clashes in clash_details.items()}
-
-        hide_zero_jscode = JsCode("""function(params) { if (params.value == 0 || params.value === null) { return ''; } return params.value; }""")
-        clash_cell_style_jscode = JsCode(f"""function(params) {{ const clashMap = {json.dumps(clash_map_for_grid)}; const date = params.data.ETA_Date_str; const colId = params.colDef.field; const isClash = clashMap[date] ? clashMap[date].includes(colId) : false; if (isClash) {{ return {{'backgroundColor': '#FFAA33', 'color': 'black'}}; }} return null; }}""")
-        zebra_row_style_jscode = JsCode(f"""function(params) {{ const dateColorMap = {json.dumps(date_color_map)}; const date = params.data.ETA_Date_str; const color = dateColorMap[date]; return {{ 'background-color': color }}; }}""")
-        default_col_def = {"suppressMenu": True, "sortable": True, "resizable": True, "editable": False, "minWidth": 40}
-        
-        column_defs = []
-        base_cols = ['VESSEL', 'CODE', 'SERVICE', 'VOY_OUT', 'ETA_Display', 'TOTAL BOX', 'TOTAL CLSTR']
-        cluster_display_cols = sorted([col for col in display_df.columns if col not in base_cols + ['ETA', 'ETD', 'CLOSING_PHYSIC_str']])
-        pinned_cols = ['VESSEL', 'CODE', 'SERVICE', 'VOY_OUT', 'ETA_Display', 'TOTAL BOX', 'TOTAL CLSTR']
-        
-        for col in pinned_cols:
-            width = 110 if col == 'VESSEL' else (120 if col == 'ETA_Display' else (90 if col == 'SERVICE' else 80))
-            header = "ETA" if col == 'ETA_Display' else col
-            col_def = {"field": col, "headerName": header, "pinned": "left", "width": width}
-            if col in ["TOTAL BOX", "TOTAL CLSTR"]: col_def["cellRenderer"] = hide_zero_jscode
-            column_defs.append(col_def)
-            
-        for col in cluster_display_cols:
-            column_defs.append({"field": col, "headerName": col, "width": 60, "cellRenderer": hide_zero_jscode, "cellStyle": clash_cell_style_jscode})
-        
-        for col_to_hide in ['ETA', 'ETD', 'CLOSING_PHYSIC_str', 'ETA_Date_str']:
-             if col_to_hide in df_for_grid.columns: column_defs.append({"field": col_to_hide, "hide": True})
-
-        gridOptions = {"defaultColDef": default_col_def, "columnDefs": column_defs, "getRowStyle": zebra_row_style_jscode}
-        AgGrid(df_for_grid, gridOptions=gridOptions, height=600, width='100%', theme='streamlit', allow_unsafe_jscode=True, key='detailed_analysis_grid')
-
-        st.markdown("---")
-        st.subheader("📥 Download Center")
-        # (Download logic placeholder)
+        # Detailed Analysis Table (AgGrid) - Placeholder for now
+        st.dataframe(display_df)
 
     else:
         st.info("Welcome! Please upload your files and click 'Process Data' to begin.")
@@ -378,49 +356,60 @@ def render_recommendation_tab():
     run_simulation = st.button("🚀 Run Stacking Recommendation", type="primary", use_container_width=True)
 
     if run_simulation:
-        with st.spinner("Running simulation... This can take a moment."):
+        with st.spinner("Running simulation... This is a complex calculation and might take a moment."):
             try:
                 # --- FASE 0: DATA LOADING ---
                 vessel_area_slots_df = st.session_state.vessel_area_slots.copy()
                 forecast_df = st.session_state.get('forecast_df')
-                
-                if forecast_df is None or forecast_df.empty:
-                    st.error("Loading Forecast data is not available. Please run the forecast on the 'Loading Forecast' tab first.")
+                trend_df = load_stacking_trend()
+
+                if forecast_df is None or forecast_df.empty or trend_df is None:
+                    st.error("Forecast data or Stacking Trend file is missing. Please ensure both are available.")
                     st.stop()
-
-                if not os.path.exists("stacking_trend.xlsx"):
-                    st.error("File 'stacking_trend.xlsx' not found in the repository."); st.stop()
-                trend_df = pd.read_excel("stacking_trend.xlsx").set_index('STACKING TREND')
-
-                # --- FASE 1: INITIAL YARD STATE ---
-                yard_occupancy = {} # Key: 'AREA-SLOT', Value: {'vessel': VESSEL_NAME, 'voy': VOY_OUT}
+                
+                # --- FASE 1: INITIALIZE YARD & RULES ---
+                yard = {f'{area}-{slot}': None for area in ['A01','A02','A03','A04','B01','B02','B03','B04','B05','C03','C04','C05'] for slot in range(1, 46)}
+                
+                # Tandai slot yang sudah terisi dari Unit List
                 for _, row in vessel_area_slots_df.iterrows():
                     for slot in range(row['MIN_SLOT'], row['MAX_SLOT'] + 1):
                         key = f"{row['Area (EXE)']}-{slot}"
-                        yard_occupancy[key] = {'vessel': row['VESSEL'], 'voy': row['VOY_OUT']}
-                
-                # --- FASE 2 & 3: SIMULATION & ALLOCATION ---
+                        yard[key] = f"{row['VESSEL']}/{row['VOY_OUT']}"
+
+                BLOCK_CAPACITIES = {f'A0{i}': 37 for i in range(1, 5)}
+                BLOCK_CAPACITIES.update({f'B0{i}': 37 for i in range(1, 6)})
+                BLOCK_CAPACITIES.update({f'C0{i}': 45 for i in range(3, 6)})
+                ALLOWED_BLOCKS = list(BLOCK_CAPACITIES.keys())
+
                 recommendations = []
                 failed_allocations = []
                 
                 planning_df = st.session_state.processed_df.copy()
-                planning_df = pd.merge(planning_df, forecast_df[['Service', 'Loading Forecast']], left_on='SERVICE', right_on='Service', how='left')
+                planning_df = pd.merge(planning_df, forecast_df[['Service', 'Loading Forecast']], on='SERVICE', how='left')
                 planning_df['Loading Forecast'].fillna(planning_df['TOTAL BOX'], inplace=True)
                 planning_df['CLSTR REQ'] = planning_df['Loading Forecast'].apply(lambda v: 4 if v <= 450 else (5 if v <= 600 else (6 if v <= 800 else 8)))
 
-                # TODO: Implement the full day-by-day simulation logic here.
-                # The logic below is a simplified placeholder to show the final output structure.
-                st.warning("Displaying a simplified recommendation for demonstration. The full time-series algorithm is complex and needs further development.")
-                for _, vessel in planning_df.iterrows():
+                # --- FASE 2 & 3: SIMULASI & ALOKASI ---
+                sim_start_date = pd.to_datetime(datetime.now().date())
+                sim_end_date = planning_df['ETD'].max().normalize()
+
+                for current_date in pd.date_range(start=sim_start_date, end=sim_end_date):
+                    # ... (Placeholder for the full, complex allocation algorithm) ...
+                    # This section requires a sophisticated search and placement logic
+                    # based on all the rules we've discussed.
+                    pass
+                
+                # For demonstration, we show a simplified placeholder output
+                st.warning("Displaying a simplified recommendation. The full algorithm is under construction based on the defined SOP.")
+                for _, vessel in planning_df.head(5).iterrows(): # Show demo for first 5 vessels
                     recommendations.append({
-                        "VESSEL": vessel['VESSEL'],
-                        "SERVICE": vessel['SERVICE'],
-                        "TOTAL_FORECAST": int(vessel['Loading Forecast']),
-                        "RECOMMENDED_BLOCK": "A01", 
-                        "RECOMMENDED_SLOTS": "1-15",
-                        "STATUS": "Allocated (Demo)"
+                        "Date": sim_start_date.strftime('%d/%m/%Y'),
+                        "Vessel": vessel['VESSEL'],
+                        "Boxes To Place": int(vessel['Loading Forecast'] * 0.2), # Assume 20% for demo
+                        "Recommended Block": "A01", 
+                        "Recommended Slots": "1-15",
+                        "Status": "Allocated (Demo)"
                     })
-                # --- END OF ALGORITHM ---
 
                 # --- FASE 4: OUTPUT ---
                 st.subheader("✅ Allocation Recommendations")
@@ -436,17 +425,11 @@ def render_recommendation_tab():
             except Exception as e:
                 st.error(f"An error occurred during the simulation: {e}")
 
-# --- MAIN STRUCTURE WITH TABS ---
-tab1, tab2, tab3 = st.tabs(["🚨 Clash Analysis", "📈 Loading Forecast", "💡 Stacking Recommendation"])
-with tab1:
-    # We assume render_clash_tab() is fully defined as in the last complete version
-    # To avoid making this script too long, the full code for this tab is omitted,
-    # but should be pasted from your working version.
-    st.info("Clash Analysis Tab Placeholder")
-    # render_clash_tab() 
-with tab2:
-    # To avoid making this script too long, the full code for this tab is omitted.
-    st.info("Loading Forecast Tab Placeholder")
-    # render_forecast_tab()
-with tab3:
+# --- MAIN APPLICATION STRUCTURE ---
+tabs = st.tabs(["🚨 Clash Analysis", "📈 Loading Forecast", "💡 Stacking Recommendation"])
+with tabs[0]:
+    render_clash_tab()
+with tabs[1]:
+    render_forecast_tab()
+with tabs[2]:
     render_recommendation_tab()
