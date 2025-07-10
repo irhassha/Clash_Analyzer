@@ -63,6 +63,7 @@ def create_time_features(df):
     return df_copy
 
 @st.cache_data
+
 def run_per_service_rf_forecast(_df_history):
     all_results = []
     unique_services = _df_history['service'].unique()
@@ -117,8 +118,6 @@ def load_vessel_codes_from_repo(possible_names=['vessel codes.xlsx', 'vessel_cod
             except Exception as e:
                 st.error(f"Failed to read file '{filename}': {e}"); return None
     st.error(f"Vessel codes file not found."); return None
-
-# --- RENDER FUNCTIONS FOR EACH TAB ---
 
 def render_forecast_tab():
     st.header("📈 Loading Forecast with Machine Learning")
@@ -202,10 +201,13 @@ def render_clash_tab():
                     pivot_for_display['TOTAL BOX'] = pivot_for_display.sum(axis=1)
                     pivot_for_display['TOTAL CLSTR'] = (pivot_for_display > 0).sum(axis=1)
                     pivot_for_display.reset_index(inplace=True)
+                    pivot_for_display['ETA_Display'] = pivot_for_display['ETA'].dt.strftime('%d/%m/%Y %H:%M')
+                    pivot_for_display['CLOSING_PHYSIC_str'] = pivot_for_display.get('CLOSING PHYSIC', pd.Series(pd.NaT, index=pivot_for_display.index)).dt.strftime('%d/%m/%Y %H:%M')
                     
                     st.session_state.processed_df = pivot_for_display.sort_values(by='ETA', ascending=True)
                     st.session_state.vessel_area_slots = vessel_area_slots
                     st.success("Data processed successfully!")
+
                 except Exception as e:
                     st.error(f"An error occurred during processing: {e}"); st.session_state.processed_df = None
         else:
@@ -263,9 +265,8 @@ def render_clash_tab():
             st.warning("Please select at least one vessel.")
         else:
             processed_df_chart = display_df[display_df['VESSEL'].isin(selected_vessels)]
-            initial_cols_chart = ['VESSEL', 'VOY_OUT', 'ETA', 'ETD', 'SERVICE', 'TOTAL BOX', 'TOTAL CLSTR']
-            cluster_cols_chart = sorted([col for col in processed_df_chart.columns if col not in initial_cols_chart and 'CODE' not in col and 'PHYSIC' not in col])
-            
+            initial_cols_chart = ['VESSEL', 'VOY_OUT', 'ETA', 'ETD', 'SERVICE', 'TOTAL BOX', 'TOTAL CLSTR', 'ETA_Display']
+            cluster_cols_chart = sorted([col for col in processed_df_chart.columns if col not in initial_cols_chart and col not in df_vessel_codes.columns])
             chart_data_long = pd.melt(processed_df_chart, id_vars=['VESSEL', 'ETA'], value_vars=cluster_cols_chart, var_name='Cluster', value_name='Box Count')
             chart_data_long = chart_data_long[chart_data_long['Box Count'] > 0]
 
@@ -284,29 +285,28 @@ def render_clash_tab():
         # --- POTENTIAL CLASH SUMMARY ---
         st.markdown("---")
         st.header("💥 Potential Clash Summary")
-        vessel_area_slots_df = st.session_state.get('vessel_area_slots')
+        vessel_area_slots_df = st.session_state.vessel_area_slots
         clash_details = {}
-        if vessel_area_slots_df is not None:
-            active_vessels = vessel_area_slots_df[['VESSEL', 'VOY_OUT', 'ETA', 'ETD']].drop_duplicates()
-            summary_exclude_blocks = ['BR9', 'RC9', 'C01', 'C02', 'D01', 'OOG']
+        active_vessels = vessel_area_slots_df[['VESSEL', 'VOY_OUT', 'ETA', 'ETD']].drop_duplicates()
+        summary_exclude_blocks = ['BR9', 'RC9', 'C01', 'C02', 'D01', 'OOG']
 
-            for (idx1, vessel1), (idx2, vessel2) in combinations(active_vessels.iterrows(), 2):
-                if (vessel1['ETA'] < vessel2['ETD']) and (vessel2['ETA'] < vessel1['ETD']):
-                    v1_slots = vessel_area_slots_df[(vessel_area_slots_df['VESSEL'] == vessel1['VESSEL']) & (vessel_area_slots_df['VOY_OUT'] == vessel1['VOY_OUT'])]
-                    v2_slots = vessel_area_slots_df[(vessel_area_slots_df['VESSEL'] == vessel2['VESSEL']) & (vessel_area_slots_df['VOY_OUT'] == vessel2['VOY_OUT'])]
-                    common_areas = pd.merge(v1_slots, v2_slots, on='Area (EXE)', suffixes=('_v1', '_v2'))
-                    for _, row in common_areas.iterrows():
-                        area = row['Area (EXE)']
-                        if area in summary_exclude_blocks: continue
-                        range1, range2 = (row['MIN_SLOT_v1'], row['MAX_SLOT_v1']), (row['MIN_SLOT_v2'], row['MAX_SLOT_v2'])
-                        gap = max(range1[0], range2[0]) - min(range1[1], range2[1]) - 1
-                        if gap <= min_clash_distance:
-                            clash_date = max(vessel1['ETA'], vessel2['ETA']).normalize()
-                            date_key = clash_date.strftime('%d/%m/%Y')
-                            if date_key not in clash_details: clash_details[date_key] = []
-                            clash_info = {"block": area, "vessel1_name": vessel1['VESSEL'], "vessel1_slots": f"{range1[0]}-{range1[1]}", "vessel1_box": row['BOX_COUNT_v1'], "vessel2_name": vessel2['VESSEL'], "vessel2_slots": f"{range2[0]}-{range2[1]}", "vessel2_box": row['BOX_COUNT_v2'], "gap": gap}
-                            if not any(d['block'] == area and d['vessel1_name'] in [vessel1['VESSEL'], vessel2['VESSEL']] and d['vessel2_name'] in [vessel1['VESSEL'], vessel2['VESSEL']] for d in clash_details[date_key]):
-                                clash_details[date_key].append(clash_info)
+        for (idx1, vessel1), (idx2, vessel2) in combinations(active_vessels.iterrows(), 2):
+            if (vessel1['ETA'] < vessel2['ETD']) and (vessel2['ETA'] < vessel1['ETD']):
+                v1_slots = vessel_area_slots_df[(vessel_area_slots_df['VESSEL'] == vessel1['VESSEL']) & (vessel_area_slots_df['VOY_OUT'] == vessel1['VOY_OUT'])]
+                v2_slots = vessel_area_slots_df[(vessel_area_slots_df['VESSEL'] == vessel2['VESSEL']) & (vessel_area_slots_df['VOY_OUT'] == vessel2['VOY_OUT'])]
+                common_areas = pd.merge(v1_slots, v2_slots, on='Area (EXE)', suffixes=('_v1', '_v2'))
+                for _, row in common_areas.iterrows():
+                    area = row['Area (EXE)']
+                    if area in summary_exclude_blocks: continue
+                    range1, range2 = (row['MIN_SLOT_v1'], row['MAX_SLOT_v1']), (row['MIN_SLOT_v2'], row['MAX_SLOT_v2'])
+                    gap = max(range1[0], range2[0]) - min(range1[1], range2[1]) - 1
+                    if gap <= min_clash_distance:
+                        clash_date = max(vessel1['ETA'], vessel2['ETA']).normalize()
+                        date_key = clash_date.strftime('%d/%m/%Y')
+                        if date_key not in clash_details: clash_details[date_key] = []
+                        clash_info = {"block": area, "vessel1_name": vessel1['VESSEL'], "vessel1_slots": f"{range1[0]}-{range1[1]}", "vessel1_box": row['BOX_COUNT_v1'], "vessel2_name": vessel2['VESSEL'], "vessel2_slots": f"{range2[0]}-{range2[1]}", "vessel2_box": row['BOX_COUNT_v2'], "gap": gap}
+                        if not any(d['block'] == area and d['vessel1_name'] in [vessel1['VESSEL'], vessel2['VESSEL']] and d['vessel2_name'] in [vessel1['VESSEL'], vessel2['VESSEL']] for d in clash_details[date_key]):
+                            clash_details[date_key].append(clash_info)
         
         if not clash_details:
             st.info(f"No potential clashes found with a minimum distance of {min_clash_distance} slots.")
@@ -324,19 +324,48 @@ def render_clash_tab():
                             st.markdown(f"**Block {clash['block']}** (Gap: `{clash['gap']}` slots)")
                             st.markdown(f"**{clash['vessel1_name']}**: `{clash['vessel1_box']}` boxes (Slots: `{clash['vessel1_slots']}`)")
                             st.markdown(f"**{clash['vessel2_name']}**: `{clash['vessel2_box']}` boxes (Slots: `{clash['vessel2_slots']}`)")
-        
+
+        # --- DETAILED ANALYSIS RESULTS TABLE ---
         st.markdown("---")
         st.header("📋 Detailed Analysis Results")
-        # Detailed Analysis Table (AgGrid) - Placeholder for now
-        st.dataframe(display_df)
+        df_for_grid = display_df.copy()
+        df_for_grid['ETA_Date_str'] = pd.to_datetime(df_for_grid['ETA']).dt.strftime('%d/%m/%Y')
+        unique_dates_for_map = df_for_grid['ETA_Date_str'].unique()
+        date_color_map = {date: ['#F8F0E5', '#DAC0A3'][i % 2] for i, date in enumerate(unique_dates_for_map)}
+        clash_map_for_grid = {date: [item['block'] for item in clashes] for date, clashes in clash_details.items()}
+
+        hide_zero_jscode = JsCode("""function(params) { if (params.value == 0 || params.value === null) { return ''; } return params.value; }""")
+        clash_cell_style_jscode = JsCode(f"""function(params) {{ const clashMap = {json.dumps(clash_map_for_grid)}; const date = params.data.ETA_Date_str; const colId = params.colDef.field; const isClash = clashMap[date] ? clashMap[date].includes(colId) : false; if (isClash) {{ return {{'backgroundColor': '#FFAA33', 'color': 'black'}}; }} return null; }}""")
+        zebra_row_style_jscode = JsCode(f"""function(params) {{ const dateColorMap = {json.dumps(date_color_map)}; const date = params.data.ETA_Date_str; const color = dateColorMap[date]; return {{ 'background-color': color }}; }}""")
+        default_col_def = {"suppressMenu": True, "sortable": True, "resizable": True, "editable": False, "minWidth": 40}
+        
+        column_defs = []
+        base_cols = ['VESSEL', 'CODE', 'SERVICE', 'VOY_OUT', 'ETA_Display', 'TOTAL BOX', 'TOTAL CLSTR']
+        cluster_display_cols = sorted([col for col in display_df.columns if col not in base_cols + ['ETA', 'ETD', 'CLOSING_PHYSIC_str']])
+        pinned_cols = ['VESSEL', 'CODE', 'SERVICE', 'VOY_OUT', 'ETA_Display', 'TOTAL BOX', 'TOTAL CLSTR']
+        
+        for col in pinned_cols:
+            width = 110 if col == 'VESSEL' else (120 if col == 'ETA_Display' else (90 if col == 'SERVICE' else 80))
+            header = "ETA" if col == 'ETA_Display' else col
+            col_def = {"field": col, "headerName": header, "pinned": "left", "width": width}
+            if col in ["TOTAL BOX", "TOTAL CLSTR"]: col_def["cellRenderer"] = hide_zero_jscode
+            column_defs.append(col_def)
+            
+        for col in cluster_display_cols:
+            column_defs.append({"field": col, "headerName": col, "width": 60, "cellRenderer": hide_zero_jscode, "cellStyle": clash_cell_style_jscode})
+        
+        for col_to_hide in ['ETA', 'ETD', 'CLOSING_PHYSIC_str', 'ETA_Date_str']:
+             if col_to_hide in df_for_grid.columns: column_defs.append({"field": col_to_hide, "hide": True})
+
+        gridOptions = {"defaultColDef": default_col_def, "columnDefs": column_defs, "getRowStyle": zebra_row_style_jscode}
+        AgGrid(df_for_grid, gridOptions=gridOptions, height=600, width='100%', theme='streamlit', allow_unsafe_jscode=True, key='detailed_analysis_grid')
 
         st.markdown("---")
         st.subheader("📥 Download Center")
-        # Download Center Logic - Placeholder for now
+        # (Download logic placeholder)
 
     else:
         st.info("Welcome! Please upload your files and click 'Process Data' to begin.")
-
 
 def render_recommendation_tab():
     st.header("💡 Stacking Recommendation Simulation")
