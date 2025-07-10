@@ -173,8 +173,11 @@ def render_clash_tab():
                     df_unit_list.columns = [col.strip() for col in df_unit_list.columns]
 
                     for col in ['ETA', 'ETD', 'CLOSING PHYSIC']:
-                        if col in df_schedule.columns: df_schedule[col] = pd.to_datetime(df_schedule[col], dayfirst=True, errors='coerce')
-                    df_schedule.dropna(subset=['ETA', 'ETD'], inplace=True,
+                        if col in df_schedule.columns:
+                            df_schedule[col] = pd.to_datetime(df_schedule[col], dayfirst=True, errors='coerce')
+                    
+                    # Perbaikan: Menghapus baris dengan ETA atau ETD kosong
+                    df_schedule.dropna(subset=['ETA', 'ETD'], inplace=True)
                     
                     if 'Row/bay (EXE)' not in df_unit_list.columns:
                         st.error("File 'Unit List' must contain a 'Row/bay (EXE)' column for detailed clash detection."); st.stop()
@@ -197,6 +200,7 @@ def render_clash_tab():
                     vessel_area_slots = filtered_data.groupby(['VESSEL', 'VOY_OUT', 'ETA', 'ETD', 'SERVICE', 'Area (EXE)']).agg(MIN_SLOT=('SLOT', 'min'), MAX_SLOT=('SLOT', 'max'), BOX_COUNT=('SLOT', 'count')).reset_index()
 
                     pivot_for_display = vessel_area_slots.pivot_table(index=['VESSEL', 'VOY_OUT', 'ETA', 'ETD', 'SERVICE'], columns='Area (EXE)', values='BOX_COUNT', fill_value=0)
+                    
                     pivot_for_display['TOTAL BOX'] = pivot_for_display.sum(axis=1)
                     pivot_for_display['TOTAL CLSTR'] = (pivot_for_display > 0).sum(axis=1)
                     pivot_for_display.reset_index(inplace=True)
@@ -325,21 +329,26 @@ def render_clash_tab():
                             st.markdown(f"**Block {clash['block']}** (Gap: `{clash['gap']}` slots)")
                             st.markdown(f"**{clash['vessel1_name']}**: `{clash['vessel1_box']}` boxes (Slots: `{clash['vessel1_slots']}`)")
                             st.markdown(f"**{clash['vessel2_name']}**: `{clash['vessel2_box']}` boxes (Slots: `{clash['vessel2_slots']}`)")
-        
+
         # --- DETAILED ANALYSIS RESULTS (AgGrid) ---
         st.markdown("---")
         st.header("📋 Detailed Analysis Results")
-        # AgGrid rendering logic...
+        # The logic for AgGrid needs to be carefully reconstructed
+        st.dataframe(display_df)
 
     else:
         st.info("Welcome! Please upload your files and click 'Process Data' to begin.")
 
-# --- TABS DEFINITION ---
-tabs = st.tabs(["🚨 Clash Analysis", "📈 Loading Forecast", "💡 Stacking Recommendation"])
-with tabs[0]:
-    render_clash_tab()
-with tabs[1]:
-    render_forecast_tab()
-with tabs[2]:
+def render_recommendation_tab():
     st.header("💡 Stacking Recommendation")
     st.info("This feature is currently under development. Please check back later!")
+
+
+# --- MAIN STRUCTURE WITH TABS ---
+tab1, tab2, tab3 = st.tabs(["🚨 Clash Analysis", "📈 Loading Forecast", "💡 Stacking Recommendation"])
+with tab1:
+    render_clash_tab()
+with tab2:
+    render_forecast_tab()
+with tab3:
+    render_recommendation_tab()
