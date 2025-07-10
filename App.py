@@ -115,7 +115,9 @@ def load_vessel_codes_from_repo(possible_names=['vessel codes.xlsx', 'vessel_cod
     for filename in possible_names:
         if os.path.exists(filename):
             try:
-                return pd.read_excel(filename) if filename.lower().endswith(('.xls', '.xlsx')) else pd.read_csv(filename)
+                df = pd.read_excel(filename) if filename.lower().endswith(('.xls', '.xlsx')) else pd.read_csv(filename)
+                df.columns = [col.strip() for col in df.columns]
+                return df
             except Exception as e:
                 st.error(f"Failed to read file '{filename}': {e}"); return None
     st.error(f"Vessel codes file not found."); return None
@@ -145,6 +147,7 @@ def render_forecast_tab():
     
     if 'forecast_df' in st.session_state and not st.session_state.forecast_df.empty:
         results_df = st.session_state.forecast_df.copy()
+        results_df.rename(columns={'service': 'Service'}, inplace=True) # Standardize to Title Case
         results_df['Loading Forecast'] = results_df['Loading Forecast'].round(2)
         results_df['Margin of Error (± box)'] = results_df['Margin of Error (± box)'].fillna(0).round(2)
         results_df['MAPE (%)'] = results_df['MAPE (%)'].replace([np.inf, -np.inf], 0).fillna(0).round(2)
@@ -219,7 +222,8 @@ def render_clash_tab(process_button, schedule_file, unit_list_file, min_clash_di
             st.warning("Please upload both files.")
 
     if st.session_state.get('processed_df') is not None:
-        display_df = st.session_state.processed_df.copy()        
+        display_df = st.session_state.processed_df.copy()
+        
         st.subheader("🚢 Upcoming Vessel Summary (Today + Next 3 Days)")
         forecast_df = st.session_state.get('forecast_df')
         if forecast_df is not None and not forecast_df.empty:
@@ -318,7 +322,6 @@ def render_clash_tab(process_button, schedule_file, unit_list_file, min_clash_di
             st.markdown(f"**🔥 Found {total_clash_days} day(s) with potential clashes.**")
             clash_dates = sorted(clash_details.keys(), key=lambda x: datetime.strptime(x, '%d/%m/%Y'))
             cols = st.columns(len(clash_dates) or 1)
-            
             for i, date_key in enumerate(clash_dates):
                 with cols[i]:
                     with st.container(border=True):
@@ -331,7 +334,6 @@ def render_clash_tab(process_button, schedule_file, unit_list_file, min_clash_di
         
         st.markdown("---")
         st.header("📋 Detailed Analysis Results")
-        # Detailed Analysis Table (AgGrid) - Placeholder for now
         st.dataframe(display_df)
 
     else:
@@ -480,13 +482,10 @@ def render_recommendation_tab():
 
 
 # --- MAIN APPLICATION STRUCTURE ---
-st.sidebar.header("⚙️ Global Options")
-# (Global options could go here if needed later)
-
 tab1, tab2, tab3 = st.tabs(["🚨 Clash Analysis", "📈 Loading Forecast", "💡 Stacking Recommendation"])
-
 with tab1:
-    render_clash_tab()
+    # Pass arguments to the render function
+    render_clash_tab(st.session_state.get('process_button'), st.session_state.get('schedule_file'), st.session_state.get('unit_list_file'), st.session_state.get('min_clash_distance'))
 with tab2:
     render_forecast_tab()
 with tab3:
