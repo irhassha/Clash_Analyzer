@@ -438,10 +438,17 @@ def render_recommendation_tab():
 
 
 # --- MAIN APPLICATION STRUCTURE ---
+st.sidebar.header("⚙️ Controls")
+schedule_file = st.sidebar.file_uploader("1. Upload Vessel Schedule", type=['xlsx', 'csv'])
+unit_list_file = st.sidebar.file_uploader("2. Upload Unit List", type=['xlsx', 'csv'])
+min_clash_distance = st.sidebar.number_input("Minimum Safe Distance (slots)", min_value=0, value=5, step=1)
+process_button = st.sidebar.button("🚀 Process Data", use_container_width=True, type="primary")
+st.sidebar.button("Reset Data", on_click=reset_data, use_container_width=True)
+
 tab1, tab2, tab3 = st.tabs(["🚨 Clash Analysis", "📈 Loading Forecast", "💡 Stacking Recommendation"])
+
 with tab1:
-    # Pass arguments to the render function
-    render_clash_tab(st.session_state.get('process_button'), st.session_state.get('schedule_file'), st.session_state.get('unit_list_file'), st.session_state.get('min_clash_distance'))
+    render_clash_tab(process_button, schedule_file, unit_list_file, min_clash_distance)
 with tab2:
     render_forecast_tab()
 with tab3:
