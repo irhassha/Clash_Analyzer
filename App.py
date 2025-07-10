@@ -118,6 +118,80 @@ def load_vessel_codes_from_repo(possible_names=['vessel codes.xlsx', 'vessel_cod
                 st.error(f"Failed to read file '{filename}': {e}"); return None
     st.error(f"Vessel codes file not found."); return None
 
+def render_recommendation_tab():
+    """Function to display the stacking recommendation simulation."""
+    st.header("💡 Stacking Recommendation Simulation")
+
+    if 'processed_df' not in st.session_state or st.session_state['processed_df'] is None:
+        st.warning("Please process data on the 'Clash Analysis' tab first.")
+        return
+
+    # --- Tombol untuk menjalankan simulasi ---
+    run_simulation = st.button("🚀 Run Stacking Recommendation", type="primary", use_container_width=True)
+
+    if run_simulation:
+        with st.spinner("Running simulation... This might take a moment."):
+            try:
+                # --- FASE 0: DATA LOADING & PREPARATION ---
+                vessel_area_slots_df = st.session_state.vessel_area_slots.copy()
+                forecast_df = st.session_state.get('forecast_df')
+                
+                if forecast_df is None or forecast_df.empty:
+                    st.error("Loading Forecast data is not available. Please run the forecast on the 'Loading Forecast' tab first.")
+                    st.stop()
+
+                if not os.path.exists("stacking_trend.xlsx"):
+                    st.error("File 'stacking_trend.xlsx' not found in the repository.")
+                    st.stop()
+                trend_df = pd.read_excel("stacking_trend.xlsx").set_index('STACKING TREND')
+
+                # --- FASE 1: INITIAL YARD STATE ---
+                yard_occupancy = {} # Key: 'AREA-SLOT', Value: 'VESSEL/VOY'
+                for _, row in vessel_area_slots_df.iterrows():
+                    for slot in range(row['MIN_SLOT'], row['MAX_SLOT'] + 1):
+                        key = f"{row['Area (EXE)']}-{slot}"
+                        yard_occupancy[key] = f"{row['VESSEL']}/{row['VOY_OUT']}"
+
+                # --- FASE 2: GENERATE DAILY REQUIREMENTS ---
+                recommendations = []
+                failed_allocations = []
+                
+                planning_df = st.session_state.processed_df.copy()
+                planning_df = pd.merge(planning_df, forecast_df[['Service', 'Loading Forecast']], left_on='SERVICE', right_on='Service', how='left')
+                planning_df['Loading Forecast'].fillna(planning_df['TOTAL BOX'], inplace=True)
+                planning_df['CLSTR REQ'] = planning_df['Loading Forecast'].apply(lambda v: 4 if v <= 450 else (5 if v <= 600 else (6 if v <= 800 else 8)))
+
+                sim_start_date = pd.to_datetime(datetime.now().date())
+                sim_end_date = planning_df['ETD'].max().normalize()
+
+                st.write(f"Simulating from **{sim_start_date.strftime('%d/%m/%Y')}** to **{sim_end_date.strftime('%d/%m/%Y')}**...")
+
+                # --- (Placeholder for a more complex allocation algorithm) ---
+                # This is a simplified version to demonstrate the concept
+                for _, vessel in planning_df.iterrows():
+                    recommendations.append({
+                        "VESSEL": vessel['VESSEL'],
+                        "SERVICE": vessel['SERVICE'],
+                        "TOTAL_FORECAST": int(vessel['Loading Forecast']),
+                        "RECOMMENDED_BLOCK": "A01", # Placeholder
+                        "RECOMMENDED_SLOTS": "1-15", # Placeholder
+                        "STATUS": "Allocated (Simplified)"
+                    })
+
+                # --- FASE 4: OUTPUT ---
+                st.subheader("Simulation Results")
+                if recommendations:
+                    st.dataframe(pd.DataFrame(recommendations), use_container_width=True)
+                else:
+                    st.info("No new allocations were recommended in the simulation period.")
+                
+                if failed_allocations:
+                    st.subheader("Failed Allocations (ACTION NEEDED)")
+                    st.dataframe(pd.DataFrame(failed_allocations), use_container_width=True)
+
+            except Exception as e:
+                st.error(f"An error occurred during the simulation: {e}")
+
 def render_forecast_tab():
     st.header("📈 Loading Forecast with Machine Learning")
     st.write("This feature uses a separate **Random Forest** model for each service to provide more accurate predictions.")
