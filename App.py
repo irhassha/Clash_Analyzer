@@ -27,7 +27,7 @@ st.title("Yard Cluster Monitoring")
 # --- Function to reset data in memory ---
 def reset_data():
     """Clears session state and all of Streamlit's internal caches."""
-    keys_to_clear = ['processed_df', 'vessel_area_slots', 'clash_details']
+    keys_to_clear = ['processed_df', 'vessel_area_slots', 'clash_details', 'forecast_df']
     for key in keys_to_clear:
         if key in st.session_state:
             del st.session_state[key]
@@ -170,10 +170,9 @@ def render_forecast_tab():
 def render_clash_tab(process_button, schedule_file, unit_list_file, min_clash_distance):
     df_vessel_codes = load_vessel_codes_from_repo()
     
-    if 'processed_df' not in st.session_state:
-        st.session_state.processed_df = None
-    if 'vessel_area_slots' not in st.session_state:
-        st.session_state.vessel_area_slots = None
+    if 'processed_df' not in st.session_state: st.session_state.processed_df = None
+    if 'vessel_area_slots' not in st.session_state: st.session_state.vessel_area_slots = None
+
 
     if process_button:
         if schedule_file and unit_list_file and (df_vessel_codes is not None and not df_vessel_codes.empty):
@@ -185,9 +184,8 @@ def render_clash_tab(process_button, schedule_file, unit_list_file, min_clash_di
                     df_unit_list = pd.read_excel(unit_list_file) if unit_list_file.name.lower().endswith('.xlsx') else pd.read_csv(unit_list_file)
                     df_unit_list.columns = [col.strip() for col in df_unit_list.columns]
 
-                    for col in ['ETA', 'ETD', 'CLOSING PHYSIC']:
-                        if col in df_schedule.columns:
-                            df_schedule[col] = pd.to_datetime(df_schedule[col], dayfirst=True, errors='coerce')
+                    for col in ['ETA', 'ETD']:
+                        if col in df_schedule.columns: df_schedule[col] = pd.to_datetime(df_schedule[col], dayfirst=True, errors='coerce')
                     df_schedule.dropna(subset=['ETA', 'ETD'], inplace=True)
                     
                     if 'Row/bay (EXE)' not in df_unit_list.columns:
@@ -201,10 +199,15 @@ def render_clash_tab(process_button, schedule_file, unit_list_file, min_clash_di
                     merged_df = pd.merge(df_schedule_with_code, df_unit_list, left_on=['CODE', 'VOY_OUT'], right_on=['Carrier Out', 'Voyage Out'], how='inner')
                     if merged_df.empty: st.warning("No matching data found."); st.stop()
                     
-                    vessel_area_slots = merged_df.groupby(['VESSEL', 'VOY_OUT', 'ETA', 'ETD', 'SERVICE', 'Area (EXE)']).agg(
-                        MIN_SLOT=('SLOT', 'min'), MAX_SLOT=('SLOT', 'max'), BOX_COUNT=('SLOT', 'count')
-                    ).reset_index()
+                    vessel_area_slots = merged_df.groupby(['VESSEL', 'VOY_OUT', 'ETA', 'ETD', 'SERVICE', 'Area (EXE)']).agg(MIN_SLOT=('SLOT', 'min'), MAX_SLOT=('SLOT', 'max'), BOX_COUNT=('SLOT', 'count')).reset_index()
 
+                    pivot_for_display = vessel_area_slots.pivot_table(index=['VESSEL', 'VOY_OUT', 'ETA', 'ETD', 'SERVICE'], columns='Area (EXE)', values='BOX_COUNT', fill_value=0)
+                    
+                    # --- PERBAIKAN DI SINI: Menambahkan kembali kalkulasi TOTAL CLSTR ---
+                    exclude_for_clstr = ['D01', 'C01', 'OOG', 'UNKNOWN', 'BR9', 'RC9']
+                    cluster_cols_for_calc = [col for col in pivot_for_display.columns if col not in exclude_for_clstr]
+                    pivot_for_display['TOTAL CLSTR'] = (pivot_for_display[cluster_cols_for_calc] > 0).sum(axis=1)
+                    # --- AKHIR PERBAIKAN ---
                     pivot_for_display = vessel_area_slots.pivot_table(
                         index=['VESSEL', 'VOY_OUT', 'ETA', 'ETD', 'SERVICE'],
                         columns='Area (EXE)', values='BOX_COUNT', fill_value=0
@@ -344,7 +347,7 @@ def render_clash_tab(process_button, schedule_file, unit_list_file, min_clash_di
     else:
         st.info("Welcome! Please upload your files and click 'Process Data' to begin.")
 
-def render_recommendation_tab():
+def render_recommendation_tab(min_clash_distance):
     st.header("💡 Stacking Recommendation Simulation")
 
     if 'processed_df' not in st.session_state or st.session_state['processed_df'] is None:
@@ -473,7 +476,7 @@ schedule_file = st.sidebar.file_uploader("1. Upload Vessel Schedule", type=['xls
 unit_list_file = st.sidebar.file_uploader("2. Upload Unit List", type=['xlsx', 'csv'], key="unit_list_uploader")
 min_clash_distance = st.sidebar.number_input("Minimum Safe Distance (slots)", min_value=0, value=5, step=1, key="min_clash_dist_input")
 process_button = st.sidebar.button("🚀 Process Data", use_container_width=True, type="primary")
-st.sidebar.button("Reset Data", on_click=reset_data, use_container_width=True, help="Clear all processed data and caches to start fresh.")
+st.sidebar.button("Reset Data", on_click=reset_data, use_container_width=True, help="Clear all processed data and caches.")
 
 tab1, tab2, tab3 = st.tabs(["🚨 Clash Analysis", "📈 Loading Forecast", "💡 Stacking Recommendation"])
 
@@ -482,4 +485,4 @@ with tab1:
 with tab2:
     render_forecast_tab()
 with tab3:
-    render_recommendation_tab()
+    render_recommendation_tab(min_clash_distance)
