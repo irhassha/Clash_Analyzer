@@ -473,7 +473,7 @@ schedule_file = st.sidebar.file_uploader("1. Upload Vessel Schedule", type=['xls
 unit_list_file = st.sidebar.file_uploader("2. Upload Unit List", type=['xlsx', 'csv'], key="unit_list_uploader")
 min_clash_distance = st.sidebar.number_input("Minimum Safe Distance (slots)", min_value=0, value=5, step=1, key="min_clash_dist_input")
 process_button = st.sidebar.button("🚀 Process Data", use_container_width=True, type="primary")
-st.sidebar.button("Reset Data", on_click=reset_data, use_container_width=True, help="Clear all processed data and caches to start fresh.")
+st.sidebar.button("Reset Data", on_click=reset_data, use_container_width=True)
 
 tab1, tab2, tab3 = st.tabs(["🚨 Clash Analysis", "📈 Loading Forecast", "💡 Stacking Recommendation"])
 
@@ -482,4 +482,4 @@ with tab1:
 with tab2:
     render_forecast_tab()
 with tab3:
-    render_recommendation_tab()
+    render_recommendation_tab(min_clash_distance)
