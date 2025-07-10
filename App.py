@@ -347,43 +347,145 @@ def render_clash_tab():
 
 def render_recommendation_tab():
     st.header("💡 Stacking Recommendation Simulation")
-    st.info("This feature provides stacking recommendations to avoid clashes based on the initial yard state and incoming volumes.")
+
     if 'processed_df' not in st.session_state or st.session_state['processed_df'] is None:
         st.warning("Please process data on the 'Clash Analysis' tab first.")
         return
 
+    st.info("This simulation recommends placement for incoming containers based on the initial yard state and incoming volumes.")
     run_simulation = st.button("🚀 Run Stacking Recommendation", type="primary", use_container_width=True)
 
     if run_simulation:
         with st.spinner("Running simulation... This is a complex calculation and might take a moment."):
             try:
+                # --- HELPER FUNCTIONS FOR SIMULATION ---
+                def find_available_space(allocations_in_area, slots_needed, capacity, min_gap):
+                    """Finds a contiguous free space in a given area."""
+                    # Sort allocations by start slot
+                    sorted_allocations = sorted(allocations_in_area, key=lambda x: x['start'])
+                    
+                    # Check space before the first allocation
+                    last_pos = 0
+                    for alloc in sorted_allocations:
+                        # Gap between last position and current allocation's safe zone
+                        free_space_start = last_pos + 1
+                        free_space_end = alloc['start'] - min_gap - 1
+                        if free_space_end - free_space_start + 1 >= slots_needed:
+                            return (free_space_start, free_space_start + slots_needed - 1)
+                        last_pos = alloc['end']
+                    
+                    # Check space after the last allocation
+                    free_space_start = last_pos + min_gap + 1
+                    if capacity - free_space_start + 1 >= slots_needed:
+                        return (free_space_start, free_space_start + slots_needed - 1)
+                        
+                    return None
+
                 # --- FASE 0: DATA LOADING ---
                 vessel_area_slots_df = st.session_state.vessel_area_slots.copy()
                 forecast_df = st.session_state.get('forecast_df')
                 trend_df = load_stacking_trend()
-                
+
                 if forecast_df is None or forecast_df.empty or trend_df is None:
-                    st.error("Forecast data or Stacking Trend file is missing. Please ensure both are available.")
-                    st.stop()
+                    st.error("Forecast data or Stacking Trend file is missing."); st.stop()
 
                 # --- FASE 1: INITIALIZE YARD & RULES ---
                 ALLOWED_BLOCKS = ['A01', 'A02', 'A03', 'A04', 'B01', 'B02', 'B03', 'B04', 'B05', 'C02', 'C03', 'C04', 'C05']
-                yard = {block: [] for block in ALLOWED_BLOCKS}
+                BLOCK_CAPACITIES = {b: 37 if b.startswith(('A', 'B')) else 45 for b in ALLOWED_BLOCKS}
                 
+                yard_occupancy = {block: [] for block in ALLOWED_BLOCKS}
                 for _, row in vessel_area_slots_df.iterrows():
-                    if row['Area (EXE)'] in yard:
-                        yard[row['Area (EXE)']].append({'vessel': row['VESSEL'], 'voy': row['VOY_OUT'], 'start': row['MIN_SLOT'], 'end': row['MAX_SLOT']})
+                    if row['Area (EXE)'] in yard_occupancy:
+                        yard_occupancy[row['Area (EXE)']].append({'vessel': row['VESSEL'], 'voy': row['VOY_OUT'], 'start': row['MIN_SLOT'], 'end': row['MAX_SLOT']})
 
-                # (Placeholder for the full complex algorithm)
-                st.success("Simulation Complete!")
-                st.subheader("✅ Allocation Recommendations (DEMO)")
-                st.dataframe(pd.DataFrame([{
-                    "Date": datetime.now().strftime('%d/%m/%Y'), "Vessel": "BEROLINA C", "Boxes to Place": 50,
-                    "Recommended Block": "A01", "Recommended Slots": "1-10", "Status": "Allocated"
-                }]))
+                # --- FASE 2: GENERATE DAILY REQUIREMENTS ---
+                recommendations = []
+                failed_allocations = []
+                
+                planning_df = st.session_state.processed_df.copy()
+                planning_df.rename(columns={'SERVICE': 'service'}, inplace=True) # Standardize for merge
+                forecast_df.rename(columns={'Service': 'service'}, inplace=True)
+                
+                planning_df = pd.merge(planning_df, forecast_df[['service', 'Loading Forecast']], on='service', how='left')
+                planning_df['Loading Forecast'].fillna(planning_df['TOTAL BOX'], inplace=True)
+                planning_df['CLSTR REQ'] = planning_df['Loading Forecast'].apply(lambda v: 4 if v <= 450 else (5 if v <= 600 else (6 if v <= 800 else 8)))
+                
+                # Create a list of all boxes that need to be placed
+                placement_tasks = []
+                for _, vessel in planning_df.iterrows():
+                    total_boxes_to_place = int(vessel['Loading Forecast'])
+                    # For V1, we place all boxes on the ETA day
+                    placement_tasks.append({
+                        'date': vessel['ETA'].normalize(),
+                        'vessel_info': vessel,
+                        'boxes_needed': total_boxes_to_place
+                    })
+                
+                # Sort tasks by date, then by original ETA
+                sorted_tasks = sorted(placement_tasks, key=lambda x: x['vessel_info']['ETA'])
+
+                # --- FASE 3: ALLOCATION ALGORITHM ---
+                vessel_block_map = {v: set(vessel_area_slots_df[vessel_area_slots_df['VESSEL'] == v]['Area (EXE)'].unique()) for v in planning_df['VESSEL'].unique()}
+
+                for task in sorted_tasks:
+                    vessel = task['vessel_info']
+                    boxes_needed = task['boxes_needed']
+                    vessel_id = f"{vessel['VESSEL']}/{vessel['VOY_OUT']}"
+                    
+                    # This is a simplified allocation logic. A full version would be more complex.
+                    # It tries to find any available block that fits.
+                    
+                    allocated = False
+                    # Search strategy: preferred blocks first, then others
+                    preferred_blocks = list(vessel_block_map.get(vessel['VESSEL'], []))
+                    other_blocks = [b for b in ALLOWED_BLOCKS if b not in preferred_blocks]
+                    search_order = preferred_blocks + other_blocks
+
+                    for block in search_order:
+                        # Check CLUSTER REQ constraint
+                        current_blocks = vessel_block_map[vessel['VESSEL']]
+                        if block not in current_blocks and len(current_blocks) >= vessel['CLSTR REQ']:
+                            continue # Skip if it would violate CLUSTER REQ
+
+                        # Find space
+                        space = find_available_space(yard_occupancy[block], boxes_needed, BLOCK_CAPACITIES[block], min_clash_distance)
+                        
+                        if space:
+                            # Allocate
+                            start_slot, end_slot = space
+                            yard_occupancy[block].append({'vessel': vessel['VESSEL'], 'voy': vessel['VOY_OUT'], 'start': start_slot, 'end': end_slot})
+                            vessel_block_map[vessel['VESSEL']].add(block)
+                            recommendations.append({
+                                "Date": task['date'].strftime('%d/%m/%Y'),
+                                "Vessel": vessel['VESSEL'],
+                                "Boxes to Place": boxes_needed,
+                                "Recommended Block": block,
+                                "Recommended Slots": f"{start_slot}-{end_slot}",
+                                "Status": "Allocated"
+                            })
+                            allocated = True
+                            break # Move to next vessel
+                    
+                    if not allocated:
+                        failed_allocations.append({"Vessel": vessel['VESSEL'], "Boxes to Place": boxes_needed, "Reason": "No suitable block found meeting all constraints."})
+
+                # --- FASE 4: OUTPUT ---
+                st.subheader("✅ Allocation Recommendations")
+                if recommendations:
+                    st.dataframe(pd.DataFrame(recommendations), use_container_width=True)
+                else:
+                    st.info("No allocations were made in this simulation run.")
+                
+                st.subheader("⚠️ Failed Allocations (Manual Action Required)")
+                if failed_allocations:
+                    st.dataframe(pd.DataFrame(failed_allocations), use_container_width=True)
+                else:
+                    st.info("All placement tasks were successfully allocated.")
 
             except Exception as e:
                 st.error(f"An error occurred during the simulation: {e}")
+                st.exception(e) # Show full traceback for debugging
+
 
 # --- MAIN APPLICATION STRUCTURE ---
 tabs = st.tabs(["🚨 Clash Analysis", "📈 Loading Forecast", "💡 Stacking Recommendation"])
