@@ -385,7 +385,9 @@ def render_recommendation_tab():
                 failed_allocations = []
                 
                 planning_df = st.session_state.processed_df.copy()
-                planning_df = pd.merge(planning_df, forecast_df[['SERVICE', 'Loading Forecast']], on='SERVICE', how='left')
+                forecast_df_copy = forecast_df.copy()
+                forecast_df_copy.rename(columns={'service': 'SERVICE'}, inplace=True)
+                planning_df = pd.merge(planning_df, forecast_df_copy[['SERVICE', 'Loading Forecast']], on='SERVICE', how='left')
                 planning_df['Loading Forecast'].fillna(planning_df['TOTAL BOX'], inplace=True)
                 planning_df['CLSTR REQ'] = planning_df['Loading Forecast'].apply(lambda v: 4 if v <= 450 else (5 if v <= 600 else (6 if v <= 800 else 8)))
 
