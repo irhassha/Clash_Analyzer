@@ -455,4 +455,4 @@ with tab1:
 with tab2:
     render_forecast_tab()
 with tab3:
-    render_recommendation_tab()
+    render_recommendation_tab(min_clash_distance)
