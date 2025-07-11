@@ -250,6 +250,8 @@ def render_clash_tab(process_button, schedule_file, unit_list_file, min_clash_di
                 st.info("No vessels scheduled to arrive in the next 4 days.")
         else:
             st.warning("Forecast data is not available. Please run the forecast in the 'Loading Forecast' tab first.")
+
+        
         # --- CLUSTER SPREADING VISUALIZATION ---
         st.markdown("---")
         st.subheader("📊 Cluster Spreading Visualization")
@@ -370,6 +372,19 @@ def render_recommendation_tab(min_clash_distance):
                 trend_df = load_stacking_trend()
                 if forecast_df is None or forecast_df.empty or trend_df is None:
                     st.error("Forecast data or Stacking Trend file is missing."); st.stop()
+
+                                # --- PERBAIKAN DI SINI: Standarisasi nama kolom ---
+                planning_df.columns = [col.lower().replace(' ', '_') for col in planning_df.columns]
+                forecast_df.columns = [col.lower().replace(' ', '_') for col in forecast_df.columns]
+                
+                # Sekarang merge menggunakan nama kolom yang sudah standar
+                planning_df = pd.merge(planning_df, forecast_df[['service', 'loading_forecast']], on='service', how='left')
+                # --- AKHIR PERBAIKAN ---
+
+                planning_df['loading_forecast'].fillna(planning_df['total_box'], inplace=True)
+                planning_df['clstr_req'] = planning_df['loading_forecast'].apply(lambda v: 4 if v <= 450 else (5 if v <= 600 else (6 if v <= 800 else 8)))
+
+                
                 # --- FASE 1: INITIALIZE YARD & RULES ---
                 ALLOWED_BLOCKS = ['A01', 'A02', 'A03', 'A04', 'B01', 'B02', 'B03', 'B04', 'B05', 'C02', 'C03', 'C04', 'C05']
                 BLOCK_CAPACITIES = {b: 37 if b.startswith(('A', 'B')) else 45 for b in ALLOWED_BLOCKS}
