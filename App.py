@@ -27,7 +27,7 @@ st.title("Yard Cluster Monitoring")
 # --- Function to reset data in memory ---
 def reset_data():
     """Clears session state and all of Streamlit's internal caches."""
-    keys_to_clear = ['processed_df', 'vessel_area_slots', 'clash_details', 'forecast_df', 'summary_display']
+    keys_to_clear = ['processed_df', 'vessel_area_slots', 'forecast_df']
     for key in keys_to_clear:
         if key in st.session_state:
             del st.session_state[key]
@@ -37,14 +37,14 @@ def reset_data():
 # --- HELPER & FORECASTING FUNCTIONS ---
 @st.cache_data
 def load_history_data(filename="History Loading.xlsx"):
-    if os.path.exists(filename):
+    if not os.path.exists(filename): return None
         try:
             df = pd.read_excel(filename) if filename.lower().endswith('.xlsx') else pd.read_csv(filename)
             df.columns = [col.strip().lower() for col in df.columns]
             df['ata'] = pd.to_datetime(df['ata'], dayfirst=True, errors='coerce')
             df.dropna(subset=['ata', 'loading', 'service'], inplace=True)
-            df = df[df['loading'] >= 0]
-            return df
+            return df[df['loading'] >= 0]
+            
         except Exception as e:
             st.error(f"Failed to load history file '{filename}': {e}")
             return None
@@ -163,8 +163,9 @@ def render_forecast_tab():
 def render_clash_tab(process_button, schedule_file, unit_list_file, min_clash_distance):
     df_vessel_codes = load_vessel_codes_from_repo()
     
-    for key in ['processed_df', 'vessel_area_slots', 'clash_details']:
-        if key not in st.session_state: st.session_state[key] = None
+    if 'processed_df' not in st.session_state: st.session_state.processed_df = None
+    if 'vessel_area_slots' not in st.session_state: st.session_state.vessel_area_slots = None
+
 
     if process_button:
         if schedule_file and unit_list_file and (df_vessel_codes is not None and not df_vessel_codes.empty):
@@ -201,8 +202,9 @@ def render_clash_tab(process_button, schedule_file, unit_list_file, min_clash_di
                     vessel_area_slots = filtered_data.groupby(['VESSEL', 'VOY_OUT', 'ETA', 'ETD', 'SERVICE', 'Area (EXE)']).agg(MIN_SLOT=('SLOT', 'min'), MAX_SLOT=('SLOT', 'max'), BOX_COUNT=('SLOT', 'count')).reset_index()
 
                     pivot_for_display = vessel_area_slots.pivot_table(index=['VESSEL', 'VOY_OUT', 'ETA', 'ETD', 'SERVICE'], columns='Area (EXE)', values='BOX_COUNT', fill_value=0)
+                    
                     pivot_for_display['TOTAL BOX'] = pivot_for_display.sum(axis=1)
-                    pivot_for_display['TOTAL CLSTR'] = (pivot_for_display > 0).sum(axis=1)
+                    pivot_for_display['TOTAL CLSTR'] = (pivot_for_display > 0).sum(axis=1) # Perbaikan penting
                     pivot_for_display.reset_index(inplace=True)
                     
                     st.session_state.processed_df = pivot_for_display.sort_values(by='ETA', ascending=True)
@@ -311,7 +313,8 @@ def render_clash_tab(process_button, schedule_file, unit_list_file, min_clash_di
         if not clash_details:
             st.info(f"No potential clashes found with a minimum distance of {min_clash_distance} slots.")
         else:
-            st.markdown(f"**🔥 Found {len(clash_details)} day(s) with potential clashes.**")
+            total_clash_days = len(clash_details)
+            st.markdown(f"**🔥 Found {total_clash_days} day(s) with potential clashes.**")
             clash_dates = sorted(clash_details.keys(), key=lambda x: datetime.strptime(x, '%d/%m/%Y'))
             cols = st.columns(len(clash_dates) or 1)
             for i, date_key in enumerate(clash_dates):
@@ -454,6 +457,7 @@ with tab1:
     render_clash_tab(process_button, schedule_file, unit_list_file, min_clash_distance)
 with tab2:
     render_forecast_tab()
+with tab3:
 with tabs[2]:
     min_clash_dist = st.session_state.get('min_clash_dist_input', 5) # Get value from sidebar widget
-    render_recommendation_tab(min_clash_dist)
+    render_recommendation_tab()
