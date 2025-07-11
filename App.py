@@ -455,6 +455,5 @@ with tab1:
 with tab2:
     render_forecast_tab()
 with tab3:
-with tabs[2]:
     min_clash_dist = st.session_state.get('min_clash_dist_input', 5) # Get value from sidebar widget
     render_recommendation_tab()
