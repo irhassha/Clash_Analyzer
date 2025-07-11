@@ -424,7 +424,6 @@ def render_recommendation_tab(min_clash_distance):
                     if not allocated:
                         failed_allocations.append({"Vessel": vessel['vessel'], "Boxes To Place": boxes_to_place, "Reason": "No suitable block found meeting all constraints."})
                 # --- FASE 4: OUTPUT ---
-        st.success("Simulation feature is under construction.")
                 st.subheader("✅ Allocation Recommendations")
                 if recommendations:
                     st.dataframe(pd.DataFrame(recommendations), use_container_width=True)
