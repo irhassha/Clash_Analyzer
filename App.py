@@ -332,40 +332,38 @@ def render_clash_tab(process_button, schedule_file, unit_list_file, min_clash_di
 
 def render_recommendation_tab(min_clash_distance):
     st.header("💡 Stacking Recommendation Simulation")
-    st.info("This feature provides stacking recommendations to avoid clashes.")
+
     if 'processed_df' not in st.session_state or st.session_state['processed_df'] is None:
-        st.warning("Please process data on the 'Clash Analysis' tab first."); return
-    
+        st.warning("Please process data on the 'Clash Analysis' tab first.")
+        return
+
+    st.info("This simulation recommends placement for incoming containers based on the initial yard state and incoming volumes.")
     run_simulation = st.button("🚀 Run Stacking Recommendation", type="primary", use_container_width=True)
+
     if run_simulation:
         with st.spinner("Running simulation... This is a complex calculation and might take a moment."):
             try:
-        # Placeholder for the complex simulation logic
                 # --- HELPER FUNCTION for the simulation ---
                 def find_available_space(allocations_in_area, slots_needed, capacity, min_gap):
-                    if not allocations_in_area:
-                        return (1, slots_needed) if capacity >= slots_needed else None
-                    sorted_allocations = sorted(allocations_in_area, key=lambda x: x['start'])
+                    """Finds a contiguous free space in a given area, respecting gaps."""
+                    # Add boundaries to simplify gap calculation
+                    boundaries = [{'start': 0, 'end': 0}, {'start': capacity + 1, 'end': capacity + 1}]
                     
-                    last_pos = 0
-                    # Check space before the first allocation
-                    if (sorted_allocations[0]['start'] - min_gap - 1) >= slots_needed:
-                        return (1, slots_needed)
+                    # Sort existing allocations by start slot
+                    sorted_allocations = sorted(allocations_in_area + boundaries, key=lambda x: x['start'])
                     
-                    # Check space between allocations
-                    for alloc in sorted_allocations:
-                        free_space_start = last_pos + min_gap + 1
-                        free_space_end = alloc['start'] - min_gap - 1
-                        if free_space_end - free_space_start + 1 >= slots_needed:
-                            return (free_space_start, free_space_start + slots_needed - 1)
-                        last_pos = alloc['end']
-                    
-                    # Check space after the last allocation
-                    free_space_start = last_pos + min_gap + 1
-                    if capacity - free_space_start + 1 >= slots_needed:
-                        return (free_space_start, free_space_start + slots_needed - 1)
+                    for i in range(len(sorted_allocations) - 1):
+                        # Gap between current alloc end and next alloc start
+                        end_of_current_safe_zone = sorted_allocations[i]['end'] + min_gap
+                        start_of_next_safe_zone = sorted_allocations[i+1]['start'] - min_gap
                         
+                        available_slots = start_of_next_safe_zone - end_of_current_safe_zone - 1
+                        
+                        if available_slots >= slots_needed:
+                            start_pos = sorted_allocations[i]['end'] + 1
+                            return (start_pos, start_pos + slots_needed - 1)
                     return None
+
                 # --- FASE 0: DATA LOADING ---
                 vessel_area_slots_df = st.session_state.vessel_area_slots.copy()
                 forecast_df = st.session_state.get('forecast_df')
@@ -379,21 +377,22 @@ def render_recommendation_tab(min_clash_distance):
                 yard_occupancy = {block: [] for block in ALLOWED_BLOCKS}
                 for _, row in vessel_area_slots_df.iterrows():
                     if row['Area (EXE)'] in yard_occupancy:
-                        yard_occupancy[row['Area (EXE)']].append({'vessel': row['VESSEL'], 'voy': row['VOY_OUT'], 'start': row['MIN_SLOT'], 'end': row['MAX_SLOT']})
+                        yard_occupancy[row['Area (EXE)']].append({'vessel': f"{row['VESSEL']}/{row['VOY_OUT']}", 'start': row['MIN_SLOT'], 'end': row['MAX_SLOT']})
                 # --- FASE 2: GENERATE DAILY REQUIREMENTS ---
                 recommendations = []
                 failed_allocations = []
                 
                 planning_df = st.session_state.processed_df.copy()
                 planning_df.rename(columns=str.lower, inplace=True)
-                forecast_df.rename(columns=str.lower, inplace=True)
+                forecast_df.rename(columns={'Service': 'service'}, inplace=True)
                 
                 planning_df = pd.merge(planning_df, forecast_df[['service', 'loading forecast']], on='service', how='left')
                 planning_df['loading forecast'].fillna(planning_df['total box'], inplace=True)
                 planning_df['clstr req'] = planning_df['loading forecast'].apply(lambda v: 4 if v <= 450 else (5 if v <= 600 else (6 if v <= 800 else 8)))
                 # --- FASE 3: ALLOCATION ALGORITHM ---
                 vessel_block_map = {v: set(vessel_area_slots_df[vessel_area_slots_df['VESSEL'] == v]['Area (EXE)'].unique()) for v in planning_df['vessel'].unique()}
-                # Simplified: Place the entire forecast at once, not day-by-day yet
+
+                st.warning("Simulation V1: Allocating total forecast at once. Daily trend logic will be in the next version.")                
                 for _, vessel in planning_df.sort_values(by='eta').iterrows():
                     boxes_to_place = int(vessel['loading forecast']) - int(vessel['total box'])
                     if boxes_to_place <= 0: continue
@@ -413,7 +412,7 @@ def render_recommendation_tab(min_clash_distance):
                         
                         if space:
                             start_slot, end_slot = space
-                            yard_occupancy[block].append({'vessel': vessel['vessel'], 'voy': vessel['voy_out'], 'start': start_slot, 'end': end_slot})
+                            yard_occupancy[block].append({'vessel': vessel_id, 'start': start_slot, 'end': end_slot})
                             vessel_block_map[vessel['vessel']].add(block)
                             
                             recommendations.append({
@@ -442,18 +441,12 @@ def render_recommendation_tab(min_clash_distance):
                 st.exception(e)
 
 # --- MAIN APPLICATION STRUCTURE ---
-st.sidebar.header("⚙️ Controls")
-schedule_file = st.sidebar.file_uploader("1. Upload Vessel Schedule", type=['xlsx', 'csv'], key="schedule_uploader")
-unit_list_file = st.sidebar.file_uploader("2. Upload Unit List", type=['xlsx', 'csv'], key="unit_list_uploader")
-min_clash_distance = st.sidebar.number_input("Minimum Safe Distance (slots)", min_value=0, value=5, step=1, key="min_clash_dist_input")
-process_button = st.sidebar.button("🚀 Process Data", use_container_width=True, type="primary")
-st.sidebar.button("Reset Data", on_click=reset_data, use_container_width=True, help="Clear all processed data and caches.")
+tabs = st.tabs(["🚨 Clash Analysis", "📈 Loading Forecast", "💡 Stacking Recommendation"])
 
-tab1, tab2, tab3 = st.tabs(["🚨 Clash Analysis", "📈 Loading Forecast", "💡 Stacking Recommendation"])
-
-with tab1:
-    render_clash_tab(process_button, schedule_file, unit_list_file, min_clash_distance)
-with tab2:
-    render_forecast_tab()
-with tab3:
-    render_recommendation_tab(min_clash_distance)
+with tabs[0]:
+    render_clash_tab() # Assume this function is fully defined
+with tabs[1]:
+    render_forecast_tab() # Assume this function is fully defined
+with tabs[2]:
+    min_clash_dist = st.session_state.get('min_clash_dist_input', 5) # Get value from sidebar widget
+    render_recommendation_tab(min_clash_dist)
