@@ -189,18 +189,21 @@ def render_clash_tab(process_button, schedule_file, unit_list_file, min_clash_di
                     df_schedule_with_code = pd.merge(df_schedule, df_vessel_codes, left_on="VESSEL", right_on="Description", how="left").rename(columns={"Value": "CODE"})
                     merged_df = pd.merge(df_schedule_with_code, df_unit_list, left_on=['CODE', 'VOY_OUT'], right_on=['Carrier Out', 'Voyage Out'], how='inner')
                     if merged_df.empty: st.warning("No matching data found."); st.stop()
-                    
-                    vessel_area_slots = merged_df.groupby(['VESSEL', 'VOY_OUT', 'ETA', 'ETD', 'SERVICE', 'Area (EXE)']).agg(MIN_SLOT=('SLOT', 'min'), MAX_SLOT=('SLOT', 'max'), BOX_COUNT=('SLOT', 'count')).reset_index()
-                    
-                    pivot_for_display = vessel_area_slots.pivot_table(index=['VESSEL', 'VOY_OUT', 'ETA', 'ETD', 'SERVICE'], columns='Area (EXE)', values='BOX_COUNT', fill_value=0)
-                    
-                    # --- PERBAIKAN DI SINI: Menambahkan kembali kalkulasi TOTAL CLSTR ---
-                    exclude_for_clstr = ['D01', 'C01', 'OOG', 'UNKNOWN', 'BR9', 'RC9']
-                    cluster_cols_for_calc = [col for col in pivot_for_display.columns if col not in exclude_for_clstr]
-                    pivot_for_display['TOTAL CLSTR'] = (pivot_for_display[cluster_cols_for_calc] > 0).sum(axis=1)
-                    pivot_for_display['TOTAL BOX'] = pivot_for_display[cluster_cols_for_calc].sum(axis=1)
+                  
+                    # --- PERBAIKAN DI SINI: Menyaring semua blok non-standar dari awal ---
+                    excluded_areas = [str(i) for i in range(801, 809)] + ['BR9', 'RC9', 'C01', 'D01', 'OOG']
                     # --- AKHIR PERBAIKAN ---
 
+                    merged_df['Area (EXE)'] = merged_df['Area (EXE)'].astype(str)
+                    filtered_data = merged_df[~merged_df['Area (EXE)'].isin(excluded_areas)]
+                    if filtered_data.empty: st.warning("No data left after filtering for excluded areas."); st.stop()
+                    
+                    # --- Data Aggregation ---
+                    vessel_area_slots = filtered_data.groupby(['VESSEL', 'VOY_OUT', 'ETA', 'ETD', 'SERVICE', 'Area (EXE)']).agg(MIN_SLOT=('SLOT', 'min'), MAX_SLOT=('SLOT', 'max'), BOX_COUNT=('SLOT', 'count')).reset_index()
+
+                    pivot_for_display = vessel_area_slots.pivot_table(index=['VESSEL', 'VOY_OUT', 'ETA', 'ETD', 'SERVICE'], columns='Area (EXE)', values='BOX_COUNT', fill_value=0)
+                    pivot_for_display['TOTAL BOX'] = pivot_for_display.sum(axis=1)
+                    pivot_for_display['TOTAL CLSTR'] = (pivot_for_display > 0).sum(axis=1)
                     pivot_for_display.reset_index(inplace=True)
                     
                     st.session_state.processed_df = pivot_for_display.sort_values(by='ETA', ascending=True)
@@ -209,7 +212,7 @@ def render_clash_tab(process_button, schedule_file, unit_list_file, min_clash_di
                 except Exception as e:
                     st.error(f"An error occurred during processing: {e}"); st.session_state.processed_df = None
         else:
-            st.warning("Please upload both files.")
+            st.warning("Please upload both files.")                    
 
     if st.session_state.get('processed_df') is not None:
         display_df = st.session_state.processed_df.copy()
