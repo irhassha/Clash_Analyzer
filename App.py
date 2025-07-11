@@ -189,14 +189,13 @@ def render_clash_tab(process_button, schedule_file, unit_list_file, min_clash_di
                     df_schedule_with_code = pd.merge(df_schedule, df_vessel_codes, left_on="VESSEL", right_on="Description", how="left").rename(columns={"Value": "CODE"})
                     merged_df = pd.merge(df_schedule_with_code, df_unit_list, left_on=['CODE', 'VOY_OUT'], right_on=['Carrier Out', 'Voyage Out'], how='inner')
                     if merged_df.empty: st.warning("No matching data found."); st.stop()
-                  
-                    # --- PERBAIKAN DI SINI: Menyaring semua blok non-standar dari awal ---
-                    excluded_areas = [str(i) for i in range(801, 809)] + ['BR9', 'RC9', 'C01', 'D01', 'OOG']
-                    # --- AKHIR PERBAIKAN ---
-
+                        
+                    # --- PERBAIKAN DI SINI: Satu sumber kebenaran untuk blok yang valid ---
+                    ALLOWED_BLOCKS = ['A01', 'A02', 'A03', 'A04', 'B01', 'B02', 'B03', 'B04', 'B05', 'C03', 'C04', 'C05']
                     merged_df['Area (EXE)'] = merged_df['Area (EXE)'].astype(str)
-                    filtered_data = merged_df[~merged_df['Area (EXE)'].isin(excluded_areas)]
-                    if filtered_data.empty: st.warning("No data left after filtering for excluded areas."); st.stop()
+                    filtered_data = merged_df[merged_df['Area (EXE)'].isin(ALLOWED_BLOCKS)]
+                    if filtered_data.empty: st.warning("No data found in allowed blocks."); st.stop()
+                    # --- AKHIR PERBAIKAN ---         
                     
                     # --- Data Aggregation ---
                     vessel_area_slots = filtered_data.groupby(['VESSEL', 'VOY_OUT', 'ETA', 'ETD', 'SERVICE', 'Area (EXE)']).agg(MIN_SLOT=('SLOT', 'min'), MAX_SLOT=('SLOT', 'max'), BOX_COUNT=('SLOT', 'count')).reset_index()
