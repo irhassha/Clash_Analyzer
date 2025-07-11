@@ -38,18 +38,15 @@ def reset_data():
 @st.cache_data
 def load_history_data(filename="History Loading.xlsx"):
     if not os.path.exists(filename): return None
-        try:
-            df = pd.read_excel(filename) if filename.lower().endswith('.xlsx') else pd.read_csv(filename)
-            df.columns = [col.strip().lower() for col in df.columns]
-            df['ata'] = pd.to_datetime(df['ata'], dayfirst=True, errors='coerce')
-            df.dropna(subset=['ata', 'loading', 'service'], inplace=True)
-            return df[df['loading'] >= 0]
-            
-        except Exception as e:
-            st.error(f"Failed to load history file '{filename}': {e}")
-            return None
-    st.warning(f"History file '{filename}' not found in the repository.")
-    return None
+    try:
+        df = pd.read_excel(filename) if filename.lower().endswith('.xlsx') else pd.read_csv(filename)
+        df.columns = [col.strip().lower() for col in df.columns]
+        df['ata'] = pd.to_datetime(df['ata'], dayfirst=True, errors='coerce')
+        df.dropna(subset=['ata', 'loading', 'service'], inplace=True)
+        return df[df['loading'] >= 0]
+    except Exception as e:
+        st.error(f"Failed to load history file '{filename}': {e}")
+        return None
 
 def create_time_features(df):
     df_copy = df.copy()
