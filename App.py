@@ -129,10 +129,8 @@ def load_stacking_trend(filename="stacking_trend.xlsx"):
         return None
 
 # --- RENDER FUNCTIONS FOR EACH TAB ---
-
 def render_forecast_tab():
     st.header("📈 Loading Forecast with Machine Learning")
-    st.write("This feature uses a separate Random Forest model for each service to provide more accurate predictions.")
     if 'forecast_df' not in st.session_state:
         df_history = load_history_data()
         if df_history is not None and not df_history.empty:
@@ -140,20 +138,12 @@ def render_forecast_tab():
                 st.session_state['forecast_df'] = run_per_service_rf_forecast(df_history)
         else:
             st.session_state['forecast_df'] = pd.DataFrame()
-            if df_history is None: st.error("Could not load historical data.")
+            if df_history is None: st.warning("History file not found. Forecasts are unavailable.")
     
     if 'forecast_df' in st.session_state and not st.session_state.forecast_df.empty:
-        results_df = st.session_state.forecast_df.copy()
-        results_df['Loading Forecast'] = results_df['Loading Forecast'].round(2)
-        
         st.markdown("---")
         st.subheader("📊 Forecast Results per Service")
-        filter_option = st.radio("Filter Services:", ("All Services", "Current Services"), horizontal=True, key="forecast_filter")
-        current_services_list = ['JPI-A', 'JPI-B', 'CIT', 'IN1', 'JKF', 'IN1-2', 'KCI', 'CMI3', 'CMI2', 'CMI', 'I15', 'SE8', 'IA8', 'IA1', 'SEAGULL', 'JTH', 'ICN']
-        
-        display_forecast_df = results_df[results_df['Service'].str.upper().isin(current_services_list)] if filter_option == "Current Services" else results_df
-        
-        st.dataframe(display_forecast_df.sort_values(by="Loading Forecast", ascending=False).reset_index(drop=True), use_container_width=True, hide_index=True)
+        st.dataframe(st.session_state.forecast_df, use_container_width=True, hide_index=True)
     else:
         st.warning("No forecast data could be generated.")
 
