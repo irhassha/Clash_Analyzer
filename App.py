@@ -27,7 +27,7 @@ st.title("Yard Cluster Monitoring")
 # --- Function to reset data in memory ---
 def reset_data():
     """Clears session state and all of Streamlit's internal caches."""
-    keys_to_clear = ['processed_df', 'vessel_area_slots', 'forecast_df']
+    keys_to_clear = ['processed_df', 'summary_display', 'vessel_area_slots', 'clash_summary_df', 'forecast_df']
     for key in keys_to_clear:
         if key in st.session_state:
             del st.session_state[key]
@@ -101,7 +101,7 @@ def run_per_service_rf_forecast(_df_history):
                 forecast_val, moe_val, mape_val, method = (service_df['loading_cleaned'].mean(), 1.96 * service_df['loading_cleaned'].std(), np.mean(np.abs((service_df['loading_cleaned'] - service_df['loading_cleaned'].mean()) / service_df['loading_cleaned'])) * 100 if not service_df['loading_cleaned'].empty else 0, f"Historical Average (RF Failed, {num_outliers} outliers cleaned)")
         else:
             forecast_val, moe_val, mape_val, method = (service_df['loading_cleaned'].mean(), 1.96 * service_df['loading_cleaned'].std(), np.mean(np.abs((service_df['loading_cleaned'] - service_df['loading_cleaned'].mean()) / service_df['loading_cleaned'])) * 100 if not service_df['loading_cleaned'].empty else 0, f"Historical Average ({num_outliers} outliers cleaned)")
-        all_results.append({"Service": service, "Loading Forecast": np.random.randint(200, 1500)})
+        all_results.append({"Service": service, "Loading Forecast": max(0, forecast_val), "Margin of Error (± box)": moe_val, "MAPE (%)": mape_val, "Method": method})
     progress_bar.empty()
     return pd.DataFrame(all_results)
 
@@ -131,6 +131,7 @@ def load_stacking_trend(filename="stacking_trend.xlsx"):
 # --- RENDER FUNCTIONS FOR EACH TAB ---
 def render_forecast_tab():
     st.header("📈 Loading Forecast with Machine Learning")
+    st.write("This feature uses a separate **Random Forest** model for each service to provide more accurate predictions.")
     if 'forecast_df' not in st.session_state:
         df_history = load_history_data()
         if df_history is not None and not df_history.empty:
@@ -141,19 +142,42 @@ def render_forecast_tab():
             if df_history is None: st.warning("History file not found. Forecasts are unavailable.")
     
     if 'forecast_df' in st.session_state and not st.session_state.forecast_df.empty:
+        results_df = st.session_state.forecast_df.copy()
+        results_df['Loading Forecast'] = results_df['Loading Forecast'].round(2)
+        results_df['Margin of Error (± box)'] = results_df['Margin of Error (± box)'].fillna(0).round(2)
+        results_df['MAPE (%)'] = results_df['MAPE (%)'].replace([np.inf, -np.inf], 0).fillna(0).round(2)
+                
         st.markdown("---")
         st.subheader("📊 Forecast Results per Service")
+        filter_option = st.radio("Filter Services:", ("All Services", "Current Services"), horizontal=True)
         st.dataframe(st.session_state.forecast_df, use_container_width=True, hide_index=True)
+        current_services_list = ['JPI-A', 'JPI-B', 'CIT', 'IN1', 'JKF', 'IN1-2', 'KCI', 'CMI3', 'CMI2', 'CMI', 'I15', 'SE8', 'IA8', 'IA1', 'SEAGULL', 'JTH', 'ICN']
+        display_forecast_df = results_df[results_df['Service'].isin(current_services_list)] if filter_option == "Current Services" else results_df
+        
+        st.dataframe(display_forecast_df.sort_values(by="Loading Forecast", ascending=False).reset_index(drop=True), use_container_width=True, hide_index=True, column_config={"MAPE (%)": st.column_config.NumberColumn(format="%.2f%%")})
+        st.markdown("---")
+        st.subheader("💡 How to Read These Results")
+        st.markdown("- **Loading Forecast**: Estimated boxes for the next arrival of that service.\n- **Margin of Error (± box)**: The uncertainty in the prediction. e.g., 300 ±50 means the value is likely between 250 and 350.\n- **MAPE (%)**: Average percentage error of the model. **The smaller, the better.**\n- **Method**: Technique used for the forecast.")
     else:
         st.warning("No forecast data could be generated.")
 
+def render_clash_tab():
 def render_clash_tab(process_button, schedule_file, unit_list_file, min_clash_distance):
+    st.sidebar.header("⚙️ Upload Your Files")
+    df_vessel_codes = load_vessel_codes_from_repo()
+    schedule_file = st.sidebar.file_uploader("1. Upload Vessel Schedule", type=['xlsx', 'csv'])
+    unit_list_file = st.sidebar.file_uploader("2. Upload Unit List", type=['xlsx', 'csv'])
+    min_clash_distance = st.sidebar.number_input("Minimum Safe Distance (slots)", min_value=0, value=5, step=1, help="A clash is detected if the distance between vessel allocations is this value or less.")
+    
+    
+    process_button = st.sidebar.button("🚀 Process Data", use_container_width=True, type="primary")
+    if 'processed_df' not in st.session_state: st.session_state.processed_df = None
+    st.sidebar.button("Reset Data", on_click=reset_data, use_container_width=True, help="Clear all processed data and caches to start fresh.")
+    if 'vessel_area_slots' not in st.session_state: st.session_state.vessel_area_slots = None
+    for key in ['processed_df', 'summary_display', 'vessel_area_slots', 'clash_summary_df']:
+        if key not in st.session_state: st.session_state[key] = None
     df_vessel_codes = load_vessel_codes_from_repo()
     
-    if 'processed_df' not in st.session_state: st.session_state.processed_df = None
-    if 'vessel_area_slots' not in st.session_state: st.session_state.vessel_area_slots = None
-
-
     if process_button:
         if schedule_file and unit_list_file and (df_vessel_codes is not None and not df_vessel_codes.empty):
             with st.spinner('Loading and processing data...'):
@@ -164,11 +188,12 @@ def render_clash_tab(process_button, schedule_file, unit_list_file, min_clash_di
                     df_unit_list = pd.read_excel(unit_list_file) if unit_list_file.name.lower().endswith('.xlsx') else pd.read_csv(unit_list_file)
                     df_unit_list.columns = [col.strip() for col in df_unit_list.columns]
 
-                    for col in ['ETA', 'ETD']:
+                    for col in ['ETA', 'ETD', 'CLOSING PHYSIC']:
                         if col in df_schedule.columns: df_schedule[col] = pd.to_datetime(df_schedule[col], dayfirst=True, errors='coerce')
                     df_schedule.dropna(subset=['ETA', 'ETD'], inplace=True)
                     
-                    if 'Row/bay (EXE)' not in df_unit_list.columns: st.error("'Unit List' must contain 'Row/bay (EXE)' column."); st.stop()
+                    if 'Row/bay (EXE)' not in df_unit_list.columns:
+                    st.error("File 'Unit List' must contain a 'Row/bay (EXE)' column for detailed clash detection."); st.stop()
                     df_unit_list['SLOT'] = df_unit_list['Row/bay (EXE)'].astype(str).str.split('-').str[-1]
                     df_unit_list['SLOT'] = pd.to_numeric(df_unit_list['SLOT'], errors='coerce')
                     df_unit_list.dropna(subset=['SLOT'], inplace=True)
@@ -193,6 +218,8 @@ def render_clash_tab(process_button, schedule_file, unit_list_file, min_clash_di
                     pivot_for_display['TOTAL BOX'] = pivot_for_display.sum(axis=1)
                     pivot_for_display['TOTAL CLSTR'] = (pivot_for_display > 0).sum(axis=1) # Perbaikan penting
                     pivot_for_display.reset_index(inplace=True)
+                    pivot_for_display['ETA_Display'] = pivot_for_display['ETA'].dt.strftime('%d/%m/%Y %H:%M')
+                    pivot_for_display['CLOSING_PHYSIC_str'] = pivot_for_display.get('CLOSING PHYSIC', pd.Series(pd.NaT, index=pivot_for_display.index)).dt.strftime('%d/%m/%Y %H:%M')
                     
                     st.session_state.processed_df = pivot_for_display.sort_values(by='ETA', ascending=True)
                     st.session_state.vessel_area_slots = vessel_area_slots
@@ -220,7 +247,7 @@ def render_clash_tab(process_button, schedule_file, unit_list_file, min_clash_di
                 priority_vessels = st.sidebar.multiselect("Select priority vessels to highlight:", options=upcoming_vessels_df['VESSEL'].unique())
                 adjusted_clstr_req = st.sidebar.number_input("Adjust CLSTR REQ for priority vessels:", min_value=0, value=0, step=1, help="Enter a new value for CLSTR REQ. Leave as 0 to not change.")
                 
-                summary_df = pd.merge(upcoming_vessels_df, forecast_df[['SERVICE', 'Loading Forecast']], on='SERVICE', how='left')
+                summary_df = pd.merge(upcoming_vessels_df, forecast_df[['Service', 'Loading Forecast']], left_on='SERVICE', right_on='Service', how='left')
                 summary_df['Loading Forecast'] = summary_df['Loading Forecast'].fillna(0).round(0).astype(int)
                 summary_df['DIFF'] = summary_df['TOTAL BOX'] - summary_df['Loading Forecast']
                 summary_df['base_for_req'] = summary_df[['TOTAL BOX', 'Loading Forecast']].max(axis=1)
@@ -316,9 +343,44 @@ def render_clash_tab(process_button, schedule_file, unit_list_file, min_clash_di
                             st.markdown(f"**{clash['vessel1_name']}**: `{clash['vessel1_box']}` boxes (Slots: `{clash['vessel1_slots']}`)")
                             st.markdown(f"**{clash['vessel2_name']}**: `{clash['vessel2_box']}` boxes (Slots: `{clash['vessel2_slots']}`)")
         
+        # --- DETAILED ANALYSIS RESULTS TABLE ---
+        st.markdown("---")
         st.markdown("---")
         st.header("📋 Detailed Analysis Results")
+        st.header("📋 Detailed Analysis Results")
+        df_for_grid = display_df.copy()
         st.dataframe(display_df)
+        df_for_grid['ETA_Date_str'] = pd.to_datetime(df_for_grid['ETA']).dt.strftime('%d/%m/%Y')
+        unique_dates_for_map = df_for_grid['ETA_Date_str'].unique()
+        date_color_map = {date: ['#F8F0E5', '#DAC0A3'][i % 2] for i, date in enumerate(unique_dates_for_map)}
+        clash_map_for_grid = {date: [item['block'] for item in clashes] for date, clashes in clash_details.items()}
+        hide_zero_jscode = JsCode("""function(params) { if (params.value == 0 || params.value === null) { return ''; } return params.value; }""")
+        clash_cell_style_jscode = JsCode(f"""function(params) {{ const clashMap = {json.dumps(clash_map_for_grid)}; const date = params.data.ETA_Date_str; const colId = params.colDef.field; const isClash = clashMap[date] ? clashMap[date].includes(colId) : false; if (isClash) {{ return {{'backgroundColor': '#FFAA33', 'color': 'black'}}; }} return null; }}""")
+        zebra_row_style_jscode = JsCode(f"""function(params) {{ const dateColorMap = {json.dumps(date_color_map)}; const date = params.data.ETA_Date_str; const color = dateColorMap[date]; return {{ 'background-color': color }}; }}""")
+        default_col_def = {"suppressMenu": True, "sortable": True, "resizable": True, "editable": False, "minWidth": 40}
+        
+        column_defs = []
+        base_cols = ['VESSEL', 'CODE', 'SERVICE', 'VOY_OUT', 'ETA_Display', 'TOTAL BOX', 'TOTAL CLSTR']
+        cluster_display_cols = sorted([col for col in display_df.columns if col not in base_cols + ['ETA', 'ETD', 'CLOSING_PHYSIC_str']])
+        pinned_cols = ['VESSEL', 'CODE', 'SERVICE', 'VOY_OUT', 'ETA_Display', 'TOTAL BOX', 'TOTAL CLSTR']
+        
+        for col in pinned_cols:
+            width = 110 if col == 'VESSEL' else (120 if col == 'ETA_Display' else (90 if col == 'SERVICE' else 80))
+            header = "ETA" if col == 'ETA_Display' else col
+            col_def = {"field": col, "headerName": header, "pinned": "left", "width": width}
+            if col in ["TOTAL BOX", "TOTAL CLSTR"]: col_def["cellRenderer"] = hide_zero_jscode
+            column_defs.append(col_def)
+            
+        for col in cluster_display_cols:
+            column_defs.append({"field": col, "headerName": col, "width": 60, "cellRenderer": hide_zero_jscode, "cellStyle": clash_cell_style_jscode})
+        
+        for col_to_hide in ['ETA', 'ETD', 'CLOSING_PHYSIC_str', 'ETA_Date_str']:
+             if col_to_hide in df_for_grid.columns: column_defs.append({"field": col_to_hide, "hide": True})
+        gridOptions = {"defaultColDef": default_col_def, "columnDefs": column_defs, "getRowStyle": zebra_row_style_jscode}
+        AgGrid(df_for_grid, gridOptions=gridOptions, height=600, width='100%', theme='streamlit', allow_unsafe_jscode=True, key='detailed_analysis_grid')
+        st.markdown("---")
+        st.subheader("📥 Download Center")
+        # (Download logic placeholder)
     else:
         st.info("Welcome! Please upload your files and click 'Process Data' to begin.")
 
