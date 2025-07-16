@@ -24,6 +24,23 @@ warnings.filterwarnings("ignore", category=UserWarning)
 st.set_page_config(page_title="Yard Cluster Monitoring", layout="wide")
 st.title("Yard Cluster Monitoring")
 
+# --- PERBAIKAN: CSS Kustom untuk Merapatkan Spasi ---
+st.markdown("""
+    <style>
+        /* Mengurangi margin atas dan bawah untuk garis pemisah */
+        hr {
+            margin-top: 10px;
+            margin-bottom: 10px;
+        }
+        /* Mengurangi margin atas dan bawah untuk subheader */
+        h2, h3 {
+            margin-top: 20px;
+            margin-bottom: 20px;
+        }
+    </style>
+""", unsafe_allow_html=True)
+
+
 # --- Fungsi untuk mereset data di memori ---
 def reset_data():
     """Membersihkan data relevan dari session state dan cache."""
@@ -438,4 +455,4 @@ tab1, tab2 = st.tabs(["🚨 Analisis Bentrok", "📈 Peramalan Muatan"])
 with tab1:
     render_clash_tab(process_button, schedule_file, unit_list_file, min_clash_distance)
 with tab2:
-    render_forecast_tab()
+    render_forecast_ta
