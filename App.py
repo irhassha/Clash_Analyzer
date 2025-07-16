@@ -162,20 +162,10 @@ def render_forecast_tab():
         st.warning("No forecast data could be generated.")
 
 def render_clash_tab(process_button, schedule_file, unit_list_file, min_clash_distance):
-    st.sidebar.header("⚙️ Upload Your Files")
     df_vessel_codes = load_vessel_codes_from_repo()
-    schedule_file = st.sidebar.file_uploader("1. Upload Vessel Schedule", type=['xlsx', 'csv'])
-    unit_list_file = st.sidebar.file_uploader("2. Upload Unit List", type=['xlsx', 'csv'])
-    min_clash_distance = st.sidebar.number_input("Minimum Safe Distance (slots)", min_value=0, value=5, step=1, help="A clash is detected if the distance between vessel allocations is this value or less.")
     
-    
-    process_button = st.sidebar.button("🚀 Process Data", use_container_width=True, type="primary")
     if 'processed_df' not in st.session_state: st.session_state.processed_df = None
-    st.sidebar.button("Reset Data", on_click=reset_data, use_container_width=True, help="Clear all processed data and caches to start fresh.")
     if 'vessel_area_slots' not in st.session_state: st.session_state.vessel_area_slots = None
-    for key in ['processed_df', 'summary_display', 'vessel_area_slots', 'clash_summary_df']:
-        if key not in st.session_state: st.session_state[key] = None
-    df_vessel_codes = load_vessel_codes_from_repo()
     
     if process_button:
         if schedule_file and unit_list_file and (df_vessel_codes is not None and not df_vessel_codes.empty):
