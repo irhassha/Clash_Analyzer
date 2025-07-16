@@ -200,8 +200,7 @@ def render_clash_tab(process_button, schedule_file, unit_list_file, min_clash_di
                     
                     # 4. AGREGRASI DATA UNTUK TABEL & DETEKSI BENTROK
                     # Data untuk tabel pivot (tampilan utama)
-                    # PERBAIKAN: Menghapus `values='BOX_COUNT'` karena `aggfunc='size'` tidak memerlukannya dan menyebabkan error.
-                    pivot_for_display = filtered_data.pivot_table(index=['VESSEL', 'VOY_OUT', 'ETA', 'ETD', 'SERVICE'], columns='Area (EXE)', fill_value=0, aggfunc='size')
+                    pivot_for_display = filtered_data.pivot_table(index=['VESSEL', 'VOY_OUT', 'ETA', 'ETD', 'SERVICE', 'CLOSING PHYSIC'], columns='Area (EXE)', fill_value=0, aggfunc='size')
                     pivot_for_display['TOTAL BOX'] = pivot_for_display.sum(axis=1)
                     pivot_for_display['TOTAL CLSTR'] = (pivot_for_display[[c for c in pivot_for_display.columns if c not in ['TOTAL BOX']]] > 0).sum(axis=1)
                     pivot_for_display.reset_index(inplace=True)
@@ -244,8 +243,14 @@ def render_clash_tab(process_button, schedule_file, unit_list_file, min_clash_di
                 if priority_vessels and adjusted_clstr_req > 0:
                     summary_df.loc[summary_df['VESSEL'].isin(priority_vessels), 'CLSTR REQ'] = adjusted_clstr_req
                 
-                summary_display_cols = ['VESSEL', 'SERVICE', 'ETA', 'TOTAL BOX', 'Loading Forecast', 'DIFF', 'TOTAL CLSTR', 'CLSTR REQ']
-                summary_display = summary_df[summary_display_cols].rename(columns={'ETA': 'ETA', 'TOTAL BOX': 'BOX STACKED', 'Loading Forecast': 'LOADING FORECAST'})
+                # PERBAIKAN: Menambahkan 'CLOSING PHYSIC' ke daftar kolom
+                summary_display_cols = ['VESSEL', 'SERVICE', 'ETA', 'CLOSING PHYSIC', 'TOTAL BOX', 'Loading Forecast', 'DIFF', 'TOTAL CLSTR', 'CLSTR REQ']
+                summary_display = summary_df[summary_display_cols].rename(columns={
+                    'ETA': 'ETA', 
+                    'CLOSING PHYSIC': 'CLOSING TIME',
+                    'TOTAL BOX': 'BOX STACKED', 
+                    'Loading Forecast': 'LOADING FORECAST'
+                })
                 st.session_state.summary_display = summary_display
 
                 def style_diff(v): return f'color: {"#4CAF50" if v > 0 else ("#F44336" if v < 0 else "#757575")}; font-weight: bold;'
@@ -254,7 +259,11 @@ def render_clash_tab(process_button, schedule_file, unit_list_file, min_clash_di
                     if row['VESSEL'] in priority_vessels: return ['background-color: #FFF3CD'] * len(row)
                     return [''] * len(row)
                 
-                styled_df = summary_display.style.apply(highlight_rows, axis=1).map(style_diff, subset=['DIFF']).format({'ETA': '{:%d/%m/%Y %H:%M}'})
+                # PERBAIKAN: Memformat kolom ETA dan CLOSING TIME
+                styled_df = summary_display.style.apply(highlight_rows, axis=1).map(style_diff, subset=['DIFF']).format({
+                    'ETA': '{:%d/%m/%Y %H:%M}',
+                    'CLOSING TIME': '{:%d/%m/%Y %H:%M}'
+                })
                 st.dataframe(styled_df, use_container_width=True, hide_index=True)
             else:
                 st.info("Tidak ada kapal yang dijadwalkan datang dalam 4 hari ke depan.")
@@ -273,7 +282,7 @@ def render_clash_tab(process_button, schedule_file, unit_list_file, min_clash_di
             st.warning("Pilih setidaknya satu kapal untuk ditampilkan.")
         else:
             processed_df_chart = display_df[display_df['VESSEL'].isin(selected_vessels)]
-            initial_cols_chart = ['VESSEL', 'VOY_OUT', 'ETA', 'ETD', 'SERVICE', 'TOTAL BOX', 'TOTAL CLSTR', 'ETA_Display', 'ETA_Date']
+            initial_cols_chart = ['VESSEL', 'VOY_OUT', 'ETA', 'ETD', 'SERVICE', 'TOTAL BOX', 'TOTAL CLSTR', 'ETA_Display', 'ETA_Date', 'CLOSING PHYSIC']
             cluster_cols_chart = sorted([col for col in processed_df_chart.columns if col not in initial_cols_chart])
             
             chart_data_long = pd.melt(processed_df_chart, id_vars=['VESSEL', 'ETA'], value_vars=cluster_cols_chart, var_name='Cluster', value_name='Box Count')
@@ -365,7 +374,7 @@ def render_clash_tab(process_button, schedule_file, unit_list_file, min_clash_di
             if col in ["TOTAL BOX", "TOTAL CLSTR"]: col_def["cellRenderer"] = hide_zero_jscode
             column_defs.append(col_def)
         
-        cluster_cols_aggrid = sorted([col for col in df_for_grid.columns if col not in pinned_cols + ['ETA', 'ETD', 'ETA_Display', 'ETA_Date']])
+        cluster_cols_aggrid = sorted([col for col in df_for_grid.columns if col not in pinned_cols + ['ETA', 'ETD', 'ETA_Display', 'ETA_Date', 'CLOSING PHYSIC']])
         for col in cluster_cols_aggrid:
             column_defs.append({"field": col, "headerName": col, "width": 60, "cellRenderer": hide_zero_jscode, "cellStyle": clash_cell_style_jscode})
         
@@ -386,7 +395,7 @@ def render_clash_tab(process_button, schedule_file, unit_list_file, min_clash_di
                     if df is not None and not df.empty:
                         df_to_write = df.copy()
                         # Format kolom tanggal jika ada
-                        for col_date in ['ETA', 'CLOSING TIME', 'Clash Date']:
+                        for col_date in ['ETA', 'CLOSING TIME', 'Clash Date', 'CLOSING PHYSIC']:
                             if col_date in df_to_write.columns:
                                 # Cek jika tipenya datetime sebelum format
                                 if pd.api.types.is_datetime64_any_dtype(df_to_write[col_date]):
