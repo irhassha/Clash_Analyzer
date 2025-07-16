@@ -161,7 +161,6 @@ def render_forecast_tab():
     else:
         st.warning("No forecast data could be generated.")
 
-def render_clash_tab():
 def render_clash_tab(process_button, schedule_file, unit_list_file, min_clash_distance):
     st.sidebar.header("⚙️ Upload Your Files")
     df_vessel_codes = load_vessel_codes_from_repo()
