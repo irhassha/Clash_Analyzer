@@ -188,26 +188,24 @@ def render_clash_tab(process_button, schedule_file, unit_list_file, min_clash_di
                     df_unit_list.dropna(subset=['SLOT'], inplace=True)
                     df_unit_list['SLOT'] = df_unit_list['SLOT'].astype(int)
 
-                    # 3. PENGGABUNGAN & PEMFILTERAN DATA
+                    # 3. PENGGABUNGAN DATA
                     df_schedule_with_code = pd.merge(df_schedule, df_vessel_codes, left_on="VESSEL", right_on="Description", how="left").rename(columns={"Value": "CODE"})
                     merged_df = pd.merge(df_schedule_with_code, df_unit_list, left_on=['CODE', 'VOY_OUT'], right_on=['Carrier Out', 'Voyage Out'], how='inner')
                     if merged_df.empty: st.warning("Tidak ada data yang cocok ditemukan."); st.stop()
                         
-                    ALLOWED_BLOCKS = ['A01', 'A02', 'A03', 'A04', 'B01', 'B02', 'B03', 'B04', 'B05', 'C03', 'C04', 'C05']
+                    # PERBAIKAN: Menghapus filter area agar semua area ditampilkan
                     merged_df['Area (EXE)'] = merged_df['Area (EXE)'].astype(str)
-                    filtered_data = merged_df[merged_df['Area (EXE)'].isin(ALLOWED_BLOCKS)]
-                    if filtered_data.empty: st.warning("Tidak ada data yang ditemukan di blok yang diizinkan."); st.stop()
                     
                     # 4. AGREGRASI DATA UNTUK TABEL & DETEKSI BENTROK
                     # Data untuk tabel pivot (tampilan utama)
-                    pivot_for_display = filtered_data.pivot_table(index=['VESSEL', 'VOY_OUT', 'ETA', 'ETD', 'SERVICE', 'CLOSING PHYSIC'], columns='Area (EXE)', fill_value=0, aggfunc='size')
+                    pivot_for_display = merged_df.pivot_table(index=['VESSEL', 'VOY_OUT', 'ETA', 'ETD', 'SERVICE', 'CLOSING PHYSIC'], columns='Area (EXE)', fill_value=0, aggfunc='size')
                     pivot_for_display['TOTAL BOX'] = pivot_for_display.sum(axis=1)
                     pivot_for_display['TOTAL CLSTR'] = (pivot_for_display[[c for c in pivot_for_display.columns if c not in ['TOTAL BOX']]] > 0).sum(axis=1)
                     pivot_for_display.reset_index(inplace=True)
                     st.session_state.processed_df = pivot_for_display.sort_values(by='ETA', ascending=True)
 
                     # Data untuk deteksi bentrok detail (dengan MIN/MAX SLOT)
-                    vessel_area_slots = filtered_data.groupby(['VESSEL', 'VOY_OUT', 'ETA', 'ETD', 'SERVICE', 'Area (EXE)']).agg(MIN_SLOT=('SLOT', 'min'), MAX_SLOT=('SLOT', 'max'), BOX_COUNT=('SLOT', 'count')).reset_index()
+                    vessel_area_slots = merged_df.groupby(['VESSEL', 'VOY_OUT', 'ETA', 'ETD', 'SERVICE', 'Area (EXE)']).agg(MIN_SLOT=('SLOT', 'min'), MAX_SLOT=('SLOT', 'max'), BOX_COUNT=('SLOT', 'count')).reset_index()
                     st.session_state.vessel_area_slots = vessel_area_slots
                     
                     st.success("Data berhasil diproses!")
@@ -243,7 +241,6 @@ def render_clash_tab(process_button, schedule_file, unit_list_file, min_clash_di
                 if priority_vessels and adjusted_clstr_req > 0:
                     summary_df.loc[summary_df['VESSEL'].isin(priority_vessels), 'CLSTR REQ'] = adjusted_clstr_req
                 
-                # PERBAIKAN: Menambahkan 'CLOSING PHYSIC' ke daftar kolom
                 summary_display_cols = ['VESSEL', 'SERVICE', 'ETA', 'CLOSING PHYSIC', 'TOTAL BOX', 'Loading Forecast', 'DIFF', 'TOTAL CLSTR', 'CLSTR REQ']
                 summary_display = summary_df[summary_display_cols].rename(columns={
                     'ETA': 'ETA', 
@@ -259,7 +256,6 @@ def render_clash_tab(process_button, schedule_file, unit_list_file, min_clash_di
                     if row['VESSEL'] in priority_vessels: return ['background-color: #FFF3CD'] * len(row)
                     return [''] * len(row)
                 
-                # PERBAIKAN: Memformat kolom ETA dan CLOSING TIME
                 styled_df = summary_display.style.apply(highlight_rows, axis=1).map(style_diff, subset=['DIFF']).format({
                     'ETA': '{:%d/%m/%Y %H:%M}',
                     'CLOSING TIME': '{:%d/%m/%Y %H:%M}'
