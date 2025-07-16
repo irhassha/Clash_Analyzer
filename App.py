@@ -200,7 +200,8 @@ def render_clash_tab(process_button, schedule_file, unit_list_file, min_clash_di
                     
                     # 4. AGREGRASI DATA UNTUK TABEL & DETEKSI BENTROK
                     # Data untuk tabel pivot (tampilan utama)
-                    pivot_for_display = filtered_data.pivot_table(index=['VESSEL', 'VOY_OUT', 'ETA', 'ETD', 'SERVICE'], columns='Area (EXE)', values='BOX_COUNT', fill_value=0, aggfunc='size')
+                    # PERBAIKAN: Menghapus `values='BOX_COUNT'` karena `aggfunc='size'` tidak memerlukannya dan menyebabkan error.
+                    pivot_for_display = filtered_data.pivot_table(index=['VESSEL', 'VOY_OUT', 'ETA', 'ETD', 'SERVICE'], columns='Area (EXE)', fill_value=0, aggfunc='size')
                     pivot_for_display['TOTAL BOX'] = pivot_for_display.sum(axis=1)
                     pivot_for_display['TOTAL CLSTR'] = (pivot_for_display[[c for c in pivot_for_display.columns if c not in ['TOTAL BOX']]] > 0).sum(axis=1)
                     pivot_for_display.reset_index(inplace=True)
@@ -224,12 +225,70 @@ def render_clash_tab(process_button, schedule_file, unit_list_file, min_clash_di
 
         # --- RINGKASAN KAPAL YANG AKAN DATANG ---
         st.subheader("🚢 Ringkasan Kapal Datang (Hari Ini + 3 Hari ke Depan)")
-        # ... (Logika ringkasan kapal datang tetap sama)
+        forecast_df = st.session_state.get('forecast_df')
+        if forecast_df is not None and not forecast_df.empty:
+            today = pd.to_datetime(datetime.now().date())
+            four_days_later = today + timedelta(days=4)
+            upcoming_vessels_df = display_df[(display_df['ETA'] >= today) & (display_df['ETA'] < four_days_later)].copy()
+            if not upcoming_vessels_df.empty:
+                st.sidebar.markdown("---")
+                st.sidebar.header("🛠️ Opsi Kapal Datang")
+                priority_vessels = st.sidebar.multiselect("Pilih kapal prioritas untuk ditandai:", options=upcoming_vessels_df['VESSEL'].unique())
+                adjusted_clstr_req = st.sidebar.number_input("Sesuaikan CLSTR REQ untuk kapal prioritas:", min_value=0, value=0, step=1, help="Masukkan nilai baru untuk CLSTR REQ. Biarkan 0 untuk tidak mengubah.")
+                
+                summary_df = pd.merge(upcoming_vessels_df, forecast_df[['Service', 'Loading Forecast']], left_on='SERVICE', right_on='Service', how='left')
+                summary_df['Loading Forecast'] = summary_df['Loading Forecast'].fillna(0).round(0).astype(int)
+                summary_df['DIFF'] = summary_df['TOTAL BOX'] - summary_df['Loading Forecast']
+                summary_df['base_for_req'] = summary_df[['TOTAL BOX', 'Loading Forecast']].max(axis=1)
+                summary_df['CLSTR REQ'] = summary_df['base_for_req'].apply(lambda v: 4 if v <= 450 else (5 if v <= 600 else (6 if v <= 800 else 8)))
+                if priority_vessels and adjusted_clstr_req > 0:
+                    summary_df.loc[summary_df['VESSEL'].isin(priority_vessels), 'CLSTR REQ'] = adjusted_clstr_req
+                
+                summary_display_cols = ['VESSEL', 'SERVICE', 'ETA', 'TOTAL BOX', 'Loading Forecast', 'DIFF', 'TOTAL CLSTR', 'CLSTR REQ']
+                summary_display = summary_df[summary_display_cols].rename(columns={'ETA': 'ETA', 'TOTAL BOX': 'BOX STACKED', 'Loading Forecast': 'LOADING FORECAST'})
+                st.session_state.summary_display = summary_display
+
+                def style_diff(v): return f'color: {"#4CAF50" if v > 0 else ("#F44336" if v < 0 else "#757575")}; font-weight: bold;'
+                def highlight_rows(row):
+                    if row['TOTAL CLSTR'] < row['CLSTR REQ']: return ['background-color: #FFCDD2'] * len(row)
+                    if row['VESSEL'] in priority_vessels: return ['background-color: #FFF3CD'] * len(row)
+                    return [''] * len(row)
+                
+                styled_df = summary_display.style.apply(highlight_rows, axis=1).map(style_diff, subset=['DIFF']).format({'ETA': '{:%d/%m/%Y %H:%M}'})
+                st.dataframe(styled_df, use_container_width=True, hide_index=True)
+            else:
+                st.info("Tidak ada kapal yang dijadwalkan datang dalam 4 hari ke depan.")
+        else:
+            st.warning("Data peramalan tidak tersedia. Jalankan peramalan di tab 'Peramalan Muatan' terlebih dahulu.")
 
         # --- VISUALISASI SEBARAN CLUSTER ---
         st.markdown("---")
         st.subheader("📊 Visualisasi Sebaran Cluster")
-        # ... (Logika visualisasi tetap sama)
+        all_vessels_list = display_df['VESSEL'].unique().tolist()
+        st.sidebar.markdown("---")
+        st.sidebar.header("📊 Opsi Grafik")
+        selected_vessels = st.sidebar.multiselect("Filter Kapal pada Grafik:", options=all_vessels_list, default=all_vessels_list)
+        font_size = st.sidebar.slider("Sesuaikan Ukuran Font Grafik", min_value=6, max_value=20, value=10, step=1)
+        if not selected_vessels:
+            st.warning("Pilih setidaknya satu kapal untuk ditampilkan.")
+        else:
+            processed_df_chart = display_df[display_df['VESSEL'].isin(selected_vessels)]
+            initial_cols_chart = ['VESSEL', 'VOY_OUT', 'ETA', 'ETD', 'SERVICE', 'TOTAL BOX', 'TOTAL CLSTR', 'ETA_Display', 'ETA_Date']
+            cluster_cols_chart = sorted([col for col in processed_df_chart.columns if col not in initial_cols_chart])
+            
+            chart_data_long = pd.melt(processed_df_chart, id_vars=['VESSEL', 'ETA'], value_vars=cluster_cols_chart, var_name='Cluster', value_name='Box Count')
+            chart_data_long = chart_data_long[chart_data_long['Box Count'] > 0]
+            if not chart_data_long.empty:
+                chart_data_long['combined_text'] = chart_data_long['Cluster'] + ' / ' + chart_data_long['Box Count'].astype(str)
+                cluster_color_map = {'A01': '#5409DA', 'A02': '#4E71FF', 'A03': '#8DD8FF', 'A04': '#BBFBFF', 'A05': '#8DBCC7', 'B01': '#328E6E', 'B02': '#67AE6E', 'B03': '#90C67C', 'B04': '#E1EEBC', 'B05': '#D2FF72', 'C03': '#B33791', 'C04': '#C562AF', 'C05': '#DB8DD0'}
+                vessel_order_by_eta = processed_df_chart.sort_values('ETA')['VESSEL'].tolist()
+                fig = px.bar(chart_data_long, x='Box Count', y='VESSEL', color='Cluster', color_discrete_map=cluster_color_map, orientation='h', title='Distribusi Box per Cluster untuk Setiap Kapal', text='combined_text', hover_data={'VESSEL': False, 'Cluster': True, 'Box Count': True})
+                fig.update_layout(xaxis_title=None, yaxis_title=None, height=len(vessel_order_by_eta) * 35 + 150, legend_title_text='Area Cluster', title_x=0)
+                fig.update_yaxes(categoryorder='array', categoryarray=vessel_order_by_eta[::-1])
+                fig.update_traces(textposition='inside', textfont_size=font_size, textangle=0)
+                st.plotly_chart(fig, use_container_width=True)
+            else:
+                st.info("Tidak ada data cluster untuk divisualisasikan untuk kapal yang dipilih.")
         
         # --- RINGKASAN POTENSI BENTROK (LOGIKA DARI SKRIP LAMA) ---
         st.markdown("---")
@@ -320,9 +379,39 @@ def render_clash_tab(process_button, schedule_file, unit_list_file, min_clash_di
         try:
             output = io.BytesIO()
             with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
-                # ... (Logika Download Center tetap sama)
-                pass # Placeholder, logika download center dari skrip baru sudah baik
-            st.download_button(...) # Placeholder
+                workbook = writer.book
+                center_format = workbook.add_format({'align': 'center', 'valign': 'vcenter'})
+
+                def auto_adjust_and_format_sheet(df, sheet_name, writer_obj):
+                    if df is not None and not df.empty:
+                        df_to_write = df.copy()
+                        # Format kolom tanggal jika ada
+                        for col_date in ['ETA', 'CLOSING TIME', 'Clash Date']:
+                            if col_date in df_to_write.columns:
+                                # Cek jika tipenya datetime sebelum format
+                                if pd.api.types.is_datetime64_any_dtype(df_to_write[col_date]):
+                                     df_to_write[col_date] = pd.to_datetime(df_to_write[col_date]).dt.strftime('%d/%m/%Y %H:%M')
+                        
+                        df_to_write.to_excel(writer_obj, sheet_name=sheet_name, index=False)
+                        worksheet = writer_obj.sheets[sheet_name]
+                        for idx, col_name in enumerate(df_to_write.columns):
+                            series = df_to_write[col_name].dropna()
+                            max_len = max(([len(str(s)) for s in series] if not series.empty else [0]) + [len(str(col_name))]) + 5
+                            worksheet.set_column(idx, idx, min(max_len, 50), center_format)
+                
+                # Menulis setiap DataFrame ke sheet yang berbeda
+                auto_adjust_and_format_sheet(st.session_state.get('processed_df'), 'Analisis Detail', writer)
+                auto_adjust_and_format_sheet(st.session_state.get('summary_display'), 'Ringkasan Kapal Datang', writer)
+                auto_adjust_and_format_sheet(st.session_state.get('clash_summary_df'), 'Ringkasan Bentrok', writer)
+
+            if output.tell() > 0:
+                st.download_button(
+                    label="📥 Unduh Laporan Analisis (Excel)",
+                    data=output.getvalue(),
+                    file_name=f"clash_analysis_report_{datetime.now().strftime('%Y%m%d')}.xlsx",
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    use_container_width=True
+                )
         except Exception as e:
             st.error(f"Gagal membuat file unduhan: {e}")
 
