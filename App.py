@@ -193,7 +193,7 @@ def render_clash_tab(process_button, schedule_file, unit_list_file, min_clash_di
                     merged_df = pd.merge(df_schedule_with_code, df_unit_list, left_on=['CODE', 'VOY_OUT'], right_on=['Carrier Out', 'Voyage Out'], how='inner')
                     if merged_df.empty: st.warning("Tidak ada data yang cocok ditemukan."); st.stop()
                         
-                    # PERBAIKAN: Menghapus filter area agar semua area ditampilkan
+                    # Menghapus filter area agar semua area ditampilkan
                     merged_df['Area (EXE)'] = merged_df['Area (EXE)'].astype(str)
                     
                     # 4. AGREGRASI DATA UNTUK TABEL & DETEKSI BENTROK
@@ -334,13 +334,24 @@ def render_clash_tab(process_button, schedule_file, unit_list_file, min_clash_di
             cols = st.columns(len(clash_dates) or 1)
             for i, date_key in enumerate(clash_dates):
                 with cols[i]:
-                    with st.container(border=True):
-                        st.markdown(f"**Potensi Bentrok pada: {date_key}**")
-                        for clash in clash_details.get(date_key, []):
-                            st.divider()
-                            st.markdown(f"**Blok {clash['block']}** (Jarak: `{clash['gap']}` slot)")
-                            st.markdown(f"**{clash['vessel1_name']}**: `{clash['vessel1_box']}` box (Slot: `{clash['vessel1_slots']}`)")
-                            st.markdown(f"**{clash['vessel2_name']}**: `{clash['vessel2_box']}` box (Slot: `{clash['vessel2_slots']}`)")
+                    # PERBAIKAN: Menggunakan HTML untuk styling kartu
+                    card_html = """
+                    <div style="background-color: white; border: 1px solid #e0e0e0; border-radius: 8px; padding: 15px; height: 100%;">
+                    """
+                    card_html += f"<strong>Potensi Bentrok pada: {date_key}</strong>"
+                    
+                    clashes_for_date = clash_details.get(date_key, [])
+                    for clash in clashes_for_date:
+                        card_html += '<hr style="margin: 8px 0;">' # Divider dengan spasi rapat
+                        card_html += f"""
+                        <div style="line-height: 1.4;">
+                            <b>Blok {clash['block']}</b> (Jarak: <code>{clash['gap']}</code> slot)<br>
+                            <small>{clash['vessel1_name']}: <code>{clash['vessel1_box']}</code> box (Slot: <code>{clash['vessel1_slots']}</code>)</small><br>
+                            <small>{clash['vessel2_name']}: <code>{clash['vessel2_box']}</code> box (Slot: <code>{clash['vessel2_slots']}</code>)</small>
+                        </div>
+                        """
+                    card_html += "</div>"
+                    st.markdown(card_html, unsafe_allow_html=True)
         
         # --- HASIL ANALISIS DETAIL (TABEL INTERAKTIF) ---
         st.markdown("---")
