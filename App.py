@@ -192,7 +192,7 @@ def render_clash_tab(process_button, schedule_file, unit_list_file, min_clash_di
                     df_schedule.dropna(subset=['ETA', 'ETD'], inplace=True)
                     
                     if 'Row/bay (EXE)' not in df_unit_list.columns:
-                    st.error("File 'Unit List' must contain a 'Row/bay (EXE)' column for detailed clash detection."); st.stop()
+                        st.error("File 'Unit List' must contain a 'Row/bay (EXE)' column for detailed clash detection."); st.stop()
                     df_unit_list['SLOT'] = df_unit_list['Row/bay (EXE)'].astype(str).str.split('-').str[-1]
                     df_unit_list['SLOT'] = pd.to_numeric(df_unit_list['SLOT'], errors='coerce')
                     df_unit_list.dropna(subset=['SLOT'], inplace=True)
