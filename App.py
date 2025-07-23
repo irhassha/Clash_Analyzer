@@ -297,7 +297,7 @@ def render_clash_tab(process_button, schedule_file, unit_list_file, min_clash_di
         st.subheader("📊 Visualisasi Sebaran Cluster")
         all_vessels_list = display_df['VESSEL'].unique().tolist()
         st.sidebar.markdown("---")
-        st.sidebar.header("� Opsi Grafik")
+        st.sidebar.header("📊 Opsi Grafik")
         selected_vessels = st.sidebar.multiselect("Filter Kapal pada Grafik:", options=all_vessels_list, default=all_vessels_list)
         font_size = st.sidebar.slider("Sesuaikan Ukuran Font Grafik", min_value=6, max_value=20, value=10, step=1)
         if not selected_vessels:
@@ -364,7 +364,6 @@ def render_clash_tab(process_button, schedule_file, unit_list_file, min_clash_di
                         st.markdown(f"**Potensi Bentrok pada: {date_key}**")
                         clashes_for_date = clash_details.get(date_key, [])
                         for i, clash in enumerate(clashes_for_date):
-                            # PERBAIKAN: Menggunakan HTML untuk divider yang lebih rapat
                             if i > 0:
                                 st.markdown('<hr class="clash-card-divider">', unsafe_allow_html=True)
                             st.markdown(f"**Blok {clash['block']}** (Jarak: `{clash['gap']}` slot)")
@@ -467,4 +466,3 @@ with tab1:
     render_clash_tab(process_button, schedule_file, unit_list_file, min_clash_distance)
 with tab2:
     render_forecast_tab()
-�
