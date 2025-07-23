@@ -59,7 +59,7 @@ def reset_data():
             del st.session_state[key]
     st.cache_data.clear()
     st.cache_resource.clear()
-    st.success("Data berhasil direset!")
+    st.success("Data has been reset successfully!")
 
 
 # --- FUNGSI UNTUK FORECASTING ---
@@ -74,9 +74,9 @@ def load_history_data(filename="History Loading.xlsx"):
             df.dropna(subset=['ata', 'loading', 'service'], inplace=True)
             return df[df['loading'] >= 0]
         except Exception as e:
-            st.error(f"Gagal memuat file histori '{filename}': {e}")
+            st.error(f"Failed to load history file '{filename}': {e}")
             return None
-    st.warning(f"File histori '{filename}' tidak ditemukan.")
+    st.warning(f"History file '{filename}' not found.")
     return None
 
 def create_time_features(df):
@@ -97,9 +97,9 @@ def run_per_service_rf_forecast(_df_history):
     all_results = []
     if _df_history is None or _df_history.empty: return pd.DataFrame(all_results)
     unique_services = _df_history['service'].unique()
-    progress_bar = st.progress(0, text="Menganalisis services...")
+    progress_bar = st.progress(0, text="Analyzing services...")
     for i, service in enumerate(unique_services):
-        progress_bar.progress((i + 1) / len(unique_services), text=f"Menganalisis service: {service}")
+        progress_bar.progress((i + 1) / len(unique_services), text=f"Analyzing service: {service}")
         service_df = _df_history[_df_history['service'] == service].copy()
         if service_df.empty or service_df['loading'].isnull().all():
             continue
@@ -116,7 +116,7 @@ def run_per_service_rf_forecast(_df_history):
                 features_to_use = ['hour', 'day_of_week', 'day_of_month', 'day_of_year', 'week_of_year', 'month', 'year']
                 X, y = df_features[features_to_use], df_features['loading_cleaned']
                 X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42, shuffle=False)
-                if len(X_train) == 0: raise ValueError("Data tidak cukup untuk training.")
+                if len(X_train) == 0: raise ValueError("Not enough data to train.")
                 model = RandomForestRegressor(n_estimators=50, random_state=42, n_jobs=-1, min_samples_leaf=2)
                 model.fit(X_train, y_train)
                 predictions = model.predict(X_test)
@@ -125,11 +125,11 @@ def run_per_service_rf_forecast(_df_history):
                 future_eta = datetime.now().replace(hour=12, minute=0, second=0, microsecond=0) + timedelta(days=1)
                 future_df = create_time_features(pd.DataFrame([{'ata': future_eta}]))
                 forecast_val = model.predict(future_df[features_to_use])[0]
-                method = f"Random Forest ({num_outliers} outliers dibersihkan)"
+                method = f"Random Forest ({num_outliers} outliers cleaned)"
             except Exception:
-                forecast_val, moe_val, mape_val, method = (service_df['loading_cleaned'].mean(), 1.96 * service_df['loading_cleaned'].std(), np.mean(np.abs((service_df['loading_cleaned'] - service_df['loading_cleaned'].mean()) / service_df['loading_cleaned'])) * 100 if not service_df['loading_cleaned'].empty else 0, f"Rata-rata Historis (RF Gagal, {num_outliers} outliers dibersihkan)")
+                forecast_val, moe_val, mape_val, method = (service_df['loading_cleaned'].mean(), 1.96 * service_df['loading_cleaned'].std(), np.mean(np.abs((service_df['loading_cleaned'] - service_df['loading_cleaned'].mean()) / service_df['loading_cleaned'])) * 100 if not service_df['loading_cleaned'].empty else 0, f"Historical Average (RF Failed, {num_outliers} outliers cleaned)")
         else:
-            forecast_val, moe_val, mape_val, method = (service_df['loading_cleaned'].mean(), 1.96 * service_df['loading_cleaned'].std(), np.mean(np.abs((service_df['loading_cleaned'] - service_df['loading_cleaned'].mean()) / service_df['loading_cleaned'])) * 100 if not service_df['loading_cleaned'].empty else 0, f"Rata-rata Historis ({num_outliers} outliers dibersihkan)")
+            forecast_val, moe_val, mape_val, method = (service_df['loading_cleaned'].mean(), 1.96 * service_df['loading_cleaned'].std(), np.mean(np.abs((service_df['loading_cleaned'] - service_df['loading_cleaned'].mean()) / service_df['loading_cleaned'])) * 100 if not service_df['loading_cleaned'].empty else 0, f"Historical Average ({num_outliers} outliers cleaned)")
         all_results.append({"Service": service, "Loading Forecast": max(0, forecast_val), "Margin of Error (± box)": moe_val, "MAPE (%)": mape_val, "Method": method})
     progress_bar.empty()
     return pd.DataFrame(all_results)
@@ -144,24 +144,24 @@ def load_vessel_codes_from_repo(possible_names=['vessel codes.xlsx', 'vessel_cod
                 df.columns = [col.strip() for col in df.columns]
                 return df
             except Exception as e:
-                st.error(f"Gagal membaca file '{filename}': {e}"); return None
-    st.error(f"File kode kapal tidak ditemukan."); return None
+                st.error(f"Failed to read file '{filename}': {e}"); return None
+    st.error(f"Vessel codes file not found."); return None
 
 
 # --- FUNGSI UNTUK MERENDER SETIAP TAB ---
 
 def render_forecast_tab():
     """Fungsi untuk menampilkan seluruh konten tab peramalan."""
-    st.header("📈 Peramalan Muatan dengan Machine Learning")
-    st.write("Fitur ini menggunakan model **Random Forest** terpisah untuk setiap *service* guna memberikan prediksi yang lebih akurat.")
+    st.header("📈 Loading Forecast with Machine Learning")
+    st.write("This feature uses a separate **Random Forest** model for each service to provide more accurate predictions.")
     if 'forecast_df' not in st.session_state:
         df_history = load_history_data()
         if df_history is not None and not df_history.empty:
-            with st.spinner("Memproses data dan melatih model..."):
+            with st.spinner("Processing data and training models..."):
                 st.session_state['forecast_df'] = run_per_service_rf_forecast(df_history)
         else:
             st.session_state['forecast_df'] = pd.DataFrame()
-            if df_history is None: st.warning("File histori tidak ditemukan. Peramalan tidak tersedia.")
+            if df_history is None: st.warning("History file not found. Forecast is unavailable.")
     
     if 'forecast_df' in st.session_state and not st.session_state.forecast_df.empty:
         results_df = st.session_state.forecast_df.copy()
@@ -170,19 +170,19 @@ def render_forecast_tab():
         results_df['MAPE (%)'] = results_df['MAPE (%)'].replace([np.inf, -np.inf], 0).fillna(0).round(2)
                 
         st.markdown("---")
-        st.subheader("📊 Hasil Peramalan per Service")
+        st.subheader("📊 Forecast Results per Service")
         filter_option = st.radio("Filter Services:", ("All Services", "Current Services"), horizontal=True, key="forecast_filter")
         current_services_list = ['JPI-A', 'JPI-B', 'CIT', 'IN1', 'JKF', 'IN1-2', 'KCI', 'CMI3', 'CMI2', 'CMI', 'I15', 'SE8', 'IA8', 'IA1', 'SEAGULL', 'JTH', 'ICN']
         display_forecast_df = results_df[results_df['Service'].isin(current_services_list)] if filter_option == "Current Services" else results_df
         
         st.dataframe(display_forecast_df.sort_values(by="Loading Forecast", ascending=False).reset_index(drop=True), use_container_width=True, hide_index=True, column_config={"MAPE (%)": st.column_config.NumberColumn(format="%.2f%%")})
         st.markdown("---")
-        st.subheader("💡 Cara Membaca Hasil Ini")
-        st.markdown("- **Loading Forecast**: Estimasi jumlah box untuk kedatangan kapal berikutnya dari service tersebut.\n- **Margin of Error (± box)**: Tingkat ketidakpastian dalam prediksi. Contoh: 300 ±50 berarti nilai sebenarnya kemungkinan antara 250 dan 350.\n- **MAPE (%)**: Rata-rata persentase kesalahan model. **Semakin kecil, semakin baik.**\n- **Method**: Teknik yang digunakan untuk peramalan.")
+        st.subheader("💡 How to Read These Results")
+        st.markdown("- **Loading Forecast**: Estimated boxes for the next vessel arrival of that service.\n- **Margin of Error (± box)**: The uncertainty in the prediction. e.g., 300 ±50 means the value is likely between 250 and 350.\n- **MAPE (%)**: Average percentage error of the model. **The smaller, the better.**\n- **Method**: Technique used for the forecast.")
     else:
-        st.warning("Tidak ada data peramalan yang dapat dihasilkan.")
+        st.warning("No forecast data could be generated.")
 
-def render_clash_tab(process_button, schedule_file, unit_list_file, min_clash_distance):
+def render_clash_tab(process_button, schedule_file, unit_list_file, min_clash_distance, ignore_small_clashes):
     """Fungsi untuk menampilkan seluruh konten tab Analisis Bentrok."""
     
     # Inisialisasi session state jika belum ada
@@ -193,7 +193,7 @@ def render_clash_tab(process_button, schedule_file, unit_list_file, min_clash_di
     
     if process_button:
         if schedule_file and unit_list_file and (df_vessel_codes is not None and not df_vessel_codes.empty):
-            with st.spinner('Memuat dan memproses data...'):
+            with st.spinner('Loading and processing data...'):
                 try:
                     # 1. PEMROSESAN DATA DASAR
                     df_schedule = pd.read_excel(schedule_file) if schedule_file.name.lower().endswith('.xlsx') else pd.read_csv(schedule_file)
@@ -208,7 +208,7 @@ def render_clash_tab(process_button, schedule_file, unit_list_file, min_clash_di
                     
                     # 2. EKSTRAKSI DATA SLOT (PENTING UNTUK DETEKSI BENTROK DETAIL)
                     if 'Row/bay (EXE)' not in df_unit_list.columns:
-                        st.error("File 'Unit List' harus memiliki kolom 'Row/bay (EXE)' untuk deteksi bentrok detail."); st.stop()
+                        st.error("File 'Unit List' must have a 'Row/bay (EXE)' column for detailed clash detection."); st.stop()
                     df_unit_list['SLOT'] = df_unit_list['Row/bay (EXE)'].astype(str).str.split('-').str[-1]
                     df_unit_list['SLOT'] = pd.to_numeric(df_unit_list['SLOT'], errors='coerce')
                     df_unit_list.dropna(subset=['SLOT'], inplace=True)
@@ -217,7 +217,7 @@ def render_clash_tab(process_button, schedule_file, unit_list_file, min_clash_di
                     # 3. PENGGABUNGAN DATA
                     df_schedule_with_code = pd.merge(df_schedule, df_vessel_codes, left_on="VESSEL", right_on="Description", how="left").rename(columns={"Value": "CODE"})
                     merged_df = pd.merge(df_schedule_with_code, df_unit_list, left_on=['CODE', 'VOY_OUT'], right_on=['Carrier Out', 'Voyage Out'], how='inner')
-                    if merged_df.empty: st.warning("Tidak ada data yang cocok ditemukan."); st.stop()
+                    if merged_df.empty: st.warning("No matching data found."); st.stop()
                         
                     # Menghapus filter area agar semua area ditampilkan
                     merged_df['Area (EXE)'] = merged_df['Area (EXE)'].astype(str)
@@ -234,11 +234,11 @@ def render_clash_tab(process_button, schedule_file, unit_list_file, min_clash_di
                     vessel_area_slots = merged_df.groupby(['VESSEL', 'VOY_OUT', 'ETA', 'ETD', 'SERVICE', 'Area (EXE)']).agg(MIN_SLOT=('SLOT', 'min'), MAX_SLOT=('SLOT', 'max'), BOX_COUNT=('SLOT', 'count')).reset_index()
                     st.session_state.vessel_area_slots = vessel_area_slots
                     
-                    st.success("Data berhasil diproses!")
+                    st.success("Data processed successfully!")
                 except Exception as e:
-                    st.error(f"Terjadi kesalahan saat pemrosesan: {e}"); st.session_state.processed_df = None
+                    st.error(f"An error occurred during processing: {e}"); st.session_state.processed_df = None
         else:
-            st.warning("Mohon unggah kedua file (Schedule dan Unit List).")                    
+            st.warning("Please upload both Schedule and Unit List files.")                    
 
     # --- TAMPILAN UTAMA SETELAH DATA DIPROSES ---
     if st.session_state.get('processed_df') is not None:
@@ -247,7 +247,7 @@ def render_clash_tab(process_button, schedule_file, unit_list_file, min_clash_di
         display_df['ETA_Date'] = display_df['ETA'].dt.strftime('%d/%m/%Y')
 
         # --- RINGKASAN KAPAL YANG AKAN DATANG ---
-        st.subheader("🚢 Ringkasan Kapal Datang (Hari Ini + 3 Hari ke Depan)")
+        st.subheader("🚢 Upcoming Vessel Summary (Today + Next 3 Days)")
         forecast_df = st.session_state.get('forecast_df')
         if forecast_df is not None and not forecast_df.empty:
             today = pd.to_datetime(datetime.now().date())
@@ -255,9 +255,9 @@ def render_clash_tab(process_button, schedule_file, unit_list_file, min_clash_di
             upcoming_vessels_df = display_df[(display_df['ETA'] >= today) & (display_df['ETA'] < four_days_later)].copy()
             if not upcoming_vessels_df.empty:
                 st.sidebar.markdown("---")
-                st.sidebar.header("🛠️ Opsi Kapal Datang")
-                priority_vessels = st.sidebar.multiselect("Pilih kapal prioritas untuk ditandai:", options=upcoming_vessels_df['VESSEL'].unique())
-                adjusted_clstr_req = st.sidebar.number_input("Sesuaikan CLSTR REQ untuk kapal prioritas:", min_value=0, value=0, step=1, help="Masukkan nilai baru untuk CLSTR REQ. Biarkan 0 untuk tidak mengubah.")
+                st.sidebar.header("🛠️ Upcoming Vessel Options")
+                priority_vessels = st.sidebar.multiselect("Select priority vessels to highlight:", options=upcoming_vessels_df['VESSEL'].unique())
+                adjusted_clstr_req = st.sidebar.number_input("Adjust CLSTR REQ for priority vessels:", min_value=0, value=0, step=1, help="Enter a new value for CLSTR REQ. Leave as 0 to not change.")
                 
                 summary_df = pd.merge(upcoming_vessels_df, forecast_df[['Service', 'Loading Forecast']], left_on='SERVICE', right_on='Service', how='left')
                 summary_df['Loading Forecast'] = summary_df['Loading Forecast'].fillna(0).round(0).astype(int)
@@ -288,20 +288,20 @@ def render_clash_tab(process_button, schedule_file, unit_list_file, min_clash_di
                 })
                 st.dataframe(styled_df, use_container_width=True, hide_index=True)
             else:
-                st.info("Tidak ada kapal yang dijadwalkan datang dalam 4 hari ke depan.")
+                st.info("No vessels scheduled to arrive in the next 4 days.")
         else:
-            st.warning("Data peramalan tidak tersedia. Jalankan peramalan di tab 'Peramalan Muatan' terlebih dahulu.")
+            st.warning("Forecast data is not available. Please run the forecast in the 'Loading Forecast' tab first.")
 
         # --- VISUALISASI SEBARAN CLUSTER ---
         st.markdown("---")
-        st.subheader("📊 Visualisasi Sebaran Cluster")
+        st.subheader("📊 Cluster Spreading Visualization")
         all_vessels_list = display_df['VESSEL'].unique().tolist()
         st.sidebar.markdown("---")
-        st.sidebar.header("📊 Opsi Grafik")
-        selected_vessels = st.sidebar.multiselect("Filter Kapal pada Grafik:", options=all_vessels_list, default=all_vessels_list)
-        font_size = st.sidebar.slider("Sesuaikan Ukuran Font Grafik", min_value=6, max_value=20, value=10, step=1)
+        st.sidebar.header("📊 Chart Options")
+        selected_vessels = st.sidebar.multiselect("Filter Vessels on Chart:", options=all_vessels_list, default=all_vessels_list)
+        font_size = st.sidebar.slider("Adjust Chart Font Size", min_value=6, max_value=20, value=10, step=1)
         if not selected_vessels:
-            st.warning("Pilih setidaknya satu kapal untuk ditampilkan.")
+            st.warning("Please select at least one vessel to display.")
         else:
             processed_df_chart = display_df[display_df['VESSEL'].isin(selected_vessels)]
             initial_cols_chart = ['VESSEL', 'VOY_OUT', 'ETA', 'ETD', 'SERVICE', 'TOTAL BOX', 'TOTAL CLSTR', 'ETA_Display', 'ETA_Date', 'CLOSING PHYSIC']
@@ -313,17 +313,17 @@ def render_clash_tab(process_button, schedule_file, unit_list_file, min_clash_di
                 chart_data_long['combined_text'] = chart_data_long['Cluster'] + ' / ' + chart_data_long['Box Count'].astype(str)
                 cluster_color_map = {'A01': '#5409DA', 'A02': '#4E71FF', 'A03': '#8DD8FF', 'A04': '#BBFBFF', 'A05': '#8DBCC7', 'B01': '#328E6E', 'B02': '#67AE6E', 'B03': '#90C67C', 'B04': '#E1EEBC', 'B05': '#D2FF72', 'C03': '#B33791', 'C04': '#C562AF', 'C05': '#DB8DD0'}
                 vessel_order_by_eta = processed_df_chart.sort_values('ETA')['VESSEL'].tolist()
-                fig = px.bar(chart_data_long, x='Box Count', y='VESSEL', color='Cluster', color_discrete_map=cluster_color_map, orientation='h', title='Distribusi Box per Cluster untuk Setiap Kapal', text='combined_text', hover_data={'VESSEL': False, 'Cluster': True, 'Box Count': True})
-                fig.update_layout(xaxis_title=None, yaxis_title=None, height=len(vessel_order_by_eta) * 35 + 150, legend_title_text='Area Cluster', title_x=0)
+                fig = px.bar(chart_data_long, x='Box Count', y='VESSEL', color='Cluster', color_discrete_map=cluster_color_map, orientation='h', title='Box Distribution per Cluster for Each Vessel', text='combined_text', hover_data={'VESSEL': False, 'Cluster': True, 'Box Count': True})
+                fig.update_layout(xaxis_title=None, yaxis_title=None, height=len(vessel_order_by_eta) * 35 + 150, legend_title_text='Cluster Area', title_x=0)
                 fig.update_yaxes(categoryorder='array', categoryarray=vessel_order_by_eta[::-1])
                 fig.update_traces(textposition='inside', textfont_size=font_size, textangle=0)
                 st.plotly_chart(fig, use_container_width=True)
             else:
-                st.info("Tidak ada data cluster untuk divisualisasikan untuk kapal yang dipilih.")
+                st.info("No cluster data to visualize for the selected vessels.")
         
         # --- RINGKASAN POTENSI BENTROK (LOGIKA DARI SKRIP LAMA) ---
         st.markdown("---")
-        st.header("💥 Ringkasan Potensi Bentrok")
+        st.header("💥 Potential Clash Summary")
         vessel_area_slots_df = st.session_state.get('vessel_area_slots')
         clash_details = {}
         clash_summary_data = []
@@ -341,6 +341,10 @@ def render_clash_tab(process_button, schedule_file, unit_list_file, min_clash_di
                         range1, range2 = (row['MIN_SLOT_v1'], row['MAX_SLOT_v1']), (row['MIN_SLOT_v2'], row['MAX_SLOT_v2'])
                         gap = max(range1[0], range2[0]) - min(range1[1], range2[1]) - 1
                         if gap <= min_clash_distance:
+                            # Implementasi fitur baru: Abaikan bentrok kecil
+                            if ignore_small_clashes and row['BOX_COUNT_v1'] < 10 and row['BOX_COUNT_v2'] < 10:
+                                continue # Lewati bentrok ini
+
                             clash_date = max(vessel1['ETA'], vessel2['ETA']).normalize()
                             date_key = clash_date.strftime('%d/%m/%Y')
                             if date_key not in clash_details: clash_details[date_key] = []
@@ -352,33 +356,33 @@ def render_clash_tab(process_button, schedule_file, unit_list_file, min_clash_di
         st.session_state.clash_summary_df = pd.DataFrame(clash_summary_data)
 
         if not clash_details:
-            st.info(f"✅ Tidak ada potensi bentrok yang ditemukan dengan jarak aman minimal {min_clash_distance} slot.")
+            st.info(f"✅ No potential clashes found with a minimum safe distance of {min_clash_distance} slots.")
         else:
             total_clash_days = len(clash_details)
-            st.markdown(f"**� Ditemukan {total_clash_days} hari dengan potensi bentrok.**")
+            st.markdown(f"**🔥 Found {total_clash_days} day(s) with potential clashes.**")
             clash_dates = sorted(clash_details.keys(), key=lambda x: datetime.strptime(x, '%d/%m/%Y'))
             cols = st.columns(len(clash_dates) or 1)
             for i, date_key in enumerate(clash_dates):
                 with cols[i]:
                     with st.container(border=True):
-                        st.markdown(f"**Potensi Bentrok pada: {date_key}**")
+                        st.markdown(f"**Potential Clash on: {date_key}**")
                         clashes_for_date = clash_details.get(date_key, [])
                         for i, clash in enumerate(clashes_for_date):
                             if i > 0:
                                 st.markdown('<hr class="clash-card-divider">', unsafe_allow_html=True)
-                            st.markdown(f"**Blok {clash['block']}** (Jarak: `{clash['gap']}` slot)")
-                            st.markdown(f"*{clash['vessel1_name']}*: `{clash['vessel1_box']}` box (Slot: `{clash['vessel1_slots']}`)")
-                            st.markdown(f"*{clash['vessel2_name']}*: `{clash['vessel2_box']}` box (Slot: `{clash['vessel2_slots']}`)")
+                            st.markdown(f"**Block {clash['block']}** (Gap: `{clash['gap']}` slots)")
+                            st.markdown(f"*{clash['vessel1_name']}*: `{clash['vessel1_box']}` box (Slots: `{clash['vessel1_slots']}`)")
+                            st.markdown(f"*{clash['vessel2_name']}*: `{clash['vessel2_box']}` box (Slots: `{clash['vessel2_slots']}`)")
         
         # --- HASIL ANALISIS DETAIL (TABEL INTERAKTIF) ---
         st.markdown("---")
-        st.header("📋 Hasil Analisis Detail")
+        st.header("📋 Detailed Analysis Results")
         
         df_for_grid = display_df.copy()
         
-        # PERBAIKAN: Mengembalikan logika pewarnaan berdasarkan tanggal ETA
+        # Logika pewarnaan berdasarkan tanggal ETA
         unique_dates = df_for_grid['ETA_Date'].unique()
-        date_color_map = {date: ['#F8F0E5', '#DAC0A3'][i % 2] for i, date in enumerate(unique_dates)} # Warna krem seperti sebelumnya
+        date_color_map = {date: ['#F8F0E5', '#DAC0A3'][i % 2] for i, date in enumerate(unique_dates)}
 
         # Membuat peta bentrok yang lebih detail untuk highlight di tabel
         clash_map_for_grid = {}
@@ -417,7 +421,6 @@ def render_clash_tab(process_button, schedule_file, unit_list_file, min_clash_di
             }}
         """)
         
-        # PERBAIKAN: Mengembalikan JsCode untuk pewarnaan baris berdasarkan tanggal ETA
         zebra_row_style_jscode = JsCode(f"""
             function(params) {{
                 const dateColorMap = {json.dumps(date_color_map)};
@@ -450,7 +453,7 @@ def render_clash_tab(process_button, schedule_file, unit_list_file, min_clash_di
 
         # --- PUSAT UNDUHAN ---
         st.markdown("---")
-        st.subheader("📥 Pusat Unduhan")
+        st.subheader("📥 Download Center")
         try:
             output = io.BytesIO()
             with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
@@ -475,36 +478,37 @@ def render_clash_tab(process_button, schedule_file, unit_list_file, min_clash_di
                             worksheet.set_column(idx, idx, min(max_len, 50), center_format)
                 
                 # Menulis setiap DataFrame ke sheet yang berbeda
-                auto_adjust_and_format_sheet(st.session_state.get('processed_df'), 'Analisis Detail', writer)
-                auto_adjust_and_format_sheet(st.session_state.get('summary_display'), 'Ringkasan Kapal Datang', writer)
-                auto_adjust_and_format_sheet(st.session_state.get('clash_summary_df'), 'Ringkasan Bentrok', writer)
+                auto_adjust_and_format_sheet(st.session_state.get('processed_df'), 'Detailed Analysis', writer)
+                auto_adjust_and_format_sheet(st.session_state.get('summary_display'), 'Upcoming Vessel Summary', writer)
+                auto_adjust_and_format_sheet(st.session_state.get('clash_summary_df'), 'Clash Summary', writer)
 
             if output.tell() > 0:
                 st.download_button(
-                    label="📥 Unduh Laporan Analisis (Excel)",
+                    label="📥 Download Analysis Report (Excel)",
                     data=output.getvalue(),
                     file_name=f"clash_analysis_report_{datetime.now().strftime('%Y%m%d')}.xlsx",
                     mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                     use_container_width=True
                 )
         except Exception as e:
-            st.error(f"Gagal membuat file unduhan: {e}")
+            st.error(f"Failed to create download file: {e}")
 
     else:
-        st.info("Selamat datang! Mohon unggah file Anda dan klik 'Proses Data' untuk memulai.")
+        st.info("Welcome! Please upload your files and click 'Process Data' to begin.")
 
 
 # --- STRUKTUR UTAMA APLIKASI DENGAN TABS ---
-st.sidebar.header("⚙️ Kontrol & Unggah")
-schedule_file = st.sidebar.file_uploader("1. Unggah Jadwal Kapal", type=['xlsx', 'csv'], key="schedule_uploader")
-unit_list_file = st.sidebar.file_uploader("2. Unggah Daftar Unit", type=['xlsx', 'csv'], key="unit_list_uploader")
-min_clash_distance = st.sidebar.number_input("Jarak Aman Minimal (slot)", min_value=0, value=5, step=1, key="min_clash_dist_input", help="Bentrok terdeteksi jika jarak antar alokasi kapal kurang dari atau sama dengan nilai ini.")
-process_button = st.sidebar.button("🚀 Proses Data", use_container_width=True, type="primary")
-st.sidebar.button("🔄 Reset Data", on_click=reset_data, use_container_width=True, help="Hapus semua data yang telah diproses untuk memulai dari awal.")
+st.sidebar.header("⚙️ Controls & Uploads")
+schedule_file = st.sidebar.file_uploader("1. Upload Vessel Schedule", type=['xlsx', 'csv'], key="schedule_uploader")
+unit_list_file = st.sidebar.file_uploader("2. Upload Unit List", type=['xlsx', 'csv'], key="unit_list_uploader")
+min_clash_distance = st.sidebar.number_input("Minimum Safe Distance (slots)", min_value=0, value=5, step=1, key="min_clash_dist_input", help="A clash is detected if the distance between vessel allocations is this value or less.")
+ignore_small_clashes = st.sidebar.checkbox("Ignore clashes if total box < 10", help="If checked, clashes between two vessels with less than 10 boxes each in the same area will be ignored.")
+process_button = st.sidebar.button("🚀 Process Data", use_container_width=True, type="primary")
+st.sidebar.button("🔄 Reset Data", on_click=reset_data, use_container_width=True, help="Clear all processed data to start fresh.")
 
-tab1, tab2 = st.tabs(["🚨 Analisis Bentrok", "📈 Peramalan Muatan"])
+tab1, tab2 = st.tabs(["🚨 Clash Analysis", "📈 Loading Forecast"])
 
 with tab1:
-    render_clash_tab(process_button, schedule_file, unit_list_file, min_clash_distance)
+    render_clash_tab(process_button, schedule_file, unit_list_file, min_clash_distance, ignore_small_clashes)
 with tab2:
     render_forecast_tab()
