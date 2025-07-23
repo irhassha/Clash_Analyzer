@@ -24,7 +24,7 @@ warnings.filterwarnings("ignore", category=UserWarning)
 st.set_page_config(page_title="Yard Cluster Monitoring", layout="wide")
 st.title("Yard Cluster Monitoring")
 
-# --- CSS Kustom untuk Merapatkan Spasi ---
+# --- CSS Kustom untuk Merapatkan Spasi dan Styling Kartu ---
 st.markdown("""
     <style>
         /* Mengurangi margin atas dan bawah untuk garis pemisah */
@@ -41,6 +41,10 @@ st.markdown("""
         .clash-card-divider {
             margin-top: 8px !important;
             margin-bottom: 8px !important;
+        }
+        /* Mengubah background container/kartu menjadi putih */
+        [data-testid="stVerticalBlockBorderWrapper"] {
+            background-color: white;
         }
     </style>
 """, unsafe_allow_html=True)
@@ -293,7 +297,7 @@ def render_clash_tab(process_button, schedule_file, unit_list_file, min_clash_di
         st.subheader("📊 Visualisasi Sebaran Cluster")
         all_vessels_list = display_df['VESSEL'].unique().tolist()
         st.sidebar.markdown("---")
-        st.sidebar.header("📊 Opsi Grafik")
+        st.sidebar.header("� Opsi Grafik")
         selected_vessels = st.sidebar.multiselect("Filter Kapal pada Grafik:", options=all_vessels_list, default=all_vessels_list)
         font_size = st.sidebar.slider("Sesuaikan Ukuran Font Grafik", min_value=6, max_value=20, value=10, step=1)
         if not selected_vessels:
@@ -463,3 +467,4 @@ with tab1:
     render_clash_tab(process_button, schedule_file, unit_list_file, min_clash_distance)
 with tab2:
     render_forecast_tab()
+�
