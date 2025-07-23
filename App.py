@@ -376,12 +376,43 @@ def render_clash_tab(process_button, schedule_file, unit_list_file, min_clash_di
         
         df_for_grid = display_df.copy()
         
-        # Membuat peta bentrok untuk highlight di tabel
-        clash_map_for_grid = {date: [item['block'] for item in clashes] for date, clashes in clash_details.items()}
+        # PERBAIKAN: Membuat peta bentrok yang lebih detail untuk highlight di tabel
+        clash_map_for_grid = {}
+        for date, clashes in clash_details.items():
+            if date not in clash_map_for_grid:
+                clash_map_for_grid[date] = {}
+            for clash in clashes:
+                block = clash['block']
+                if block not in clash_map_for_grid[date]:
+                    clash_map_for_grid[date][block] = []
+                
+                vessel1 = clash['vessel1_name']
+                vessel2 = clash['vessel2_name']
+                
+                if vessel1 not in clash_map_for_grid[date][block]:
+                    clash_map_for_grid[date][block].append(vessel1)
+                if vessel2 not in clash_map_for_grid[date][block]:
+                    clash_map_for_grid[date][block].append(vessel2)
         
         # Konfigurasi AgGrid
         hide_zero_jscode = JsCode("""function(params) { if (params.value == 0 || params.value === null) { return ''; } return params.value; }""")
-        clash_cell_style_jscode = JsCode(f"""function(params) {{ const clashMap = {json.dumps(clash_map_for_grid)}; const date = params.data.ETA_Date; const colId = params.colDef.field; const isClash = clashMap[date] ? clashMap[date].includes(colId) : false; if (isClash) {{ return {{'backgroundColor': '#FFAA33', 'color': 'black'}}; }} return null; }}""")
+        
+        # PERBAIKAN: Memperbarui JsCode untuk menggunakan peta bentrok yang detail
+        clash_cell_style_jscode = JsCode(f"""
+            function(params) {{
+                const clashMap = {json.dumps(clash_map_for_grid)};
+                const date = params.data.ETA_Date;
+                const colId = params.colDef.field;
+                const vessel = params.data.VESSEL;
+                
+                const isClash = clashMap[date] && clashMap[date][colId] && clashMap[date][colId].includes(vessel);
+                
+                if (isClash) {{
+                    return {{'backgroundColor': '#FFAA33', 'color': 'black'}};
+                }}
+                return null;
+            }}
+        """)
         
         unique_dates = df_for_grid['ETA_Date'].unique()
         date_color_map = {date: ['#F8F0E5', '#DAC0A3'][i % 2] for i, date in enumerate(unique_dates)}
