@@ -355,7 +355,7 @@ def render_clash_tab(process_button, schedule_file, unit_list_file, min_clash_di
             st.info(f"✅ Tidak ada potensi bentrok yang ditemukan dengan jarak aman minimal {min_clash_distance} slot.")
         else:
             total_clash_days = len(clash_details)
-            st.markdown(f"**� Ditemukan {total_clash_days} hari dengan potensi bentrok.**")
+            st.markdown(f"**🔥 Ditemukan {total_clash_days} hari dengan potensi bentrok.**")
             clash_dates = sorted(clash_details.keys(), key=lambda x: datetime.strptime(x, '%d/%m/%Y'))
             cols = st.columns(len(clash_dates) or 1)
             for i, date_key in enumerate(clash_dates):
@@ -376,7 +376,7 @@ def render_clash_tab(process_button, schedule_file, unit_list_file, min_clash_di
         
         df_for_grid = display_df.copy()
         
-        # PERBAIKAN: Logika baru untuk pewarnaan baris berdasarkan periode ETA-ETD yang tumpang tindih
+        # Logika baru untuk pewarnaan baris berdasarkan periode ETA-ETD yang tumpang tindih
         df_for_grid = df_for_grid.sort_values(by='ETA').reset_index(drop=True)
         
         groups = []
@@ -438,7 +438,6 @@ def render_clash_tab(process_button, schedule_file, unit_list_file, min_clash_di
             }}
         """)
         
-        # PERBAIKAN: Memperbarui JsCode untuk menggunakan grup tumpang tindih
         zebra_row_style_jscode = JsCode(f"""
             function(params) {{
                 const groupColorMap = {json.dumps(group_color_map)};
@@ -530,4 +529,3 @@ with tab1:
     render_clash_tab(process_button, schedule_file, unit_list_file, min_clash_distance)
 with tab2:
     render_forecast_tab()
-�
