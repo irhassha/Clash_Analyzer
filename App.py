@@ -399,7 +399,7 @@ def render_clash_tab(process_button, schedule_file, unit_list_file, min_clash_di
 
         # Membuat peta warna untuk grup
         unique_groups = df_for_grid['overlap_group'].unique()
-        group_color_map = {group: ['#FFFFFF', '#F0F2F6'][i % 2] for i, group in enumerate(unique_groups)} # Putih dan Abu-abu muda
+        group_color_map = {str(group): ['#FFFFFF', '#F0F2F6'][i % 2] for i, group in enumerate(unique_groups)} # Putih dan Abu-abu muda
 
         # Membuat peta bentrok yang lebih detail untuk highlight di tabel
         clash_map_for_grid = {}
