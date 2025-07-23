@@ -341,8 +341,8 @@ def render_clash_tab(process_button, schedule_file, unit_list_file, min_clash_di
                         range1, range2 = (row['MIN_SLOT_v1'], row['MAX_SLOT_v1']), (row['MIN_SLOT_v2'], row['MAX_SLOT_v2'])
                         gap = max(range1[0], range2[0]) - min(range1[1], range2[1]) - 1
                         if gap <= min_clash_distance:
-                            # Implementasi fitur baru: Abaikan bentrok kecil
-                            if ignore_small_clashes and row['BOX_COUNT_v1'] < 10 and row['BOX_COUNT_v2'] < 10:
+                            # PERBAIKAN: Mengubah logika untuk menjumlahkan box count
+                            if ignore_small_clashes and (row['BOX_COUNT_v1'] + row['BOX_COUNT_v2'] < 10):
                                 continue # Lewati bentrok ini
 
                             clash_date = max(vessel1['ETA'], vessel2['ETA']).normalize()
@@ -502,7 +502,7 @@ st.sidebar.header("⚙️ Controls & Uploads")
 schedule_file = st.sidebar.file_uploader("1. Upload Vessel Schedule", type=['xlsx', 'csv'], key="schedule_uploader")
 unit_list_file = st.sidebar.file_uploader("2. Upload Unit List", type=['xlsx', 'csv'], key="unit_list_uploader")
 min_clash_distance = st.sidebar.number_input("Minimum Safe Distance (slots)", min_value=0, value=5, step=1, key="min_clash_dist_input", help="A clash is detected if the distance between vessel allocations is this value or less.")
-ignore_small_clashes = st.sidebar.checkbox("Ignore clashes if total box < 10", help="If checked, clashes between two vessels with less than 10 boxes each in the same area will be ignored.")
+ignore_small_clashes = st.sidebar.checkbox("Ignore clashes if total box < 10", help="If checked, clashes where the combined box count of both vessels in an area is less than 10 will be ignored.")
 process_button = st.sidebar.button("🚀 Process Data", use_container_width=True, type="primary")
 st.sidebar.button("🔄 Reset Data", on_click=reset_data, use_container_width=True, help="Clear all processed data to start fresh.")
 
