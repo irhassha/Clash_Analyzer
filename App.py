@@ -182,7 +182,7 @@ def render_forecast_tab():
     else:
         st.warning("No forecast data could be generated.")
 
-def render_clash_tab(process_button, schedule_file, unit_list_file, min_clash_distance, ignore_small_clashes):
+def render_clash_tab(process_button, schedule_file, unit_list_file, min_clash_distance):
     """Fungsi untuk menampilkan seluruh konten tab Analisis Bentrok."""
     
     # Inisialisasi session state jika belum ada
@@ -325,9 +325,8 @@ def render_clash_tab(process_button, schedule_file, unit_list_file, min_clash_di
         st.markdown("---")
         st.header("💥 Potential Clash Summary")
         vessel_area_slots_df = st.session_state.get('vessel_area_slots')
-        all_clash_info = []
+        clash_details = {}
         clash_summary_data = []
-
         if vessel_area_slots_df is not None:
             active_vessels = vessel_area_slots_df[['VESSEL', 'VOY_OUT', 'ETA', 'ETD']].drop_duplicates()
             summary_exclude_blocks = ['BR9', 'RC9', 'C01', 'C02', 'D01', 'OOG']
@@ -342,36 +341,13 @@ def render_clash_tab(process_button, schedule_file, unit_list_file, min_clash_di
                         range1, range2 = (row['MIN_SLOT_v1'], row['MAX_SLOT_v1']), (row['MIN_SLOT_v2'], row['MAX_SLOT_v2'])
                         gap = max(range1[0], range2[0]) - min(range1[1], range2[1]) - 1
                         if gap <= min_clash_distance:
-                            all_clash_info.append(row)
-
-        # Filter bentrok kecil setelah semua potensi bentrok dikumpulkan
-        if ignore_small_clashes:
-            final_clashes = [row for row in all_clash_info if (row['BOX_COUNT_v1'] + row['BOX_COUNT_v2']) >= 10]
-        else:
-            final_clashes = all_clash_info
-
-        # Proses bentrok yang sudah final
-        clash_details = {}
-        for row in final_clashes:
-            vessel1_info = active_vessels[(active_vessels['VESSEL'] == row['VESSEL_v1']) & (active_vessels['VOY_OUT'] == row['VOY_OUT_v1'])].iloc[0]
-            vessel2_info = active_vessels[(active_vessels['VESSEL'] == row['VESSEL_v2']) & (active_vessels['VOY_OUT'] == row['VOY_OUT_v2'])].iloc[0]
-            
-            clash_date = max(vessel1_info['ETA'], vessel2_info['ETA']).normalize()
-            date_key = clash_date.strftime('%d/%m/%Y')
-            
-            if date_key not in clash_details: clash_details[date_key] = []
-            
-            clash_info = {
-                "block": row['Area (EXE)'],
-                "vessel1_name": row['VESSEL_v1'], "vessel1_slots": f"{row['MIN_SLOT_v1']}-{row['MAX_SLOT_v1']}", "vessel1_box": row['BOX_COUNT_v1'],
-                "vessel2_name": row['VESSEL_v2'], "vessel2_slots": f"{row['MIN_SLOT_v2']}-{row['MAX_SLOT_v2']}", "vessel2_box": row['BOX_COUNT_v2'],
-                "gap": max(row['MIN_SLOT_v1'], row['MIN_SLOT_v2']) - min(row['MAX_SLOT_v1'], row['MAX_SLOT_v2']) - 1
-            }
-            
-            # Cek duplikat sebelum menambahkan
-            if not any(d['block'] == clash_info['block'] and d['vessel1_name'] in [clash_info['vessel1_name'], clash_info['vessel2_name']] and d['vessel2_name'] in [clash_info['vessel1_name'], clash_info['vessel2_name']] for d in clash_details[date_key]):
-                clash_details[date_key].append(clash_info)
-                clash_summary_data.append({"Clash Date": date_key, "Block": clash_info['block'], "Gap (slots)": clash_info['gap'], "Vessel 1": clash_info['vessel1_name'], "Vessel 2": clash_info['vessel2_name'], "Notes": ""})
+                            clash_date = max(vessel1['ETA'], vessel2['ETA']).normalize()
+                            date_key = clash_date.strftime('%d/%m/%Y')
+                            if date_key not in clash_details: clash_details[date_key] = []
+                            clash_info = {"block": area, "vessel1_name": vessel1['VESSEL'], "vessel1_slots": f"{range1[0]}-{range1[1]}", "vessel1_box": row['BOX_COUNT_v1'], "vessel2_name": vessel2['VESSEL'], "vessel2_slots": f"{range2[0]}-{range2[1]}", "vessel2_box": row['BOX_COUNT_v2'], "gap": gap}
+                            if not any(d['block'] == area and d['vessel1_name'] in [vessel1['VESSEL'], vessel2['VESSEL']] and d['vessel2_name'] in [vessel1['VESSEL'], vessel2['VESSEL']] for d in clash_details.get(date_key, [])):
+                                clash_details[date_key].append(clash_info)
+                                clash_summary_data.append({"Clash Date": date_key, "Block": area, "Gap (slots)": gap, "Vessel 1": vessel1['VESSEL'], "Vessel 2": vessel2['VESSEL'], "Notes": ""})
 
         st.session_state.clash_summary_df = pd.DataFrame(clash_summary_data)
 
@@ -522,13 +498,15 @@ st.sidebar.header("⚙️ Controls & Uploads")
 schedule_file = st.sidebar.file_uploader("1. Upload Vessel Schedule", type=['xlsx', 'csv'], key="schedule_uploader")
 unit_list_file = st.sidebar.file_uploader("2. Upload Unit List", type=['xlsx', 'csv'], key="unit_list_uploader")
 min_clash_distance = st.sidebar.number_input("Minimum Safe Distance (slots)", min_value=0, value=5, step=1, key="min_clash_dist_input", help="A clash is detected if the distance between vessel allocations is this value or less.")
-ignore_small_clashes = st.sidebar.checkbox("Ignore clashes if total box < 10", help="If checked, clashes where the combined box count of both vessels in an area is less than 10 will be ignored.")
+# Menghapus checkbox
+# ignore_small_clashes = st.sidebar.checkbox("Ignore clashes if total box < 10", help="If checked, clashes where the combined box count of both vessels in an area is less than 10 will be ignored.")
 process_button = st.sidebar.button("🚀 Process Data", use_container_width=True, type="primary")
 st.sidebar.button("🔄 Reset Data", on_click=reset_data, use_container_width=True, help="Clear all processed data to start fresh.")
 
 tab1, tab2 = st.tabs(["🚨 Clash Analysis", "📈 Loading Forecast"])
 
 with tab1:
-    render_clash_tab(process_button, schedule_file, unit_list_file, min_clash_distance, ignore_small_clashes)
+    # Menghapus parameter ignore_small_clashes dari pemanggilan fungsi
+    render_clash_tab(process_button, schedule_file, unit_list_file, min_clash_distance)
 with tab2:
     render_forecast_tab()
