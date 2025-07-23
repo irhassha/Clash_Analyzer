@@ -355,7 +355,7 @@ def render_clash_tab(process_button, schedule_file, unit_list_file, min_clash_di
             st.info(f"✅ Tidak ada potensi bentrok yang ditemukan dengan jarak aman minimal {min_clash_distance} slot.")
         else:
             total_clash_days = len(clash_details)
-            st.markdown(f"**🔥 Ditemukan {total_clash_days} hari dengan potensi bentrok.**")
+            st.markdown(f"**� Ditemukan {total_clash_days} hari dengan potensi bentrok.**")
             clash_dates = sorted(clash_details.keys(), key=lambda x: datetime.strptime(x, '%d/%m/%Y'))
             cols = st.columns(len(clash_dates) or 1)
             for i, date_key in enumerate(clash_dates):
@@ -376,7 +376,32 @@ def render_clash_tab(process_button, schedule_file, unit_list_file, min_clash_di
         
         df_for_grid = display_df.copy()
         
-        # PERBAIKAN: Membuat peta bentrok yang lebih detail untuk highlight di tabel
+        # PERBAIKAN: Logika baru untuk pewarnaan baris berdasarkan periode ETA-ETD yang tumpang tindih
+        df_for_grid = df_for_grid.sort_values(by='ETA').reset_index(drop=True)
+        
+        groups = []
+        if not df_for_grid.empty:
+            group_id = 0
+            # Inisialisasi dengan ETD kapal pertama
+            current_group_end = df_for_grid.loc[0, 'ETD']
+            
+            for index, row in df_for_grid.iterrows():
+                # Jika ETA kapal saat ini lebih lambat dari akhir grup, buat grup baru
+                if row['ETA'] > current_group_end:
+                    group_id += 1
+                    current_group_end = row['ETD']
+                else:
+                    # Jika tidak, perpanjang akhir grup jika ETD kapal ini lebih lambat
+                    current_group_end = max(current_group_end, row['ETD'])
+                groups.append(group_id)
+        
+        df_for_grid['overlap_group'] = groups
+
+        # Membuat peta warna untuk grup
+        unique_groups = df_for_grid['overlap_group'].unique()
+        group_color_map = {group: ['#FFFFFF', '#F0F2F6'][i % 2] for i, group in enumerate(unique_groups)} # Putih dan Abu-abu muda
+
+        # Membuat peta bentrok yang lebih detail untuk highlight di tabel
         clash_map_for_grid = {}
         for date, clashes in clash_details.items():
             if date not in clash_map_for_grid:
@@ -397,7 +422,6 @@ def render_clash_tab(process_button, schedule_file, unit_list_file, min_clash_di
         # Konfigurasi AgGrid
         hide_zero_jscode = JsCode("""function(params) { if (params.value == 0 || params.value === null) { return ''; } return params.value; }""")
         
-        # PERBAIKAN: Memperbarui JsCode untuk menggunakan peta bentrok yang detail
         clash_cell_style_jscode = JsCode(f"""
             function(params) {{
                 const clashMap = {json.dumps(clash_map_for_grid)};
@@ -414,9 +438,15 @@ def render_clash_tab(process_button, schedule_file, unit_list_file, min_clash_di
             }}
         """)
         
-        unique_dates = df_for_grid['ETA_Date'].unique()
-        date_color_map = {date: ['#F8F0E5', '#DAC0A3'][i % 2] for i, date in enumerate(unique_dates)}
-        zebra_row_style_jscode = JsCode(f"""function(params) {{ const dateColorMap = {json.dumps(date_color_map)}; const date = params.data.ETA_Date; const color = dateColorMap[date]; return {{ 'background-color': color }}; }}""")
+        # PERBAIKAN: Memperbarui JsCode untuk menggunakan grup tumpang tindih
+        zebra_row_style_jscode = JsCode(f"""
+            function(params) {{
+                const groupColorMap = {json.dumps(group_color_map)};
+                const group = params.data.overlap_group;
+                const color = groupColorMap[group];
+                return {{ 'background-color': color }};
+            }}
+        """)
         
         default_col_def = {"suppressMenu": True, "sortable": True, "resizable": True, "editable": False, "minWidth": 40}
         
@@ -429,11 +459,14 @@ def render_clash_tab(process_button, schedule_file, unit_list_file, min_clash_di
             if col in ["TOTAL BOX", "TOTAL CLSTR"]: col_def["cellRenderer"] = hide_zero_jscode
             column_defs.append(col_def)
         
-        cluster_cols_aggrid = sorted([col for col in df_for_grid.columns if col not in pinned_cols + ['ETA', 'ETD', 'ETA_Display', 'ETA_Date', 'CLOSING PHYSIC']])
+        cluster_cols_aggrid = sorted([col for col in df_for_grid.columns if col not in pinned_cols + ['ETA', 'ETD', 'ETA_Display', 'ETA_Date', 'CLOSING PHYSIC', 'overlap_group']])
         for col in cluster_cols_aggrid:
             column_defs.append({"field": col, "headerName": col, "width": 60, "cellRenderer": hide_zero_jscode, "cellStyle": clash_cell_style_jscode})
         
-        column_defs.append({"field": "ETA_Date", "hide": True})
+        # Menyembunyikan kolom bantu
+        for col_to_hide in ['ETA_Date', 'overlap_group']:
+            column_defs.append({"field": col_to_hide, "hide": True})
+
         gridOptions = {"defaultColDef": default_col_def, "columnDefs": column_defs, "getRowStyle": zebra_row_style_jscode}
         AgGrid(df_for_grid, gridOptions=gridOptions, height=600, width='100%', theme='streamlit', allow_unsafe_jscode=True, key='detailed_analysis_grid')
 
@@ -497,3 +530,4 @@ with tab1:
     render_clash_tab(process_button, schedule_file, unit_list_file, min_clash_distance)
 with tab2:
     render_forecast_tab()
+�
