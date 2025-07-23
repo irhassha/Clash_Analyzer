@@ -508,4 +508,3 @@ with tab1:
     render_clash_tab(process_button, schedule_file, unit_list_file, min_clash_distance)
 with tab2:
     render_forecast_tab()
-�
