@@ -396,6 +396,8 @@ def render_clash_tab(process_button, schedule_file, unit_list_file, min_clash_di
                 groups.append(group_id)
         
         df_for_grid['overlap_group'] = groups
+        # PERBAIKAN: Konversi kolom grup ke string agar cocok dengan kunci JSON
+        df_for_grid['overlap_group'] = df_for_grid['overlap_group'].astype(str)
 
         # Membuat peta warna untuk grup
         unique_groups = df_for_grid['overlap_group'].unique()
