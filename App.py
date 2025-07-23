@@ -24,7 +24,7 @@ warnings.filterwarnings("ignore", category=UserWarning)
 st.set_page_config(page_title="Yard Cluster Monitoring", layout="wide")
 st.title("Yard Cluster Monitoring")
 
-# --- PERBAIKAN: CSS Kustom untuk Merapatkan Spasi ---
+# --- CSS Kustom untuk Merapatkan Spasi ---
 st.markdown("""
     <style>
         /* Mengurangi margin atas dan bawah untuk garis pemisah */
@@ -36,6 +36,11 @@ st.markdown("""
         h2, h3 {
             margin-top: 20px;
             margin-bottom: 20px;
+        }
+        /* CSS khusus untuk divider di dalam kartu bentrok */
+        .clash-card-divider {
+            margin-top: 8px !important;
+            margin-bottom: 8px !important;
         }
     </style>
 """, unsafe_allow_html=True)
@@ -354,8 +359,10 @@ def render_clash_tab(process_button, schedule_file, unit_list_file, min_clash_di
                     with st.container(border=True):
                         st.markdown(f"**Potensi Bentrok pada: {date_key}**")
                         clashes_for_date = clash_details.get(date_key, [])
-                        for clash in clashes_for_date:
-                            st.divider()
+                        for i, clash in enumerate(clashes_for_date):
+                            # PERBAIKAN: Menggunakan HTML untuk divider yang lebih rapat
+                            if i > 0:
+                                st.markdown('<hr class="clash-card-divider">', unsafe_allow_html=True)
                             st.markdown(f"**Blok {clash['block']}** (Jarak: `{clash['gap']}` slot)")
                             st.markdown(f"*{clash['vessel1_name']}*: `{clash['vessel1_box']}` box (Slot: `{clash['vessel1_slots']}`)")
                             st.markdown(f"*{clash['vessel2_name']}*: `{clash['vessel2_box']}` box (Slot: `{clash['vessel2_slots']}`)")
