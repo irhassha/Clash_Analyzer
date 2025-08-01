@@ -135,7 +135,7 @@ def run_per_service_rf_forecast(_df_history):
     return pd.DataFrame(all_results)
 
 @st.cache_data
-def load_vessel_codes_from_repo(possible_names=['vessel codes1.xlsx', 'vessel_codes1.xls', 'vessel_codes.csv']):
+def load_vessel_codes_from_repo(possible_names=['vessel codes1.xlsx', 'vessel_codes1.xls', 'vessel_codes1.csv']):
     """Mencari dan memuat file kode kapal."""
     for filename in possible_names:
         if os.path.exists(filename):
@@ -145,7 +145,7 @@ def load_vessel_codes_from_repo(possible_names=['vessel codes1.xlsx', 'vessel_co
                 return df
             except Exception as e:
                 st.error(f"Failed to read file '{filename}': {e}"); return None
-    st.error(f"Vessel codes file not found."); return None
+    st.error(f"Vessel codes1 file not found."); return None
 
 
 # --- FUNGSI UNTUK MERENDER SETIAP TAB ---
